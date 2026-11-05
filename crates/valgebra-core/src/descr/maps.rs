@@ -41,10 +41,25 @@
 //! function. A key schema
 //! that is neither a kind nor a constant has no part to land in, and the frontend
 //! refuses it rather than approximating.
+//!
+//! **A `str` part may be split further, by regular languages.** The partition of
+//! [Cas23, Def. 4.6] is any finite one, and the paper fixes it in advance as a
+//! design and implementation choice [Cas23, §4.5], for the reason it names: two
+//! maps with overlapping domains meet in an atom whose domains overlap. Words
+//! meet in that same atom and stay a partition, since a regular language has a
+//! complement and two of them an intersection, which is how a checker over
+//! JSON Schema's `patternProperties` keeps them apart [HSHP20, §4.1]. So an atom
+//! holds its own split of the `str` keys ([`Narrowed`]), and a meet reads the two
+//! splits at their common refinement. A cell holding few keys is not read as
+//! having a fresh one: the hypothesis [Cas23, §4.4] states for [Cas23, Lem. 4.7],
+//! that a key type is infinite, is met by a cell's holding more keys than the atom
+//! can use, and its keys are pinned otherwise, as a finite part's are.
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::budget;
 use super::polar::{PolarUnion, Summand, tidy};
+use super::regular::{Alphabet, RegularSet};
 use super::symbolic::Guard;
 use super::values::{Field, Values};
 use crate::kind::Kind;
@@ -175,13 +190,124 @@ struct Wanted<G> {
     slot: usize,
     ty: Values<G>,
     besides: BTreeSet<Label>,
+    /// The `str` keys the constraint may be met by, where it is about part of
+    /// them: the failure of one cell of a [`Narrowed`] split.
+    keys: Option<RegularSet>,
 }
 
 /// Equal where every part is, the slot and the labels read before the type,
 /// which is a descriptor.
 impl<G: PartialEq> PartialEq for Wanted<G> {
     fn eq(&self, other: &Wanted<G>) -> bool {
-        self.slot == other.slot && self.besides == other.besides && self.ty == other.ty
+        self.slot == other.slot
+            && self.besides == other.besides
+            && self.keys == other.keys
+            && self.ty == other.ty
+    }
+}
+
+/// Whether `label` is a key a constraint reading `keys` may be met by.
+fn among(label: &Label, keys: Option<&RegularSet>) -> bool {
+    keys.is_none_or(|keys| matches!(label, Label::Word(word, Kind::Str) if keys.holds(word)))
+}
+
+/// Whether `slot` is the part of the `str` keys, the one a split divides.
+fn is_str_part(slot: usize) -> bool {
+    matches!(KEY_KINDS.get(slot), Some(Kind::Str))
+}
+
+/// The keys a constraint of `S` may be pinned to, each with what it maps to.
+type Listed<'a, G> = Vec<(Label, &'a Values<G>)>;
+
+/// Some `str` keys a clause narrows, and what a key of them maps to.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Cell<G> {
+    keys: RegularSet,
+    field: Field<G>,
+}
+
+/// A split of the `str` part: disjoint cells read in place of its default, and
+/// the keys none of them holds, which the default goes on reading. A quasi
+/// `K`-step function over a partition finer than the kinds [Cas23, Def. 4.6].
+///
+/// `rest` is kept rather than read off the cells because a complement is total
+/// and reads it, and a union of languages can refuse past the state bound.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Narrowed<G> {
+    cells: Vec<Cell<G>>,
+    rest: RegularSet,
+}
+
+impl<G: Guard> Narrowed<G> {
+    /// The split `keys` read `field` and every other key the default.
+    fn of(keys: &RegularSet, field: Field<G>) -> Narrowed<G> {
+        Narrowed {
+            rest: keys.complement(),
+            cells: vec![Cell {
+                keys: keys.clone(),
+                field,
+            }],
+        }
+    }
+
+    /// A cell holding `keys`, joined to the one that reads the same field, or
+    /// nothing where `keys` is empty.
+    fn add(cells: &mut Vec<Cell<G>>, keys: RegularSet, field: Field<G>) -> Option<()> {
+        if !budget::spend() {
+            return None;
+        }
+        if keys.is_empty() {
+            return Some(());
+        }
+        match cells.iter_mut().find(|cell| cell.field == field) {
+            Some(cell) => cell.keys = cell.keys.union(&keys)?,
+            None => cells.push(Cell { keys, field }),
+        }
+        Some(())
+    }
+
+    /// The two splits at their common refinement, each cell's field met with what
+    /// the other reads there: the rewrite that keeps overlapping patterns disjoint
+    /// [HSHP20, §4.1]. An atom holding no split reads its default on every word.
+    fn meet(
+        mine: Option<&Narrowed<G>>,
+        my_default: &Field<G>,
+        theirs: Option<&Narrowed<G>>,
+        their_default: &Field<G>,
+    ) -> Option<Box<Narrowed<G>>> {
+        let read = |split: Option<&'_ Narrowed<G>>| match split {
+            Some(split) => (split.cells.clone(), split.rest.clone()),
+            None => (Vec::new(), RegularSet::all(Alphabet::Text)),
+        };
+        let (my_cells, my_rest) = read(mine);
+        let (their_cells, their_rest) = read(theirs);
+        let mut cells = Vec::new();
+        for a in &my_cells {
+            for b in &their_cells {
+                Self::add(
+                    &mut cells,
+                    a.keys.intersect(&b.keys)?,
+                    a.field.meet(&b.field)?,
+                )?;
+            }
+            Self::add(
+                &mut cells,
+                a.keys.intersect(&their_rest)?,
+                a.field.meet(their_default)?,
+            )?;
+        }
+        for b in &their_cells {
+            Self::add(
+                &mut cells,
+                b.keys.intersect(&my_rest)?,
+                my_default.meet(&b.field)?,
+            )?;
+        }
+        cells.sort();
+        Some(Box::new(Narrowed {
+            cells,
+            rest: my_rest.intersect(&their_rest)?,
+        }))
     }
 }
 
@@ -328,6 +454,9 @@ struct MapAtom<G> {
     labels: BTreeMap<Label, Field<G>>,
     /// `t₀`, one entry per key kind.
     defaults: [Field<G>; PARTS],
+    /// The split of the `str` part, where a clause narrows its keys. Boxed because
+    /// nearly every atom has none, and an atom is moved and compared often.
+    narrowed: Option<Box<Narrowed<G>>>,
     /// `S`.
     wanted: Vec<Wanted<G>>,
 }
@@ -365,6 +494,7 @@ impl<G: PartialEq> PartialEq for MapAtom<G> {
                 .all(|(mine, theirs)| (mine.slot, &mine.besides) == (theirs.slot, &theirs.besides))
             && self.labels == other.labels
             && self.defaults == other.defaults
+            && self.narrowed == other.narrowed
             && self.wanted == other.wanted
     }
 }
@@ -375,6 +505,7 @@ impl<G: Guard> MapAtom<G> {
         MapAtom {
             labels: BTreeMap::new(),
             defaults: core::array::from_fn(|_| Field::top()),
+            narrowed: None,
             wanted: Vec::new(),
         }
     }
@@ -387,8 +518,19 @@ impl<G: Guard> MapAtom<G> {
             // A label the atom does not name is governed by the default for its
             // own part, which is what the quasi K-step function maps it to --
             // so reading it here is exact rather than a widening.
-            None => self.default_for(Some(label.kind())),
+            None => self.unnamed(label),
         }
+    }
+
+    /// What a key the labels do not name maps to: the cell holding it where the
+    /// `str` part is split, and its part's default otherwise.
+    fn unnamed(&self, label: &Label) -> Field<G> {
+        if let (Some(split), Label::Word(word, Kind::Str)) = (&self.narrowed, label)
+            && let Some(cell) = split.cells.iter().find(|cell| cell.keys.holds(word))
+        {
+            return cell.field.clone();
+        }
+        self.default_for(Some(label.kind()))
     }
 
     /// The same atom with every label its part's default already covers dropped.
@@ -407,13 +549,70 @@ impl<G: Guard> MapAtom<G> {
         let covered: Vec<Label> = self
             .labels
             .iter()
-            .filter(|(label, field)| **field == self.default_for(Some(label.kind())))
+            .filter(|(label, field)| **field == self.unnamed(label))
             .map(|(label, _)| label.clone())
             .collect();
         for label in covered {
             self.labels.remove(&label);
         }
         self
+    }
+
+    /// The `str` keys a constraint may be met by, each with what it maps to: the
+    /// split's cells and the rest, each read inside `keys`, or `None` for the part
+    /// read whole.
+    fn regions(&self, want: &Wanted<G>) -> Option<Vec<(Option<RegularSet>, &Field<G>)>> {
+        let default = self.defaults.get(want.slot)?;
+        let inside = |keys: &RegularSet| match &want.keys {
+            Some(only) => keys.intersect(only),
+            None => Some(keys.clone()),
+        };
+        let Some(split) = &self.narrowed else {
+            return Some(vec![(want.keys.clone(), default)]);
+        };
+        let mut regions = vec![(inside(&split.rest), default)];
+        regions.extend(
+            split
+                .cells
+                .iter()
+                .map(|cell| (inside(&cell.keys), &cell.field)),
+        );
+        Some(regions)
+    }
+
+    /// [`emptiness`](Self::emptiness) of one constraint over a split: whether a
+    /// fresh key meets it, and the keys it may be pinned to otherwise.
+    ///
+    /// A region holding more keys than the atom names and constrains has one
+    /// left for this constraint whatever the others take, which is what the
+    /// infinite key type gives [Cas23, Lem. 4.7]. A region holding fewer lists
+    /// them, and each is read as a label the atom does not name.
+    fn over_a_split(&self, want: &Wanted<G>) -> Option<(Verdict, Listed<'_, G>)> {
+        let room = self.labels.len() + want.besides.len() + self.wanted.len();
+        let mut fresh = Verdict::Empty;
+        let mut pinned = Vec::new();
+        for (keys, field) in self.regions(want)? {
+            let Some(keys) = keys else {
+                fresh = Verdict::any([fresh, Verdict::Unknown].into_iter());
+                continue;
+            };
+            if let Some(words) = keys.words(room) {
+                pinned.extend(
+                    words
+                        .into_iter()
+                        .map(|word| Label::Word(word, Kind::Str))
+                        .filter(|key| !self.labels.contains_key(key) && !want.besides.contains(key))
+                        .map(|key| (key, &field.ty)),
+                );
+            } else {
+                let here = field
+                    .ty
+                    .meet(&want.ty)
+                    .map_or(Verdict::Unknown, |shared| shared.emptiness());
+                fresh = Verdict::any([fresh, here].into_iter());
+            }
+        }
+        Some((fresh, pinned))
     }
 
     /// The default for the part a key of `kind` falls in.
@@ -475,29 +674,41 @@ impl<G: Guard> MapAtom<G> {
             let Some(default) = self.defaults.get(want.slot) else {
                 return Verdict::Unknown;
             };
+            let split = is_str_part(want.slot) && (self.narrowed.is_some() || want.keys.is_some());
             let finite = finite_keys(want.slot);
-            let fresh = if finite.is_some() {
-                Verdict::Empty
+            let (fresh, listed) = if split {
+                let Some(read) = self.over_a_split(want) else {
+                    return Verdict::Unknown;
+                };
+                read
+            } else if finite.is_some() {
+                (Verdict::Empty, Vec::new())
             } else {
                 // Past a guard's own bound there is no set to read, so nothing
                 // is proved either way.
-                default
+                let fresh = default
                     .ty
                     .meet(&want.ty)
-                    .map_or(Verdict::Unknown, |shared| shared.emptiness())
+                    .map_or(Verdict::Unknown, |shared| shared.emptiness());
+                (fresh, Vec::new())
             };
             if fresh == Verdict::Inhabited {
                 continue;
             }
             let named = self.labels.iter().filter(|(label, _)| {
-                key_slot(Some(label.kind())) == Some(want.slot) && !want.besides.contains(*label)
+                key_slot(Some(label.kind())) == Some(want.slot)
+                    && !want.besides.contains(*label)
+                    && among(label, want.keys.as_ref())
             });
             let named = named.map(|(label, field)| (label.clone(), &field.ty));
             let unnamed = finite
                 .into_iter()
                 .flatten()
                 .filter(|key| !self.labels.contains_key(key) && !want.besides.contains(key));
-            let keys = named.chain(unnamed.map(|key| (key, &default.ty))).collect();
+            let keys = named
+                .chain(listed)
+                .chain(unnamed.map(|key| (key, &default.ty)))
+                .collect();
             pinned.push(Pinned {
                 ty: &want.ty,
                 fresh: fresh == Verdict::Unknown,
@@ -530,6 +741,11 @@ impl<G: Guard> MapAtom<G> {
         for (mine, theirs) in self.defaults.iter().zip(&other.defaults) {
             defaults.push(mine.meet(theirs)?);
         }
+        let narrowed = if self.narrowed.is_none() && other.narrowed.is_none() {
+            None
+        } else {
+            Some(self.narrowed_with(other)?)
+        };
         // `S ∪ S′`, each constraint once by equality: a type's equality can be
         // coarser than its order, so a sort need not put two equal
         // constraints side by side.
@@ -543,8 +759,22 @@ impl<G: Guard> MapAtom<G> {
         Some(MapAtom {
             labels,
             defaults: defaults.try_into().ok()?,
+            narrowed,
             wanted,
         })
+    }
+
+    /// The split a meet of this atom and `other` reads the `str` keys by. Out of
+    /// line, since nearly every meet holds none.
+    #[inline(never)]
+    fn narrowed_with(&self, other: &MapAtom<G>) -> Option<Box<Narrowed<G>>> {
+        let slot = KEY_KINDS.iter().position(|kind| *kind == Kind::Str)?;
+        Narrowed::meet(
+            self.narrowed.as_deref(),
+            self.defaults.get(slot)?,
+            other.narrowed.as_deref(),
+            other.defaults.get(slot)?,
+        )
     }
 
     /// The ways to fail this atom, as atoms, by [Cas23, (13)].
@@ -586,12 +816,25 @@ impl<G: Guard> MapAtom<G> {
         let named: BTreeSet<Label> = self.labels.keys().cloned().collect();
         for (slot, default) in self.defaults.iter().enumerate() {
             let mut atom = widened();
+            let split = self.narrowed.as_ref().filter(|_| is_str_part(slot));
             atom.wanted.push(Wanted {
                 slot,
                 ty: default.ty.complement(),
                 besides: named.clone(),
+                keys: split.map(|split| split.rest.clone()),
             });
             atoms.push(atom);
+            // A key of a cell fails the atom by mapping outside that cell's field.
+            for cell in split.iter().flat_map(|split| &split.cells) {
+                let mut atom = widened();
+                atom.wanted.push(Wanted {
+                    slot,
+                    ty: cell.field.ty.complement(),
+                    besides: named.clone(),
+                    keys: Some(cell.keys.clone()),
+                });
+                atoms.push(atom);
+            }
         }
         // "No key outside `besides` maps into `ty`" constrains the default for
         // that part *and* every label the exclusion set does not cover.
@@ -601,12 +844,16 @@ impl<G: Guard> MapAtom<G> {
                 ty: want.ty.complement(),
                 absent: true,
             };
-            match atom.defaults.get_mut(want.slot) {
-                Some(default) => *default = outside.clone(),
+            match (&want.keys, atom.defaults.get_mut(want.slot)) {
+                (None, Some(default)) => *default = outside.clone(),
+                // A constraint over part of the keys tightens that part alone.
+                (Some(keys), Some(_)) => {
+                    atom.narrowed = Some(Box::new(Narrowed::of(keys, outside.clone())));
+                }
                 // Past the partition the want is kept as it stands, so every
                 // reading built from this atom declines on it as the atom it
                 // came from does, rather than widening in silence.
-                None => atom.wanted.push(want.clone()),
+                (_, None) => atom.wanted.push(want.clone()),
             }
             // A default governs the keys the atom does not name, so tightening
             // one reaches every key of the part -- the exclusion set included,
@@ -625,6 +872,7 @@ impl<G: Guard> MapAtom<G> {
                 .filter(|label| {
                     key_slot(Some(label.kind())) == Some(want.slot)
                         && !want.besides.contains(*label)
+                        && among(label, want.keys.as_ref())
                 })
                 .cloned()
                 .collect();
@@ -668,7 +916,11 @@ impl<G: Guard> MapAtom<G> {
         };
         // Every key the labels do not name is governed by its part's default.
         for entry in entries {
-            if unnamed(entry) && !self.default_for(entry.kind).ty.holds(&entry.value) {
+            let read = match &entry.label {
+                Some(label) => self.unnamed(label),
+                None => self.default_for(entry.kind),
+            };
+            if unnamed(entry) && !read.ty.holds(&entry.value) {
                 return false;
             }
         }
@@ -681,6 +933,12 @@ impl<G: Guard> MapAtom<G> {
                     .as_ref()
                     .is_some_and(|label| want.besides.contains(label))
                     && key_slot(entry.kind) == Some(want.slot)
+                    && want.keys.as_ref().is_none_or(|keys| {
+                        entry
+                            .label
+                            .as_ref()
+                            .is_some_and(|label| among(label, Some(keys)))
+                    })
                     && want.ty.holds(&entry.value)
             })
         })
@@ -759,6 +1017,16 @@ impl<G: Guard> MapLattice<G> {
         MapLattice(PolarUnion::of(vec![atom.absorbed()]))
     }
 
+    /// The dicts a keyed map spells, with no clause over part of the `str` keys.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn record(
+        labels: impl IntoIterator<Item = (Label, G, bool)>,
+        opened: impl IntoIterator<Item = (Option<Kind>, G)>,
+    ) -> Option<MapLattice<G>> {
+        Self::narrowed_record(labels, opened, [])
+    }
+
     /// The dicts a keyed map spells: the keys it names, and what a key of each
     /// part may hold besides them.
     ///
@@ -773,10 +1041,16 @@ impl<G: Guard> MapLattice<G> {
     /// `⊥` [Cas23, §3.2]. Two clauses over one part join, which is the IR's
     /// reading of overlapping clauses where the paper forbids them
     /// [Cas23, §4.4], so a key belongs when *some* clause admits it.
+    ///
+    /// `narrowed` holds the clauses over part of the `str` keys, and a cell of the
+    /// split maps to the join of the clauses that hold it, the `str` part's default
+    /// among them: two clauses overlap and the atom still reads one function, a step
+    /// function on the common refinement of their keys.
     #[must_use]
-    pub(crate) fn record(
+    pub(crate) fn narrowed_record(
         labels: impl IntoIterator<Item = (Label, G, bool)>,
         opened: impl IntoIterator<Item = (Option<Kind>, G)>,
+        narrowed: impl IntoIterator<Item = (RegularSet, G)>,
     ) -> Option<MapLattice<G>> {
         let mut atom = MapAtom::top();
         for default in &mut atom.defaults {
@@ -796,6 +1070,10 @@ impl<G: Guard> MapLattice<G> {
                 *default = default.join(&widened)?;
             }
         }
+        let narrowed: Vec<(RegularSet, G)> = narrowed.into_iter().collect();
+        if !narrowed.is_empty() {
+            atom.narrowed = Some(Self::split_of(narrowed, &atom)?);
+        }
         for (label, ty, optional) in labels {
             let named = Field {
                 ty: Values::Only(ty),
@@ -810,6 +1088,36 @@ impl<G: Guard> MapLattice<G> {
             atom.labels.insert(label, field);
         }
         Some(MapLattice(PolarUnion::of(tidy(vec![atom])?)))
+    }
+
+    /// The split the narrowed clauses spell over `atom`'s default for `str` keys.
+    fn split_of(narrowed: Vec<(RegularSet, G)>, atom: &MapAtom<G>) -> Option<Box<Narrowed<G>>> {
+        let default = atom.defaults.get(key_slot(Some(Kind::Str))?)?;
+        let mut split = Narrowed {
+            cells: Vec::new(),
+            rest: RegularSet::all(Alphabet::Text),
+        };
+        for (keys, ty) in narrowed {
+            let widened = Field {
+                ty: Values::Only(ty),
+                absent: true,
+            };
+            let mut cells = Vec::new();
+            for cell in split.cells {
+                let both = cell.keys.intersect(&keys)?;
+                Narrowed::add(&mut cells, both, cell.field.join(&widened)?)?;
+                let outside = cell.keys.intersect(&keys.complement())?;
+                Narrowed::add(&mut cells, outside, cell.field)?;
+            }
+            let fresh = split.rest.intersect(&keys)?;
+            Narrowed::add(&mut cells, fresh, default.join(&widened)?)?;
+            split = Narrowed {
+                cells,
+                rest: split.rest.intersect(&keys.complement())?,
+            };
+        }
+        split.cells.sort();
+        Some(Box::new(split))
     }
 
     /// The dicts every one of whose keys of `kind` maps into `ty`.

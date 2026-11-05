@@ -1210,6 +1210,7 @@ fn descr_with_sets() -> impl Strategy<Value = Descr> {
                         .into_iter()
                         .map(|(name, ty, optional)| (Label::str(name), ty, optional)),
                     opened.map(|(kind, ty)| (Some(kind), ty)),
+                    [],
                 )
                 .unwrap_or_else(Descr::nothing)
             }),

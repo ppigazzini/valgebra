@@ -14,10 +14,19 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - feat: a step over floats is decided as a set of whole floats
+- feat: a map key is narrowed by a pattern or a length of a str
 
 -->
 
 ### Added
+
+- **A map key narrowed by a pattern or a length.** `dict[Annotated[str,
+  Regex("x-.*")], V]` builds, where it was refused, and so do `MinLen`, `MaxLen`
+  and the connectives over them, which name a regular language of `str` keys. Two
+  clauses whose keys overlap read the join of their values on the keys they share,
+  so a key takes one answer, and the relations read the languages: the map above
+  is `subset` of `dict[str, V]` and the reverse `not_subset`. A key narrowed by a
+  number's bound, a word's order or a callback stays refused.
 
 - **A step over floats is decided as a set.** `x % n == 0` holds of the whole
   floats of one residue class, so the float component holds a list of intervals

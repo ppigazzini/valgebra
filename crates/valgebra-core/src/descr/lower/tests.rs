@@ -5,7 +5,7 @@ use proptest::prelude::*;
 
 use super::{
     BUDGET, Bounds, Constants, DEPTH, Operand, Room, WORK, an_empty_reading_stands, descend, lower,
-    lower_widened, lower_within, nests_past_the_depth, read_widened,
+    lower_widened, lower_within, narrowed_cover, nests_past_the_depth, read_widened,
 };
 use crate::descr::budget;
 use crate::descr::classes::Class;
@@ -403,6 +403,143 @@ fn a_step_the_floats_cannot_hold_refuses_the_lowering() {
     assert!(refined(Schema::Int, Operand::Float(2.0)).is_none());
     assert!(refined(Schema::Float, Operand::Float(4096.0)).is_some());
     assert!(refined(Schema::Int, Operand::Integer(2)).is_some());
+}
+
+/// A clause's key reads as a language where the connectives and a pattern or a
+/// length spell one, and a whole part beside it keeps its part.
+#[test]
+fn a_narrowed_key_lowers_to_the_language_it_spells() {
+    let pattern = |text: &str| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(text.to_owned())].into(),
+    };
+    let long = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::MinLen(2), Constraint::MaxLen(3)].into(),
+    };
+    let reads = |key: &Schema, word: &[u8]| {
+        let (_, words) = narrowed_cover(key).expect("the key reads as words");
+        words.holds(word)
+    };
+    assert!(reads(&pattern("a+"), b"aa") && !reads(&pattern("a+"), b"b"));
+    assert!(reads(&long, b"ab") && !reads(&long, b"a") && !reads(&long, b"abcd"));
+    let either = Schema::union([pattern("a"), pattern("b")]);
+    assert!(reads(&either, b"a") && reads(&either, b"b") && !reads(&either, b"c"));
+    let both = Schema::meet([pattern("a."), pattern(".b")]);
+    assert!(reads(&both, b"ab") && !reads(&both, b"aa") && !reads(&both, b"bb"));
+    let other = pattern("a").complement();
+    assert!(reads(&other, b"b") && !reads(&other, b"a"));
+    // Beside a narrowing, a whole kind reads as its words or its part.
+    let or_str = Schema::Union(vec![pattern("a"), Schema::Str].into());
+    assert!(reads(&or_str, b"") && reads(&or_str, b"z"));
+    let or_nothing = Schema::Union(vec![pattern("a"), Schema::Nothing].into());
+    assert!(reads(&or_nothing, b"a") && !reads(&or_nothing, b""));
+
+    // Beside the words, the whole parts: a complement of a pattern holds every
+    // other kind, a union its members', and a meet what both do.
+    let parts_of = |key: &Schema| narrowed_cover(key).expect("the key reads as words").0;
+    assert!(parts_of(&other).contains(&Some(Kind::Int)));
+    assert!(parts_of(&other).contains(&None));
+    assert!(!parts_of(&other).contains(&Some(Kind::Str)));
+    assert_eq!(parts_of(&pattern("a")), Vec::new());
+    let with_int = Schema::union([pattern("a"), Schema::Int]);
+    assert_eq!(
+        parts_of(&with_int),
+        vec![Some(Kind::Bool), Some(Kind::Int)],
+        "a `bool` key is an `int` key"
+    );
+    assert!(parts_of(&Schema::meet([with_int, other])).contains(&Some(Kind::Int)));
+    let or_everything = Schema::Union(vec![pattern("a"), Schema::ANYTHING].into());
+    assert!(parts_of(&or_everything).contains(&Some(Kind::Float)));
+}
+
+/// A key holding no refinement is no language asked for: a meet of whole kinds stays
+/// the rules' to read, and a build of it declines.
+#[test]
+fn a_key_of_whole_kinds_is_not_read_as_a_language() {
+    for key in [
+        Schema::Str,
+        Schema::Nothing,
+        Schema::ANYTHING,
+        Schema::meet([Schema::Int, Schema::Complement(Arc::new(Schema::Bool))]),
+        Schema::union([Schema::Str, Schema::Int]),
+    ] {
+        assert!(narrowed_cover(&key).is_none(), "{key:?} narrows nothing");
+    }
+}
+
+/// What no language spells leaves the map to the rules: a literal beside a pattern,
+/// whose reading is its value and not its type, a bound, and a base of other kinds.
+#[test]
+fn a_key_no_language_spells_refuses_the_lowering() {
+    let pattern = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex("a".to_owned())].into(),
+    };
+    for key in [
+        Schema::union([pattern.clone(), Schema::Literal(ConstIx::new(0))]),
+        Schema::Refine {
+            base: Arc::new(Schema::Str),
+            constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+        },
+        Schema::Refine {
+            base: Arc::new(Schema::union([Schema::Str, Schema::Int])),
+            constraints: vec![Constraint::MinLen(1)].into(),
+        },
+        Schema::Instance(ClassIx::new(0)),
+    ] {
+        assert!(narrowed_cover(&key).is_none(), "{key:?} spells no language");
+    }
+}
+
+/// A map over a narrowed key holds what its clauses say, and a literal key a clause
+/// holds reads the join of the two.
+#[test]
+fn a_map_over_a_narrowed_key_lowers_to_its_clauses() {
+    let pool = Pool(vec![Operand::Word(b"ab".to_vec(), Kind::Str)]);
+    let pattern = Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex("a.*".to_owned())].into(),
+    };
+    let map = Schema::keyed_map(
+        Vec::new(),
+        vec![
+            MapClause {
+                key: pattern,
+                value: Schema::Int,
+            },
+            MapClause {
+                key: Schema::Literal(ConstIx::new(0)),
+                value: Schema::Str,
+            },
+        ],
+    );
+    let lowered = lower(&map, &pool).expect("a small map");
+    let (narrow, wide) = (
+        lower(
+            &Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: Schema::union([Schema::Int, Schema::Str]),
+                }],
+            ),
+            &pool,
+        )
+        .expect("a small map"),
+        lowered.clone(),
+    );
+    assert_eq!(
+        wide.intersect(&narrow.complement()).map(|d| d.emptiness()),
+        Some(Verdict::Empty),
+        "every key it admits maps into the join"
+    );
+    assert_eq!(
+        narrow
+            .intersect(&lowered.complement())
+            .map(|d| d.emptiness()),
+        Some(Verdict::Inhabited)
+    );
 }
 
 /// A sequence lowers through the one constructor its three spellings share.
@@ -962,13 +1099,13 @@ fn the_forms_with_nowhere_to_land_refuse() {
         // core has none.
         Schema::Instance(crate::ir::ClassIx::new(0)),
         Schema::Ref(crate::ir::DefIx::new(0)),
-        // A key schema that is neither a kind nor a constant covers part of
-        // a part, and the default is a function on the parts.
+        // A key covering part of a part no language holds, and the default is
+        // a function on the parts.
         Schema::KeyedMap {
             fields: Vec::new().into(),
             defaults: vec![MapClause {
                 key: Schema::Refine {
-                    base: Arc::new(Schema::Str),
+                    base: Arc::new(Schema::Int),
                     constraints: vec![Constraint::MinLen(1)].into(),
                 },
                 value: Schema::Int,

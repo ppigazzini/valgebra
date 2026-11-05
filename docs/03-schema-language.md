@@ -795,12 +795,53 @@ assert not field.is_valid({"k": 1})  # the field is read, not the clauses
 assert field.is_valid({Key("k"): "x"})  # the field reads any key equal to it
 ```
 
-### A key schema names whole types, not narrowed ones
+### A key schema names a type, a constant, or words
 
-A clause's key says which keys it governs, and that must be a **type** —
-`str`, `int`, a union of them, `Any` — or a `Literal`, which names the keys one
-by one. A key narrowed by a constraint is refused where it is written, at the
-key itself; one level down -- a narrowed position of a tuple key -- it builds:
+A clause's key says which keys it governs. It is a **type** -- `str`, `int`, a
+union of them, `Any` -- or a `Literal`, which names the keys one by one, or a
+`str` narrowed by a **pattern or a length**, which names the words of a regular
+language:
+
+```python
+from typing import Annotated
+
+from valgebra import Regex, Validator
+
+headers = Validator(dict[Annotated[str, Regex("x-.*")], str])
+assert headers.is_valid({"x-trace": "abc"})
+assert not headers.is_valid({"trace": "abc"})  # no clause governs this key
+assert not headers.is_valid({"x-trace": 1})
+
+# Relations read the words: every header is a `dict[str, str]`, and not the reverse.
+assert headers.relation_to(dict[str, str]) == "subset"
+assert Validator(dict[str, str]).relation_to(headers) == "not_subset"
+```
+
+Clauses are a disjunction, so two whose keys overlap read the join of their
+values on the keys they share, and each on its own elsewhere. A key takes one
+answer, however the clauses are written:
+
+```python
+from typing import Annotated
+
+from valgebra import Regex, Validator
+
+overlapping = Validator(
+    {Annotated[str, Regex("a.*")]: int, Annotated[str, Regex(".*z")]: str}
+)
+assert overlapping.is_valid({"az": 1})  # both clauses hold `az`, and each admits
+assert overlapping.is_valid({"az": "s"})  # a value of its own
+assert not overlapping.is_valid({"ab": "s"})  # only the first holds `ab`
+assert overlapping.relation_to(dict[str, int | str]) == "subset"
+```
+
+JSON Schema's `patternProperties` reads overlap the other way, as a conjunction.
+To write it, give the keys both patterns hold a clause of their own, over the meet
+of the two schemas, so no two clauses overlap and the two readings agree.
+
+A key narrowed any other way -- a number's bound, a word's order, a callback --
+names part of a kind no language holds, and is refused where it is written. One
+level down, a narrowed position of a tuple key, it builds:
 
 ```python
 from typing import Annotated
@@ -811,49 +852,16 @@ import pytest
 from valgebra import Validator
 
 with pytest.raises(NotImplementedError):
-    Validator({Annotated[str, at.MinLen(2)]: int})
+    Validator({Annotated[int, at.Gt(0)]: int})
 
-# The two spellings that remain: every key of a type, or one key by name.
-assert Validator(dict[str, int]).is_valid({"ab": 1})
-assert Validator({"ab": int}).is_valid({"ab": 1})
+# Check such keys beside the mapping rather than inside it. The predicate is
+# opaque, as every predicate is, so the keys are checked on membership and say
+# nothing about inclusion.
+positive_keys = at.Predicate(lambda d: all(k > 0 for k in d))
+counts = Validator(Annotated[dict[int, int], positive_keys])
+assert counts.is_valid({1: 1})
+assert not counts.is_valid({0: 1})
 ```
-
-A narrowed key names *part* of a type, and two such clauses can overlap without
-either containing the other — which is a question this map model does not answer
-the same way twice. To constrain the keys themselves, check them beside the
-mapping rather than inside it. A record's declared keys are named, not shaped,
-so a check of the keys a clause reads exempts them by name:
-
-```python
-from typing import Annotated
-
-import annotated_types as at
-
-from valgebra import Validator, intersection
-
-key_shape = Validator(Annotated[str, at.MinLen(2)])
-
-
-def keys_in(key_schema: Validator, *fields: str) -> at.Predicate:
-    """Hold every key a mapping carries, but the named fields, to `key_schema`."""
-    return at.Predicate(lambda d: all(k in fields or key_schema.is_valid(k) for k in d))
-
-
-short_codes = Validator(Annotated[dict[str, int], keys_in(key_shape)])
-assert short_codes.is_valid({"ab": 1})
-assert not short_codes.is_valid({"a": 1})
-
-# `n` is a field the record declares, so the key check leaves it to the record.
-counted = intersection({"n": int, str: int}, Annotated[dict, keys_in(key_shape, "n")])
-assert counted.is_valid({"n": 1, "ab": 2})
-assert not counted.is_valid({"n": 1, "a": 2})
-```
-
-The mapping is still a `dict[str, int]` to every relation — the predicate is
-opaque, as every predicate is ([refinements](05-refinements.md)), so the keys
-are checked on membership and say nothing about inclusion. That is the whole
-trade, and it is why the narrowed key is refused rather than compiled into
-something that looks decided and is not.
 
 ### Constraining some keys and freeing the rest
 

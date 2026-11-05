@@ -681,15 +681,15 @@ truth value in a length marker is read instead (`MinLen(True)`), because the
 value it holds reads as the length it equals; these hold no value Python divides
 or orders by.
 
-**A map key narrowed by a constraint.** A clause's key says which keys it
-governs, and a map reads that as whole *kinds* of key or as the constants a
-`Literal` names. `Annotated[str, MinLen(2)]` is neither: it names part of a kind,
-and two such clauses can overlap without either containing the other. Overlapping
-key domains are a different theory from the one these maps are built on --
-[Cas23, §4.5] says that with them "there would not be any difference between
-record types and an intersection of function types" -- and this library reads
-overlapping clauses disjunctively, which answers a question the two theories do
-not agree on.
+**A map key narrowed past a language of `str` keys.** A clause's key says which
+keys it governs, and a map reads that as whole *kinds* of key, the constants a
+`Literal` names, or the words a pattern or a length of a `str` spells. Those are
+held by a split of the map's `str` part, the partition of a quasi `K`-step function
+being any finite one [Cas23, Def. 4.6], and two clauses that overlap read the join
+of their values on the common refinement of their keys. `Annotated[int, Gt(0)]`, a
+word's order bound and a callback name part of a kind no language holds, with
+nothing for the set representation to split, so `checked_key` refuses them where
+they are written, and the mapping is checked by a predicate beside it.
 
 The same principle governs the regex: the pattern is compiled and anchored at
 build time, so an invalid expression fails at construction rather than at first

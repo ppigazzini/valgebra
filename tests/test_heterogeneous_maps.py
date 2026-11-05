@@ -187,21 +187,23 @@ def test_optional_field_with_a_catch_all() -> None:
     assert not schema.is_valid({"a": "x"})  # the field still wins: a must be int
 
 
-def test_a_refinement_key_schema_is_refused() -> None:
-    """A narrowed key names part of a kind, and a clause's key must name whole ones.
+def test_a_key_narrowed_past_a_language_is_refused() -> None:
+    """A clause's key names a kind, a constant or the words of a language.
 
-    Two such clauses can overlap without either containing the other, and
-    overlapping key domains are a different theory from the one this library's
-    maps are built on. It is refused where it is written, as the zero divisor and
-    the invalid pattern already are.
+    A bound, a word's order or a callback names part of a kind no language holds,
+    so nothing can split a map's keys by it. It is refused where it is written, as
+    the zero divisor and the invalid pattern already are.
     """
     for spec in (
-        {Annotated[str, at.MinLen(2)]: int},
-        dict[Annotated[str, at.MinLen(2)], int],
+        {Annotated[int, at.Gt(0)]: int},
+        dict[Annotated[int, at.Gt(0)], int],
+        dict[Annotated[str, at.Gt("a")], int],
+        dict[Annotated[str, at.Predicate(str.isalpha)], int],
+        dict[Annotated[bytes, at.MinLen(1)], int],
         # Hidden inside a union, which is the same claim spelled longer. The
         # dict is built at runtime, so the static checker is not asked to read a
         # combinator as a type expression.
-        GenericAlias(dict, (union(int, Annotated[str, at.MinLen(2)]), int)),
+        GenericAlias(dict, (union(str, Annotated[int, at.Gt(0)]), int)),
     ):
         with pytest.raises(NotImplementedError, match="narrows the keys it governs"):
             Validator(spec)

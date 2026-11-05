@@ -1,13 +1,14 @@
 use std::collections::BTreeSet;
 
 use super::{
-    Entry, KEY_KINDS, Label, MAX_ASSIGNMENTS, MAX_ATOMS, MapAtom, MapLattice, PARTS, Pinned,
-    Search, Wanted, key_slot, tidy,
+    Entry, KEY_KINDS, Label, MAX_ASSIGNMENTS, MAX_ATOMS, MapAtom, MapLattice, Narrowed, PARTS,
+    Pinned, Search, Wanted, key_slot, tidy,
 };
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
 use crate::descr::lattice_tests::Algebra;
 use crate::descr::polar::PolarUnion;
+use crate::descr::regular::{Alphabet, RegularSet};
 use crate::descr::values::{Field, Values};
 use crate::kind::Kind;
 use crate::verdict::Verdict;
@@ -336,6 +337,7 @@ fn a_want_with_one_viable_witness_requires_that_key() {
             slot: int_slot,
             ty: one(),
             besides: BTreeSet::new(),
+            keys: None,
         });
         atom
     };
@@ -494,6 +496,7 @@ fn the_search_for_keys_past_its_bound_is_unknown() {
                 slot: str_slot,
                 ty: Values::Every,
                 besides: BTreeSet::from([Label::str(&format!("x{n}"))]),
+                keys: None,
             });
         }
         for value in 1..=3 {
@@ -501,6 +504,7 @@ fn the_search_for_keys_past_its_bound_is_unknown() {
                 slot: str_slot,
                 ty: Values::Only(IntSet::just(value)),
                 besides: BTreeSet::new(),
+                keys: None,
             });
         }
         atom
@@ -1189,6 +1193,7 @@ fn a_meet_wants_a_key_once_whatever_its_type_spells() {
             slot: key_slot(Some(Kind::Str)).expect("a key kind"),
             ty: Values::Only(values),
             besides: BTreeSet::new(),
+            keys: None,
         });
         atom
     };
@@ -1213,6 +1218,7 @@ fn a_want_past_the_partition_proves_nothing() {
         slot: PARTS,
         ty: Values::Only(IntSet::just(1)),
         besides: BTreeSet::new(),
+        keys: None,
     });
     assert_eq!(broken.emptiness(), Verdict::Unknown);
 
@@ -1225,4 +1231,282 @@ fn a_want_past_the_partition_proves_nothing() {
     for atom in carried {
         assert_eq!(atom.emptiness(), Verdict::Unknown);
     }
+}
+
+/// The language of `pattern` over `str` keys.
+fn words(pattern: &str) -> RegularSet {
+    RegularSet::pattern(pattern, Alphabet::Text).expect("a small pattern")
+}
+
+/// A dict of `str` keys, each with its value.
+fn of(entries: &[(&str, i64)]) -> Vec<Entry<i64>> {
+    entries.iter().map(|(key, value)| at(key, *value)).collect()
+}
+
+/// The dicts over a few keys and values a split tells apart: every dict of up to
+/// three keys, each mapping to one of three values.
+fn narrow_dicts() -> Vec<Vec<Entry<i64>>> {
+    const KEYS: [&str; 6] = ["a", "ab", "b", "xa", "c", "xb"];
+    let mut dicts = vec![Vec::new()];
+    for (first, a) in KEYS.iter().enumerate() {
+        for va in 1..=3 {
+            dicts.push(vec![at(a, va)]);
+            for (second, b) in KEYS.iter().enumerate().skip(first + 1) {
+                for vb in 1..=3 {
+                    dicts.push(vec![at(a, va), at(b, vb)]);
+                    for c in KEYS.iter().skip(second + 1) {
+                        for vc in 1..=3 {
+                            dicts.push(vec![at(a, va), at(b, vb), at(c, vc)]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    dicts.push(vec![at_an_integer(1)]);
+    dicts
+}
+
+/// One dict entry under an integer key, which a split of the `str` keys leaves to
+/// its own part.
+fn at_an_integer(value: i64) -> Entry<i64> {
+    Entry {
+        label: Some(Label::Int(7)),
+        kind: Some(Kind::Int),
+        value,
+    }
+}
+
+fn same_over_narrow(a: &MapLattice<IntSet>, b: &MapLattice<IntSet>) -> bool {
+    narrow_dicts().iter().all(|d| a.holds(d) == b.holds(d))
+}
+
+/// The map lattice's operations over splits of the `str` keys.
+const NARROW: Algebra<MapLattice<IntSet>> = Algebra {
+    join: MapLattice::union,
+    meet: MapLattice::intersect,
+    complement: MapLattice::complement,
+    same: same_over_narrow,
+    holds_nothing: |a| narrow_dicts().iter().all(|d| !a.holds(d)),
+    holds_everything: |a| same_over_narrow(a, &MapLattice::all()),
+};
+
+/// Lattices whose atoms split the `str` keys: clauses over languages that overlap,
+/// one that holds a single key, and one beside a whole-kind clause.
+fn narrow_lattice() -> impl Strategy<Value = MapLattice<IntSet>> {
+    let language = prop_oneof![
+        Just(words("a.*")),
+        Just(words(".*b")),
+        Just(words("x.*")),
+        Just(words("a|b")),
+        Just(words("a")),
+    ];
+    let value = (1i64..=3).prop_map(IntSet::just);
+    let leaf = prop_oneof![
+        (language.clone(), value.clone()).prop_map(|(keys, ty)| {
+            MapLattice::narrowed_record([], [], [(keys, ty)]).expect("a small record")
+        }),
+        (language.clone(), value.clone(), value.clone()).prop_map(|(keys, ty, rest)| {
+            MapLattice::narrowed_record([], [(Some(Kind::Str), rest)], [(keys, ty)])
+                .expect("a small record")
+        }),
+        (language.clone(), language, value.clone(), value.clone()).prop_map(|(a, b, ta, tb)| {
+            MapLattice::narrowed_record([], [], [(a, ta), (b, tb)]).expect("a small record")
+        }),
+        value
+            .clone()
+            .prop_map(|ty| MapLattice::label(Label::str("a"), ty, false)),
+        value.prop_map(|ty| MapLattice::keyed(Kind::Str, ty)),
+        Just(MapLattice::all()),
+    ];
+    leaf.prop_recursive(2, 6, 2, |inner| {
+        prop_oneof![
+            (inner.clone(), inner.clone())
+                .prop_map(|(a, b)| a.union(&b).unwrap_or_else(MapLattice::all)),
+            (inner.clone(), inner.clone())
+                .prop_map(|(a, b)| a.intersect(&b).unwrap_or_else(MapLattice::empty)),
+            inner.prop_map(|a| a.complement()),
+        ]
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 96,
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    // THEORY: the-str-keys-split-by-languages
+    /// The algebra's laws over atoms that split the `str` keys, against the dicts.
+    #[test]
+    fn the_laws_hold_over_a_split_of_the_str_keys(
+        a in narrow_lattice(),
+        b in narrow_lattice(),
+        c in narrow_lattice(),
+    ) {
+        let _allowance = budget::law();
+        NARROW.lattice_laws(&a, &b, &c)?;
+        NARROW.complement_laws(&a, &b)?;
+    }
+
+    // THEORY: the-str-keys-split-by-languages
+    /// Emptiness is exact: a set read empty holds no dict, and one read inhabited
+    /// holds one of the dicts the drawn keys spell.
+    #[test]
+    fn emptiness_over_a_split_is_the_dicts_it_holds(a in narrow_lattice()) {
+        let _allowance = budget::law();
+        let held = narrow_dicts().iter().any(|d| a.holds(d));
+        match a.emptiness() {
+            Verdict::Empty => prop_assert!(!held, "read empty, and it holds a dict"),
+            Verdict::Inhabited => prop_assert!(held, "read inhabited, and it holds no dict"),
+            Verdict::Unknown => {}
+        }
+    }
+}
+
+/// A clause reads its keys and leaves the others shut, and a key outside it is no
+/// member, whatever it maps to.
+#[test]
+fn a_clause_over_a_language_governs_those_keys_alone() {
+    let map = MapLattice::narrowed_record([], [], [(words("a.*"), IntSet::just(1))])
+        .expect("a small record");
+    assert!(map.holds(&of(&[])));
+    assert!(map.holds(&of(&[("a", 1), ("ab", 1)])));
+    assert!(
+        !map.holds(&of(&[("a", 2)])),
+        "the value is outside the clause"
+    );
+    assert!(
+        !map.holds(&of(&[("b", 1)])),
+        "the key is outside every clause"
+    );
+    assert!(
+        !map.holds(&[at_an_integer(1)]),
+        "a key of another kind is shut"
+    );
+}
+
+/// Two clauses over keys that overlap read the join on what they share: a key
+/// belongs when some clause admits it, which is one function on the refinement.
+#[test]
+fn clauses_over_overlapping_languages_read_the_join_where_they_meet() {
+    let map = MapLattice::narrowed_record(
+        [],
+        [],
+        [
+            (words("a.*"), IntSet::just(1)),
+            (words(".*b"), IntSet::just(2)),
+        ],
+    )
+    .expect("a small record");
+    assert!(map.holds(&of(&[("ab", 1)])) && map.holds(&of(&[("ab", 2)])));
+    assert!(!map.holds(&of(&[("ab", 3)])));
+    assert!(map.holds(&of(&[("a", 1)])) && !map.holds(&of(&[("a", 2)])));
+    assert!(map.holds(&of(&[("b", 2)])) && !map.holds(&of(&[("b", 1)])));
+}
+
+/// A named key is read by its label rather than by the cell holding it, and a key
+/// a clause holds reads the join of the whole kind's default with it.
+#[test]
+fn a_label_is_read_before_the_cell_holding_it() {
+    let map = MapLattice::narrowed_record(
+        [(Label::str("ab"), IntSet::just(3), true)],
+        [(Some(Kind::Str), IntSet::just(1))],
+        [(words("a.*"), IntSet::just(2))],
+    )
+    .expect("a small record");
+    assert!(map.holds(&of(&[("ab", 3)])) && !map.holds(&of(&[("ab", 2)])));
+    assert!(map.holds(&of(&[("a", 2)])) && map.holds(&of(&[("a", 1)])));
+    assert!(map.holds(&of(&[("b", 1)])) && !map.holds(&of(&[("b", 2)])));
+}
+
+/// The dicts some key of `keys` maps to `value`: the complement of the atom that
+/// holds those keys to every other value and leaves every other key free.
+fn some_word(keys: &RegularSet, value: i64) -> MapLattice<IntSet> {
+    let mut atom = MapAtom::top();
+    atom.narrowed = Some(Box::new(Narrowed::of(
+        keys,
+        Field {
+            ty: Values::Only(IntSet::just(value).complement()),
+            absent: true,
+        },
+    )));
+    MapLattice(PolarUnion::of(vec![atom])).complement()
+}
+
+// THEORY: the-str-keys-split-by-languages
+/// A constraint asks a key for a value, and a cell holding too few keys is read by
+/// listing them: one key cannot meet two constraints whose values are apart, two
+/// keys can, and a language with room for both needs neither listed.
+#[test]
+fn a_cell_of_few_keys_is_pinned_and_a_wide_one_is_not() {
+    let both = |pattern: &str| {
+        let keys = words(pattern);
+        some_word(&keys, 2)
+            .intersect(&some_word(&keys, 3))
+            .expect("a small meet")
+    };
+    assert_eq!(both("a").emptiness(), Verdict::Empty);
+    assert_eq!(both("a|b").emptiness(), Verdict::Inhabited);
+    assert!(both("a|b").holds(&of(&[("a", 2), ("b", 3)])));
+    assert!(!both("a|b").holds(&of(&[("a", 2), ("b", 2)])));
+    assert_eq!(both("a.*").emptiness(), Verdict::Inhabited);
+    assert!(both("a.*").holds(&of(&[("a", 2), ("ab", 3)])));
+    assert!(
+        !both("a.*").holds(&of(&[("a", 2), ("b", 3)])),
+        "`b` is no key of it"
+    );
+}
+
+/// A named key takes its value from its label, so it meets a constraint over a
+/// language only where the language holds it.
+#[test]
+fn a_label_meets_a_constraint_only_where_its_language_holds_it() {
+    // Every other key maps to 1, and the label `a` to 2, so "some key of `a.*` maps
+    // to 2" is met by `a` and "some key of `b.*` maps to 2" by no key.
+    let record = MapLattice::narrowed_record(
+        [(Label::str("a"), IntSet::just(2), false)],
+        [(Some(Kind::Str), IntSet::just(1))],
+        [],
+    )
+    .expect("a small record");
+    let met = record
+        .intersect(&some_word(&words("a.*"), 2))
+        .expect("a small meet");
+    assert_eq!(met.emptiness(), Verdict::Inhabited);
+    let unmet = record
+        .intersect(&some_word(&words("b.*"), 2))
+        .expect("a small meet");
+    assert_eq!(unmet.emptiness(), Verdict::Empty);
+}
+
+/// A lone surrogate is a `str` key no pattern's language holds, so a clause over
+/// `.*` leaves it to the rest of the part, as the walk does.
+#[test]
+fn a_key_holding_a_lone_surrogate_is_in_no_pattern_language() {
+    let surrogate = Entry {
+        label: Some(Label::Word(vec![0xED, 0xA0, 0x80], Kind::Str)),
+        kind: Some(Kind::Str),
+        value: 1,
+    };
+    let map = MapLattice::narrowed_record([], [], [(words("(?s).*"), IntSet::just(1))])
+        .expect("a small record");
+    assert!(map.holds(&of(&[("a", 1)])));
+    assert!(!map.holds(core::slice::from_ref(&surrogate)));
+    assert!(map.complement().holds(&[surrogate]));
+}
+
+/// A meet of two splits past the allowance refuses, since a split it could not
+/// finish would hold other dicts than it says.
+#[test]
+fn a_meet_of_two_splits_refuses_past_the_allowance() {
+    let map = |pattern: &str| {
+        MapLattice::narrowed_record([], [], [(words(pattern), IntSet::just(1))])
+            .expect("a small record")
+    };
+    let (a, b) = (map("a.*"), map(".*b"));
+    assert!(a.intersect(&b).is_some(), "a meet with room for it builds");
+    let refused = budget::under(0, || a.intersect(&b));
+    assert!(refused.is_none(), "and past the allowance it refuses");
 }

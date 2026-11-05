@@ -1953,25 +1953,37 @@ fn a_pool_seeded_by_shared_keys_pools_as_one_seeded_by_rebuilding() {
     });
 }
 
-/// A key schema that narrows its keys is refused, at any depth a connective
-/// can hide the narrowing.
+/// A key schema narrowed past a language of `str` keys is refused, at any depth a
+/// connective can hide the narrowing, and one a language reads builds.
 #[test]
-fn a_narrowing_key_is_found_under_every_connective() {
-    let narrowing = Schema::Refine {
-        base: Arc::new(Schema::Str),
-        constraints: vec![Constraint::MinLen(1)].into(),
+fn a_key_narrowed_past_words_is_found_under_every_connective() {
+    let refined = |base: Schema, constraint: Constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
     };
-    for schema in [
-        narrowing.clone(),
-        Schema::union([Schema::Int, narrowing.clone()]),
-        Schema::meet([Schema::Str, narrowing.clone()]),
-        narrowing.clone().complement(),
-        Schema::union([Schema::Int, narrowing.clone().complement()]),
+    for narrowing in [
+        refined(Schema::Int, Constraint::Ge(OperandIx::new(0))),
+        refined(Schema::Str, Constraint::Ge(OperandIx::new(0))),
+        refined(Schema::Str, Constraint::Predicate(PredIx::new(0))),
+        refined(Schema::Bytes, Constraint::MinLen(1)),
+        refined(
+            refined(Schema::Int, Constraint::Ge(OperandIx::new(0))),
+            Constraint::MinLen(1),
+        ),
     ] {
-        assert!(narrows_its_keys(&schema), "{schema:?} narrows its keys");
+        for schema in [
+            narrowing.clone(),
+            Schema::union([Schema::Int, narrowing.clone()]),
+            Schema::meet([Schema::Str, narrowing.clone()]),
+            narrowing.clone().complement(),
+            Schema::union([Schema::Int, narrowing.clone().complement()]),
+        ] {
+            assert!(narrows_past_words(&schema), "{schema:?} narrows past words");
+        }
     }
-    // A refinement carrying no constraint narrows nothing, and neither does
-    // a plain key type: both are keys a map may be written with.
+    let pattern = refined(Schema::Str, Constraint::Regex("a".to_owned()));
+    // A plain key type and a refinement carrying no constraint narrow nothing, and
+    // what a language reads keys as it is, whichever connective holds it.
     for schema in [
         Schema::Str,
         Schema::union([Schema::Str, Schema::Int]),
@@ -1979,8 +1991,19 @@ fn a_narrowing_key_is_found_under_every_connective() {
             base: Arc::new(Schema::Str),
             constraints: Vec::new().into(),
         },
+        Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: Vec::new().into(),
+        },
+        refined(Schema::Str, Constraint::MinLen(1)),
+        refined(Schema::Str, Constraint::MaxLen(1)),
+        pattern.clone(),
+        refined(pattern.clone(), Constraint::MinLen(1)),
+        Schema::union([Schema::Int, pattern.clone()]),
+        Schema::meet([Schema::Str, pattern.clone()]),
+        pattern.complement(),
     ] {
-        assert!(!narrows_its_keys(&schema), "{schema:?} keys as it is");
+        assert!(!narrows_past_words(&schema), "{schema:?} keys as it is");
     }
 }
 

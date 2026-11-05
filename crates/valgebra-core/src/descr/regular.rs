@@ -299,7 +299,6 @@ impl Dfa {
     }
 
     /// Whether this automaton accepts `word`.
-    #[cfg(test)]
     fn holds(&self, word: &[u8]) -> bool {
         let mut state = 0;
         for byte in word {
@@ -326,7 +325,6 @@ impl Dfa {
     }
 
     /// The automaton accepting nothing, over the one-class alphabet.
-    #[cfg(test)]
     fn empty() -> Dfa {
         Dfa {
             classes: vec![0; 256],
@@ -1435,7 +1433,6 @@ pub(crate) struct RegularSet {
 
 impl RegularSet {
     /// The empty set.
-    #[cfg(test)]
     #[must_use]
     pub(crate) fn empty() -> RegularSet {
         RegularSet {
@@ -1695,7 +1692,6 @@ impl RegularSet {
     }
 
     /// Whether this set holds `word`.
-    #[cfg(test)]
     #[must_use]
     pub(crate) fn holds(&self, word: &[u8]) -> bool {
         self.dfa.holds(word)

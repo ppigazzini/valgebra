@@ -301,7 +301,7 @@ than whether it is empty [Cas23, Rem. 4.3].
 
 SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
 
-IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/check/walk/record.rs::keyed_map_asks_for_its_keys, valgebra-py/src/check/walk/record.rs::keyed_map_matches_json, descr/values.rs::Field, decision/readings.rs::Schema::admits_the_empty, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::tagged_unions_disjoint
+IMPLEMENTED-BY: decision.rs::Schema::holds_a_value_shallowly, decision/emptiness.rs::intersection_verdict, decision/records.rs::keyed_map_meet_verdict, decision/records.rs::keyed_map_subtype, decision/records.rs::entered, decision/records.rs::Labels::of, descr/maps.rs, descr/maps.rs::Wanted, descr/maps.rs::Search::assign, descr/maps.rs::MapAtom::absorbed, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/maps.rs::MapAtom::complement, descr/maps.rs::MapLattice::narrowed_record, descr/records.rs, descr/records.rs::Atom::meet, descr/records.rs::Atom::emptiness, descr/records.rs::Atom::complement, descr/records.rs::Atom::tidy, descr/records.rs::RecordLattice::attribute, descr/values.rs::Field::top, descr/values.rs::Field::meet, descr/values.rs::Field::join, descr/values.rs::Field::complement, descr/values.rs::Field::emptiness, descr/lower.rs::map, ir.rs::Schema::record, ir.rs::canonical_fields, ir.rs::already_said, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/check/walk/record.rs::keyed_map_asks_for_its_keys, valgebra-py/src/check/walk/record.rs::keyed_map_matches_json, descr/values.rs::Field, decision/readings.rs::Schema::admits_the_empty, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::tagged_unions_disjoint
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition, a_key_of_whole_kinds_opens_the_parts_it_holds
 
@@ -1252,6 +1252,23 @@ IMPLEMENTED-BY: descr/maps.rs::Wanted
 
 HELD-BY: two_spellings_of_one_keyed_map_are_one_term, opening_drops_a_field_the_record_already_said, a_label_carrying_its_regions_default_is_absorbed
 
+**A `str` part may be split by regular languages.** The partition of a quasi
+`K`-step function is any finite one [Cas23, Def. 4.6], and the source fixes it in
+advance because two maps with overlapping domains meet in one whose domains
+overlap [Cas23, §4.4]. Languages stay a partition at that meet, since each has a
+complement and two an intersection, which is how a checker of JSON Schema keeps
+`patternProperties` disjoint [HSHP20, §4.1]. So an atom carries its own split of
+the `str` keys, a meet reads two splits at their common refinement, and a clause
+list reads the join of its values on each cell, overlap being a disjunction here.
+The property the emptiness rests on asks a key type to be infinite
+[Cas23, Lem. 4.7], so a cell with more keys than the atom names and constrains has
+one left for each constraint, and the keys of a smaller cell are pinned as a finite
+part's are. **[DEVIATION: the-str-keys-split-by-languages]**
+
+IMPLEMENTED-BY: descr/maps.rs, descr/maps.rs::Narrowed, descr/maps.rs::Narrowed::meet, descr/maps.rs::MapAtom::over_a_split, descr/lower.rs::narrowed_cover
+
+HELD-BY: the_laws_hold_over_a_split_of_the_str_keys, emptiness_over_a_split_is_the_dicts_it_holds, a_cell_of_few_keys_is_pinned_and_a_wide_one_is_not, test_a_relation_over_narrowed_keys_answers_as_the_walk_does
+
 **Clauses may overlap where the source forbids it.** A key belongs when
 *some* clause admits it and its value, in the walk and in subtyping alike, and
 two clauses may claim one key: a disjunction, where [Cas23, §4.4] forbids two
@@ -1259,7 +1276,7 @@ domains of one map to overlap and an overlap read at face value is a
 conjunction. Neither reads the clauses in order.
 **[DEVIATION: clauses-may-overlap]**
 
-IMPLEMENTED-BY: descr/maps.rs::MapLattice::record, ir.rs::canonical_clauses, valgebra-py/src/check/walk/record.rs::covered
+IMPLEMENTED-BY: descr/maps.rs::MapLattice::narrowed_record, ir.rs::canonical_clauses, valgebra-py/src/check/walk/record.rs::covered
 
 HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, test_a_key_belongs_when_some_clause_admits_it_over_drawn_clauses, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, a_field_is_read_instead_of_a_clause_that_names_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
 

@@ -869,7 +869,13 @@ the shape. What is left below is what the descriptor cannot hold.
   dict's keys **by kind** and gives each part its own default, so a clause whose
   key is a kind, a literal, or a union or complement of kinds lands in parts:
   `complement(str)` opens every other kind and the part for a key of no listed
-  kind, a class instance. A key holding *part* of a kind has no part to land in
+  kind, a class instance. A `str` narrowed by a pattern or a length, and the
+  connectives over those, names a regular language, and the `str` part is split
+  by it: two clauses overlap and the map reads the join of their values on the
+  refinement of their keys, so `dict[Annotated[str, Regex("x-.*")], str]` is
+  decided against `dict[str, str]`, a record naming `x-a` and another clause's
+  keys, as a key narrowed by no pattern is. A key holding any other *part* of a
+  kind has no part to land in
   -- a tuple or a frozenset of narrower elements; a class; the complement of
   `Literal["a"]`, which holds a `str` subclass's key equal to `"a"` and not the
   exact one, where a label holds both -- and the lowering declines rather than
@@ -888,7 +894,9 @@ the shape. What is left below is what the descriptor cannot hold.
     of the other parts. A key holding part of a kind is not, and it may overlap
     another clause: the source says a theory of maps with overlapping domains is
     possible, and that comparing two records under it needs the machinery for
-    comparing intersections of arrow types. valgebra admits such a key where the
+    comparing intersections of arrow types. Words escape that: clauses here read
+    disjunctively, and languages have a common refinement, so two maps meet in one
+    step function. valgebra admits every other such key where the
     source has no part for it: the walk reads it exactly, and the comparison it
     needs is not built. That is a gap rather than a refusal, and what it costs
     is the proof a pair needs where a key kind is read in part -- which comes

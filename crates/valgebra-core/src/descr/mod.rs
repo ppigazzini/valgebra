@@ -754,12 +754,14 @@ impl Descr {
     pub(crate) fn keyed_map(
         labels: impl IntoIterator<Item = (Label, Descr, bool)>,
         opened: impl IntoIterator<Item = (Option<Kind>, Descr)>,
+        narrowed: impl IntoIterator<Item = (RegularSet, Descr)>,
     ) -> Option<Descr> {
-        let lattice = MapLattice::record(
+        let lattice = MapLattice::narrowed_record(
             labels
                 .into_iter()
                 .map(|(label, ty, optional)| (label, Arc::new(ty), optional)),
             opened.into_iter().map(|(part, ty)| (part, Arc::new(ty))),
+            narrowed.into_iter().map(|(keys, ty)| (keys, Arc::new(ty))),
         )?;
         let mut descr = Descr::nothing();
         descr.put(Kind::Dict, Component::Maps(lattice));

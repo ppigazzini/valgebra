@@ -15,7 +15,8 @@ use pyo3::types::{
     PyTuple, PyType,
 };
 use valgebra_core::{
-    ClassIx, ConstIx, DefIx, DefShift, Guarded, OperandIx, PredIx, Schema, fresh_self_token,
+    ClassIx, ConstIx, Constraint, DefIx, DefShift, Guarded, OperandIx, PredIx, Schema,
+    fresh_self_token,
 };
 
 use crate::errors::summarize;
@@ -1795,43 +1796,50 @@ impl Pool {
     }
 }
 
-/// Refuse a map key schema narrowed by a constraint or a predicate.
+/// Refuse a map key schema narrowed past what a language of `str` keys reads.
 ///
-/// A clause's key says which keys it governs, and a map reads that as whole
-/// *kinds* of key -- `str`, `int`, and the rest -- or as the constants a
-/// `Literal` names. A key narrowed by a bound, a pattern or a callback is
-/// neither: it names part of a kind, and two such clauses can overlap without
-/// either containing the other. Overlapping key domains are a different theory
-/// from the one this library's maps are built on -- with them "there would not
-/// be any difference between record types and an intersection of function
-/// types" [Cas23, §4.5], which is why the paper forbids them [Cas23, §4.4] --
-/// and reading them as this library does, one clause at a time, answers a
-/// question the two spellings do not agree on.
-///
-/// So it is refused where it is written, which is the rule the zero divisor and
-/// the invalid pattern already follow.
+/// A clause's key says which keys it governs. A key type and a `Literal` name
+/// whole kinds and constants, and a `str` narrowed by a pattern or a length names
+/// a regular language, which a map splits its `str` part by
+/// (`crates/valgebra-core/src/descr/maps.rs`). Clauses read disjunctively, so two
+/// that overlap read the join of their values on what they share, a step function
+/// on the common refinement of their keys [Cas23, Def. 4.6]. A key narrowed by a
+/// number's bound, a word's order or a callback names part of a kind no language
+/// holds, so it is refused where it is written, which is the rule the zero divisor
+/// and the invalid pattern already follow.
 fn checked_key(schema: &Schema, spelling: &Bound<'_, PyAny>) -> PyResult<()> {
-    if !narrows_its_keys(schema) {
+    if !narrows_past_words(schema) {
         return Ok(());
     }
     Err(not_implemented(format!(
-        "{} narrows the keys it governs, and a map key must be a key type or a \
-         Literal: write dict[str, V] to key every string, or dict[Literal[\"a\"], V] \
-         (or {{\"a\": V}}) to key one. To constrain the keys themselves, check them \
+        "{} narrows the keys it governs past a language of `str` keys, and a map key \
+         must be a key type, a Literal, or a `str` narrowed by a pattern or a length: \
+         write dict[str, V] to key every string, or dict[Literal[\"a\"], V] (or \
+         {{\"a\": V}}) to key one. To constrain the keys any other way, check them \
          beside the mapping rather than inside it",
         summarize(spelling)?
     )))
 }
 
-/// Whether a key schema narrows its keys by a constraint or a predicate, at any
-/// depth a union or a complement can hide one.
-fn narrows_its_keys(schema: &Schema) -> bool {
+/// Whether a key schema narrows its keys by more than a pattern or a length of a
+/// `str`, at any depth a union or a complement can hide one.
+fn narrows_past_words(schema: &Schema) -> bool {
     match schema {
-        Schema::Refine { constraints, .. } => !constraints.is_empty(),
-        Schema::Union(members) | Schema::Intersection(members) => {
-            members.iter().any(narrows_its_keys)
+        Schema::Refine { base, constraints } if !constraints.is_empty() => {
+            let of_words = matches!(**base, Schema::Str)
+                || (matches!(**base, Schema::Refine { .. }) && !narrows_past_words(base));
+            !of_words
+                || !constraints.iter().all(|constraint| {
+                    matches!(
+                        constraint,
+                        Constraint::Regex(_) | Constraint::MinLen(_) | Constraint::MaxLen(_)
+                    )
+                })
         }
-        Schema::Complement(inner) => narrows_its_keys(inner),
+        Schema::Union(members) | Schema::Intersection(members) => {
+            members.iter().any(narrows_past_words)
+        }
+        Schema::Complement(inner) => narrows_past_words(inner),
         _ => false,
     }
 }

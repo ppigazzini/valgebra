@@ -18,6 +18,7 @@ use super::budget;
 use super::classes::Class;
 use super::floats::FloatSet;
 use super::maps::{KEY_KINDS, Label};
+use super::regular::{Alphabet, RegularSet};
 use super::{BoolSet, Descr, EVERY_PART, Parts, integers::IntSet, part};
 use crate::ir::{
     ClassIx, CollKind, ConstIx, Constraint, Field, MapClause, OperandIx, Polarity, Schema, SeqKind,
@@ -871,15 +872,20 @@ fn map(
     }
     // Every clause first -- what it names, what it opens, what it maps to --
     // because a named key's type is read off all of them.
-    let mut clauses: Vec<(Vec<Label>, Vec<Option<Kind>>, Descr)> =
-        Vec::with_capacity(defaults.len());
+    let mut clauses: Vec<ReadClause> = Vec::with_capacity(defaults.len());
     for clause in defaults {
         let value = descend(&clause.value, pool, budget, depth)?;
-        let (named, parts) = key_cover(&clause.key, pool)?;
-        clauses.push((named, parts, value));
+        let (named, parts, words) = if let Some((named, parts)) = key_cover(&clause.key, pool) {
+            (named, parts, None)
+        } else {
+            let (parts, words) = narrowed_cover(&clause.key)?;
+            (Vec::new(), parts, Some(words))
+        };
+        clauses.push((named, parts, words, value));
     }
     let mut opened: Vec<(Option<Kind>, Descr)> = Vec::new();
-    for (index, (named, parts, value)) in clauses.iter().enumerate() {
+    let mut narrowed: Vec<(RegularSet, Descr)> = Vec::new();
+    for (index, (named, parts, words, value)) in clauses.iter().enumerate() {
         for label in named {
             // A field of this name is read instead of the clause.
             if fields.iter().any(|field| Label::str(&field.name) == *label) {
@@ -889,10 +895,16 @@ fn map(
             // admits the dict that carries no `a` at all. And the key is read
             // by every clause that covers it, so its type is the join.
             let mut ty = value.clone();
-            for (other, (other_named, other_parts, other_value)) in clauses.iter().enumerate() {
+            for (other, (other_named, other_parts, other_words, other_value)) in
+                clauses.iter().enumerate()
+            {
+                let holds_it = other_words.as_ref().is_some_and(
+                    |keys| matches!(label, Label::Word(word, Kind::Str) if keys.holds(word)),
+                );
                 let covers = other != index
                     && (other_named.contains(label)
-                        || other_parts.iter().any(|part| *part == Some(label.kind())));
+                        || other_parts.iter().any(|part| *part == Some(label.kind()))
+                        || holds_it);
                 if covers {
                     ty = ty.union(other_value)?;
                 }
@@ -902,21 +914,138 @@ fn map(
         for part in parts {
             opened.push((*part, value.clone()));
         }
+        if let Some(words) = words {
+            narrowed.push((words.clone(), value.clone()));
+        }
     }
-    Descr::keyed_map(labels, opened)
+    Descr::keyed_map(labels, opened, narrowed)
+}
+
+/// A clause as a map reads it: the constants it names, the parts it opens, the
+/// words it holds, and what it maps them to.
+type ReadClause = (Vec<Label>, Vec<Option<Kind>>, Option<RegularSet>, Descr);
+
+/// What a clause's key reads as where it narrows the `str` keys: the whole parts
+/// it holds, and a regular language of `str` keys, a part of a partition finer than
+/// the kinds [Cas23, Def. 4.6].
+///
+/// Only the connectives and a refinement of `str` by what a language can read: a
+/// pattern and a length bound. A literal keeps `key_cover`'s reading, which is its
+/// value and not its type, so a union holding one beside a narrowing is left to the
+/// rules, and the walk answers its values exactly.
+fn narrowed_cover(key: &Schema) -> Option<(Vec<Option<Kind>>, RegularSet)> {
+    if !narrows(key) {
+        return None;
+    }
+    let (parts, words) = narrowed_parts(key)?;
+    let held = KEY_KINDS.iter().copied().map(Some).chain([None]);
+    let parts = held
+        .zip(parts)
+        .filter_map(|(part, held)| held.then_some(part))
+        .collect();
+    Some((parts, words))
+}
+
+/// Whether a key holds a refinement under its connectives. A meet of whole kinds, as
+/// `int & ~bool`, stays out of a split: no language is asked for, and a clause over one
+/// is the rules' to read, as it is where a key holds any other part of a kind.
+fn narrows(key: &Schema) -> bool {
+    match key {
+        Schema::Refine { .. } => true,
+        Schema::Union(members) | Schema::Intersection(members) => members.iter().any(narrows),
+        Schema::Complement(inner) => narrows(inner),
+        _ => false,
+    }
+}
+
+/// [`narrowed_cover`] as one flag per part beside the language, the shape the
+/// connectives are pointwise over. The flag of the `str` part stays down: the
+/// language says what it holds.
+fn narrowed_parts(key: &Schema) -> Option<(Vec<bool>, RegularSet)> {
+    let of_parts = |held: fn(Kind) -> bool, others: bool| {
+        KEY_KINDS
+            .iter()
+            .map(|kind| held(*kind))
+            .chain([others])
+            .collect::<Vec<bool>>()
+    };
+    let none = RegularSet::empty;
+    let every = || RegularSet::all(Alphabet::Text);
+    let but_str = |kind: Kind| kind != Kind::Str;
+    let fold = |members: &[Schema],
+                unit: (Vec<bool>, RegularSet),
+                flags: fn(bool, bool) -> bool,
+                words: fn(&RegularSet, &RegularSet) -> Option<RegularSet>| {
+        members.iter().try_fold(unit, |(parts, held), member| {
+            let (their_parts, theirs) = narrowed_parts(member)?;
+            let parts = parts
+                .iter()
+                .zip(&their_parts)
+                .map(|(a, b)| flags(*a, *b))
+                .collect();
+            Some((parts, words(&held, &theirs)?))
+        })
+    };
+    match key {
+        Schema::Nothing => Some((of_parts(|_| false, false), none())),
+        Schema::Anything(_) => Some((of_parts(but_str, true), every())),
+        Schema::Str => Some((of_parts(|_| false, false), every())),
+        Schema::NoneType => Some((of_parts(|kind| kind == Kind::NoneType, false), none())),
+        Schema::Bool => Some((of_parts(|kind| kind == Kind::Bool, false), none())),
+        // A `bool` key is an `int` key, as [`key_cover`] reads it.
+        Schema::Int => Some((
+            of_parts(|kind| matches!(kind, Kind::Int | Kind::Bool), false),
+            none(),
+        )),
+        Schema::Float => Some((of_parts(|kind| kind == Kind::Float, false), none())),
+        Schema::Bytes => Some((of_parts(|kind| kind == Kind::Bytes, false), none())),
+        Schema::Refine { base, constraints } => {
+            let (parts, mut words) = narrowed_parts(base)?;
+            if parts.iter().any(|held| *held) {
+                return None;
+            }
+            for constraint in constraints.iter() {
+                let keys = match constraint {
+                    Constraint::Regex(pattern) => RegularSet::pattern(pattern, Alphabet::Text)?,
+                    Constraint::MinLen(least) => RegularSet::at_least(*least, Alphabet::Text)?,
+                    Constraint::MaxLen(most) => RegularSet::at_most(*most, Alphabet::Text)?,
+                    _ => return None,
+                };
+                words = words.intersect(&keys)?;
+            }
+            Some((parts, words))
+        }
+        Schema::Union(members) => fold(
+            members,
+            (of_parts(|_| false, false), none()),
+            |a, b| a || b,
+            RegularSet::union,
+        ),
+        Schema::Intersection(members) => fold(
+            members,
+            (of_parts(but_str, true), every()),
+            |a, b| a && b,
+            RegularSet::intersect,
+        ),
+        Schema::Complement(inner) => {
+            let (parts, words) = narrowed_parts(inner)?;
+            let held = KEY_KINDS.iter().map(|kind| but_str(*kind)).chain([true]);
+            let parts = parts.iter().zip(held).map(|(a, b)| !a && b).collect();
+            Some((parts, words.complement()))
+        }
+        _ => None,
+    }
 }
 
 /// The keys a clause governs: the constants it names, and the parts of the key
 /// partition it covers whole.
 ///
-/// `None` where it is neither -- a key schema covering *part* of a kind, such as
-/// a regex over strings, would need the default to hold a set of keys rather
-/// than a part of the partition, and that is the theory of overlapping domains
-/// the paper sets aside [Cas23, §4.5], "it is possible to define a theory for
-/// maps with overlapping domains, but in that case, there would not be any
-/// difference between record types and an intersection of function types whose
-/// codomain may contain an undefined value". Refusing is what keeps the default
-/// a function.
+/// `None` where it is neither. A key schema covering *part* of a kind holds a set
+/// of keys rather than a part of the partition, which [`narrowed_cover`] reads where
+/// a regular language of `str` keys spells it and a map splits its `str` part by
+/// that language. Any other part of a kind has no split to land in, so the default
+/// stays a function, as the paper keeps it by refusing overlapping domains
+/// [Cas23, §4.5].
 ///
 /// A complement of whole parts is the other parts. The parts are a partition of
 /// the keys, so a key outside every part `inner` opens is in one of the rest,
