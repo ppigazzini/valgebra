@@ -316,11 +316,11 @@ two kinds that hold their values alike share one:
 |---|---|---|---|
 | `Booleans` | `bool` | a two-bit subset, which is exact for a kind with two values | `descr/mod.rs` |
 | `Integers` | `int` | eventually periodic sets: an interval set per residue class, which is what holds a bound, a point *and* a step | `descr/integers.rs` |
-| `Floats` | `float` | closed intervals of floats, an open end held as its neighboring float, plus a bit for `nan`, which sits outside the order | `descr/floats.rs` |
+| `Floats` | `float` | closed intervals of floats, an open end held as its neighboring float, per residue of a whole step where one split the line and beside the floats no step holds, plus a bit for `nan`, which sits outside the order | `descr/floats.rs` |
 | `Words` | `str`, `bytes` | a minimal deterministic automaton, canonically numbered, so two spellings of one language are one table | `descr/regular.rs` |
 | `Sequences` | `list`, `tuple` | an automaton whose transitions are guarded by value sets -- the letters are descriptors, so the component recurses through the automaton's *states* | `descr/symbolic.rs` |
 | `Sets` | `set`, `frozenset` | a union of powerset lines: a set is its members and has no order for an automaton to walk | `descr/sets.rs` |
-| `Maps` | `dict` | a union of map atoms -- finitely many named keys plus a per-kind default and a negative set | `descr/maps.rs` |
+| `Maps` | `dict` | a union of map atoms -- finitely many named keys plus a per-kind default, a split of the `str` part by regular languages where a clause narrows its keys, and a negative set | `descr/maps.rs` |
 | `Coarse` | `NoneType`, the kindless slot | every value of the kind or none, which is **exact** where the kind has one value | `descr/mod.rs` |
 
 `Component::top` is the one place that says which kind takes which
@@ -377,11 +377,16 @@ the memo is bounded by `COMPILED_BYTES` too.
 (`key_cover` in `descr/lower.rs`): a kind, a `tuple` or `frozenset` of
 anything, a union of those, and a complement of one, which opens the parts its
 inner leaves -- the part for a key of no listed kind among them, so
-`complement(str)` holds `{object(): 1}`. A literal is a label. A key holding
-part of a kind -- a narrower tuple, a class, the complement of a literal --
-refuses, because the default is a function on the parts and such a key splits
-one; [15-decidability.md](../15-decidability.md) lists what that leaves to the
-rules. A want indexed past the partition -- no lowering builds one, so it is an
+`complement(str)` holds `{object(): 1}`. A literal is a label. A `str` narrowed
+by a pattern or a length, and the connectives over those (`narrowed_cover`),
+splits the `str` part by the regular language it spells, so the default stays a
+function, on a finer partition: an atom holds its own split, a meet reads two at
+their common refinement, and a constraint over a cell holding few keys is pinned
+to them as one over a finite part is (`over_a_split` in `descr/maps.rs`). The rules
+read such a key as one they cannot place, a proof or nothing. A key holding any
+other part of a kind -- a narrower tuple, a class, the complement of a literal --
+refuses, because no split holds it; [15-decidability.md](../15-decidability.md)
+lists what that leaves to the rules. A want indexed past the partition -- no lowering builds one, so it is an
 invariant broken -- is no element of the model, and an atom carrying it is
 proved nothing: its emptiness declines, and its complement keeps the want, so
 every reading built from it declines too
