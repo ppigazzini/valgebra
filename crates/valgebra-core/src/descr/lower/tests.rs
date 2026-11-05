@@ -1542,6 +1542,8 @@ proptest! {
         let rational = Operand::Rational {
             floor: p.div_euclid(q),
             ceil: -(-p).div_euclid(q),
+            below: f64::NAN,
+            above: f64::NAN,
         };
         let set = lower(
             &Schema::Refine {
@@ -1888,6 +1890,53 @@ fn a_length_bound_costs_three_units_an_element() {
 /// cuts at the float *above*, an upper bound at the float *below*; reading the
 /// nearest one instead moves the boundary by one representable step, and
 /// reading the wrong side of it turns a lower bound into an upper one.
+/// A rational no float equals is cut at the neighbor on the side the bound keeps,
+/// whichever way it is strict, and one a float equals at that float, where
+/// strictness is what tells `>` from `>=`.
+#[test]
+fn a_rational_bound_over_the_floats_cuts_at_the_float_on_its_side() {
+    let of = |below: f64, above: f64| {
+        Pool(vec![Operand::Rational {
+            floor: 0,
+            ceil: 1,
+            below,
+            above,
+        }])
+    };
+    let set = |pool: &Pool, constraint: Constraint| {
+        lower(
+            &Schema::Refine {
+                base: Arc::new(Schema::Float),
+                constraints: vec![constraint].into(),
+            },
+            pool,
+        )
+        .expect("a small refinement")
+    };
+    let at = OperandIx::new(0);
+    let admits =
+        |pool: &Pool, constraint: Constraint, x: f64| set(pool, constraint).admits(Value::float(x));
+
+    let (below, above) = (0.1_f64.next_down(), 0.1_f64);
+    let inexact = of(below, above);
+    for constraint in [Constraint::Ge(at), Constraint::Gt(at)] {
+        assert!(admits(&inexact, constraint.clone(), above));
+        assert!(!admits(&inexact, constraint, below));
+    }
+    for constraint in [Constraint::Le(at), Constraint::Lt(at)] {
+        assert!(admits(&inexact, constraint.clone(), below));
+        assert!(!admits(&inexact, constraint, above));
+    }
+
+    let exact = of(0.5, 0.5);
+    assert!(admits(&exact, Constraint::Ge(at), 0.5));
+    assert!(!admits(&exact, Constraint::Gt(at), 0.5));
+    assert!(admits(&exact, Constraint::Le(at), 0.5));
+    assert!(!admits(&exact, Constraint::Lt(at), 0.5));
+    assert!(admits(&exact, Constraint::Gt(at), 0.5_f64.next_up()));
+    assert!(admits(&exact, Constraint::Lt(at), 0.5_f64.next_down()));
+}
+
 #[test]
 fn a_float_bound_over_an_inexact_integer_cuts_at_the_right_neighbor() {
     // Two integers with no float of their own, one either side of the rounding:

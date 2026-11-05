@@ -17,10 +17,17 @@ answer of its own, or a repair to a change not yet released.
 - feat: a map key is narrowed by a pattern or a length of a str
 - feat: numpy's generic reads as the class met with a record
 - feat: a relation reads a schema of up to 1024 nodes through the sets
+- feat: a rational bound over a float is read at the float on its side
 
 -->
 
 ### Added
+
+- **A `Fraction` or `Decimal` bound over a float is decided.** It is read at the float
+  on the side the bound keeps, as Python's exact comparison does, so
+  `Annotated[float, Ge(Decimal("0.1"))]` is the set `Annotated[float, Ge(0.1)]` is, and
+  `Annotated[float, Ge(0.25)]` is `not_subset` of `Annotated[float, Ge(Decimal("0.5"))]`,
+  where both were `undecided`.
 
 - **A relation reads a wider schema.** The set representation takes a schema of up to
   1024 nodes, where it took 64: a range of JSON integers with 112 others taken out of

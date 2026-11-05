@@ -211,6 +211,10 @@ answers `"undecided"`.
   side a bound lands on is chosen by the base rather than by the operand's type,
   so `Annotated[float, Gt(0)]` carries the integer zero and still orders the
   floats. `nan` is outside every interval, which is the comparison Python makes.
+  A `Fraction` or `Decimal` operand is read at the float on the side it keeps,
+  since Python compares a `float` with each exactly: the float `0.1` is a little
+  above `Decimal("0.1")`, so `Annotated[float, Ge(Decimal("0.1"))]` holds it and is
+  the set `Annotated[float, Ge(0.1)]` is, and `Gt(Decimal("0.1"))` is that set too.
   No float lies between a float and the next one, so `Gt(1.0)` is decided equal
   to `Ge(math.nextafter(1.0, math.inf))`, and a pair of bounds with no float
   between them is empty. A **step over a float base** is decided with them:

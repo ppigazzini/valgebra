@@ -268,16 +268,20 @@ fn a_decimal_bound_past_the_rounded_digits_is_not_rounded() {
 
 #[test]
 fn a_fraction_or_a_decimal_operand_is_read_at_its_floor_and_its_ceiling() {
-    // Python compares an `int` with either exactly, so the two integers around
-    // one are what a bound over the integers reads. Only the two classes the
+    // Python compares an `int` and a `float` with either exactly, so the integers
+    // and the floats around one are what a bound reads. Only the two classes the
     // standard library binds, with a finite value inside the integers an `i64`
     // holds: a subclass, an infinity, a NaN and a value past the range are not
-    // read.
+    // read. `0.1` lands above its decimal and `Fraction(1, 3)` below its own, and
+    // `1e-400` rounds to zero, whose next float is the least there is.
     Python::attach(|py| {
         let values = [
             "__import__('fractions').Fraction(-3, 2)",
             "__import__('decimal').Decimal('2.0')",
             "__import__('decimal').Decimal('0.25')",
+            "__import__('decimal').Decimal('0.1')",
+            "__import__('fractions').Fraction(1, 3)",
+            "__import__('decimal').Decimal('1e-400')",
             "__import__('decimal').Decimal('Infinity')",
             "__import__('decimal').Decimal('NaN')",
             "__import__('decimal').Decimal('1e30')",
@@ -288,16 +292,22 @@ fn a_fraction_or_a_decimal_operand_is_read_at_its_floor_and_its_ceiling() {
         .collect();
         asking(py, values, |oracle| {
             let read = |slot| oracle.operand(OperandIx::new(slot));
-            assert_eq!(
-                read(0),
+            let rational = |floor, ceil, below, above| {
                 Some(Operand::Rational {
-                    floor: -2,
-                    ceil: -1
+                    floor,
+                    ceil,
+                    below,
+                    above,
                 })
-            );
-            assert_eq!(read(1), Some(Operand::Rational { floor: 2, ceil: 2 }));
-            assert_eq!(read(2), Some(Operand::Rational { floor: 0, ceil: 1 }));
-            for slot in 3..7 {
+            };
+            assert_eq!(read(0), rational(-2, -1, -1.5, -1.5));
+            assert_eq!(read(1), rational(2, 2, 2.0, 2.0));
+            assert_eq!(read(2), rational(0, 1, 0.25, 0.25));
+            assert_eq!(read(3), rational(0, 1, 0.1_f64.next_down(), 0.1));
+            let third = 1.0_f64 / 3.0;
+            assert_eq!(read(4), rational(0, 1, third, third.next_up()));
+            assert_eq!(read(5), rational(0, 1, 0.0, 0.0_f64.next_up()));
+            for slot in 6..10 {
                 assert_eq!(read(slot), None, "the operand at {slot} is not read");
             }
         });

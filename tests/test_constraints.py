@@ -10,9 +10,10 @@ from __future__ import annotations
 import datetime as dt
 import math
 import numbers
+import operator
 import sys
 import typing
-from decimal import Decimal
+from decimal import Decimal, FloatOperation, localcontext
 from fractions import Fraction
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -463,6 +464,114 @@ def test_a_complex_step_is_refused() -> None:
         Validator(Annotated[int, at.MultipleOf(2j)])  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="no remainder against a complex number"):
         Validator(Annotated[object, at.MultipleOf(2j)])  # ty: ignore[invalid-argument-type]
+
+
+_COMPARISONS = (
+    (at.Ge, operator.ge),
+    (at.Gt, operator.gt),
+    (at.Le, operator.le),
+    (at.Lt, operator.lt),
+)
+
+
+def _beside(value: Fraction | Decimal) -> list[float]:
+    nearest = float(value)
+    down = math.nextafter(nearest, -math.inf)
+    up = math.nextafter(nearest, math.inf)
+    return [
+        math.nextafter(down, -math.inf),
+        down,
+        nearest,
+        up,
+        math.nextafter(up, math.inf),
+    ]
+
+
+@given(
+    rational=st.one_of(
+        st.fractions(min_value=-(10**6), max_value=10**6, max_denominator=10**4),
+        st.decimals(
+            min_value=-(10**6),
+            max_value=10**6,
+            places=12,
+            allow_nan=False,
+            allow_infinity=False,
+        ),
+    ),
+    which=st.sampled_from(_COMPARISONS),
+)
+def test_a_rational_bound_over_a_float_is_the_floats_it_compares_with(
+    rational: Fraction | Decimal, which: tuple[Any, Any]
+) -> None:
+    # The walk and Python compare exactly, so the set the bound reads as is the one
+    # the floats beside it spell, in both directions.
+    marker, compare = which
+    bound = Validator(Annotated[float, marker(rational)])
+    near = _beside(rational)
+    for x in [*near, math.inf, -math.inf, 0.0, -0.0]:
+        assert bound.is_valid(x) == compare(x, rational), x
+    assert not bound.is_valid(math.nan)
+    kept = [x for x in near if compare(x, rational)]
+    if marker in (at.Ge, at.Gt):
+        same = Annotated[float, at.Ge(min(kept))]
+    else:
+        same = Annotated[float, at.Le(max(kept))]
+    assert bound.relation_to(same) == "subset"
+    assert Validator(same).relation_to(Annotated[float, marker(rational)]) == "subset"
+
+
+@pytest.mark.parametrize(
+    ("narrow", "wide", "expected"),
+    [
+        pytest.param(
+            at.Ge(0.25), at.Ge(Decimal("0.5")), "not_subset", id="a-float-below"
+        ),
+        pytest.param(at.Ge(Decimal("0.5")), at.Ge(0.5), "subset", id="one-float"),
+        pytest.param(at.Ge(0.5), at.Ge(Decimal("0.5")), "subset", id="and-back"),
+        # The float 0.1 is a little above the decimal, so a bound on that holds it.
+        pytest.param(
+            at.Ge(Decimal("0.1")), at.Gt(0.1), "not_subset", id="the-float-above"
+        ),
+        pytest.param(at.Ge(0.1), at.Ge(Decimal("0.1")), "subset", id="the-float-holds"),
+        pytest.param(
+            at.Gt(Decimal("0.1")), at.Ge(0.1), "subset", id="strictness-costs-nothing"
+        ),
+        # The float 1/3 is a little below the fraction.
+        pytest.param(
+            at.Ge(Fraction(1, 3)), at.Gt(1 / 3), "subset", id="the-float-below"
+        ),
+        pytest.param(
+            at.Le(Fraction(1, 3)), at.Le(1 / 3), "subset", id="and-its-other-side"
+        ),
+    ],
+)
+def test_a_rational_bound_over_a_float_is_decided(
+    narrow: object, wide: object, expected: str
+) -> None:
+    subject = Validator(Annotated[float, narrow])
+    assert subject.relation_to(Annotated[float, wide]) == expected
+
+
+def test_no_float_lies_between_a_decimal_and_the_float_next_to_it() -> None:
+    exact = Decimal("0.1000000000000000055511151231257827021181583404541015625")
+    between = intersection(
+        Annotated[float, at.Gt(Decimal("0.1"))], Annotated[float, at.Lt(exact)]
+    )
+    assert Validator(between).relation_to(nothing) == "subset"
+    assert (
+        Validator(Annotated[int | float, at.Ge(Decimal("0.5"))]).relation_to(
+            union(Annotated[int, at.Ge(1)], Annotated[float, at.Ge(0.5)])
+        )
+        == "subset"
+    )
+    # Under the trap the comparison raises, so the operand is not read, and the
+    # relation declines rather than raising.
+    with localcontext() as context:
+        context.traps[FloatOperation] = True
+        trapped = Validator(Annotated[float, at.Ge(0.25)])
+        assert (
+            trapped.relation_to(Annotated[float, at.Ge(Decimal("0.5"))]) == "undecided"
+        )
 
 
 def test_a_decimal_step_divides_integers_and_no_float() -> None:

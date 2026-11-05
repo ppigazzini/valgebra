@@ -44,14 +44,19 @@ pub enum Operand {
     /// An instance of a pure class.
     Instance(Class),
     /// A bound's `Fraction` or finite `Decimal`, as the integers at its floor
-    /// and at its ceiling, one integer where it is whole. Python compares an
-    /// `int` with either exactly, so a bound over the integers reads no more
-    /// of it, and nothing else reads it.
+    /// and at its ceiling, one integer where it is whole, and the floats beside
+    /// it, one float where it is one. Python compares an `int` and a `float`
+    /// with either exactly, so a bound over the integers reads the first two,
+    /// one over the floats the last two, and nothing else reads it.
     Rational {
         /// The greatest integer at or below the value.
         floor: i64,
         /// The least integer at or above the value.
         ceil: i64,
+        /// The greatest float at or below the value.
+        below: f64,
+        /// The least float at or above the value.
+        above: f64,
     },
 }
 
@@ -1617,7 +1622,7 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
             let near = near as i64;
             near
         }
-        Operand::Rational { floor, ceil } => {
+        Operand::Rational { floor, ceil, .. } => {
             if lower == strict {
                 floor
             } else {
@@ -1646,8 +1651,9 @@ const I64_EDGE: f64 = 9_223_372_036_854_775_808.0;
 /// against its neighbors instead: a float is `>= n` exactly when it is at or
 /// above the smallest float above `n`, and `<= n` exactly when it is at or below
 /// the largest float below `n`. Strictness costs nothing there, since no float
-/// equals the bound for `>` or `<` to exclude. Python compares an `int` with a
-/// `float` exactly, and so does this.
+/// equals the bound for `>` or `<` to exclude. A `Fraction` or a `Decimal` no
+/// float equals is the same case, and the pool hands over its two neighbors.
+/// Python compares each with a `float` exactly, and so does this.
 fn float_bound(constraint: &Constraint, operand: &Operand) -> Option<FloatSet> {
     let lower = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
     let strict = matches!(constraint, Constraint::Gt(_) | Constraint::Lt(_));
@@ -1655,6 +1661,14 @@ fn float_bound(constraint: &Constraint, operand: &Operand) -> Option<FloatSet> {
         Operand::Float(value) => Straddle::Exact(value),
         Operand::Integer(value) => straddle(value, lower),
         Operand::Boolean(value) => straddle(i64::from(value), lower),
+        #[expect(
+            clippy::float_cmp,
+            reason = "one float handed over twice is the value, with no arithmetic between"
+        )]
+        Operand::Rational { below, above, .. } if below == above => Straddle::Exact(below),
+        Operand::Rational { below, above, .. } => {
+            Straddle::Beside(if lower { above } else { below })
+        }
         _ => return None,
     };
     // No float equals an inexact bound, so `>` and `>=` admit the same ones and
