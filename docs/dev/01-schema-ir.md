@@ -290,6 +290,17 @@ spelling where the values are decimals.
 `test_a_decimal_step_divides_integers_and_no_float` in `tests/test_constraints.py`
 holds the mix the refusal stands on.
 
+**A node counting the elements a schema admits, so `minContains` is a set.**
+Refused. "One element in `S`" is the complement of `list[~S]`, so it is reached.
+"Two elements in `S`" is not: `Seq` reads positions and one tail, and no
+combination of them counts. That makes it case 2, and the domain half is what it
+fails: no annotation spells a count, and what asks for one is a keyword of JSON
+Schema's that none of JSONSchemaBench's 9,558 schemas uses, at the commit valplan
+pins. A node would reach every exhaustive match in both crates for a set a predicate
+reaches, exact on membership and opaque to relations.
+`test_one_element_is_a_complement_and_a_count_is_a_predicate` in
+`tests/test_universe.py` holds both halves.
+
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labeling than the record model
 assumes.

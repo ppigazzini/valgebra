@@ -10,8 +10,9 @@ inside it answer as the walk does.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Annotated, Any
 
+import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -138,3 +139,25 @@ def test_kinds_a_document_cannot_hold_are_empty_inside_the_universe() -> None:
     assert not within(dict[int, int]).is_empty()
     assert within(dict[int, int]).is_valid({})
     assert not within(dict[int, int]).is_valid({1: 1})
+
+
+def test_one_element_is_a_complement_and_a_count_is_a_predicate() -> None:
+    some_int = intersection(list, complement(list[complement(int)]))  # ty: ignore[invalid-type-form]
+    assert some_int.is_valid([1, "a"])
+    assert not some_int.is_valid(["a"])
+    assert not some_int.is_valid([])
+    assert (
+        Validator(Annotated[list[int], at.MinLen(1)]).relation_to(some_int) == "subset"
+    )
+    assert Validator(list[int]).relation_to(some_int) == "not_subset"
+
+    twice = Validator(
+        Annotated[
+            list[Any],
+            at.Predicate(lambda items: sum(isinstance(i, int) for i in items) >= 2),
+        ]
+    )
+    assert twice.is_valid([1, 2])
+    assert not twice.is_valid([1, "a"])
+    # The count is opaque: exact on membership, and every relation declines.
+    assert twice.relation_to(some_int) == "undecided"
