@@ -1079,6 +1079,16 @@ sibling is what the bound saves on one shape. On the nested shapes those rows
 build, the nesting bound refuses before the work allowance does, so the
 allowance is what remains for a schema that is shallow and wide.
 
+**A union is read by its width times the rounds, or the node bound would be no
+bound on time.** A step that is linear in what it holds charges no unit
+(`budget::spend`), and a fold makes that step quadratic: each join reads the whole
+so far, and admits it again against what it has kept, which is the cube of the
+width. `descend` joins a union's members two at a time in rounds
+(`joined_in_rounds`), so a union of 341 tagged records, past the 256 atoms a map
+lattice holds and stopped there by the node bound, declines beside the rules in
+37 ms, where folding it takes 5.9 s. `--decision-unions` holds the count, and the
+metamorphic gate's `tagged-2048` holds the time to the last release.
+
 **Building a set costs about three orders of magnitude more than a rule that
 already answers**, which is the whole reason the rules are asked first and the
 descriptor second. `scripts/perf_gate.py --decision-rules` and

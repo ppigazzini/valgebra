@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::records::keyed_map_meet_verdict;
 use super::*;
 use crate::descr::classes::{Class, Reach};
-use crate::descr::lower::{Operand, lower_widened};
+use crate::descr::lower::{BUDGET, Operand, lower_widened};
 use crate::descr::regular::{Alphabet, RegularSet};
 use crate::ir::{Attribute, CollKind, Field, MapClause, OperandIx, SeqKind, Spelling};
 use crate::ir::{DefIx, LONGEST, Openness, REACHED};
@@ -1660,14 +1660,14 @@ fn a_record_is_refuted_a_shared_field_at_a_time_past_the_node_bound() {
     };
     let record = |first: Schema| {
         closed(
-            (0..40)
+            (0..BUDGET / 2)
                 .map(|at| {
                     let schema = if at == 0 {
                         first.clone()
                     } else {
                         pattern("a+")
                     };
-                    field(&format!("f{at:02}"), schema, false)
+                    field(&format!("f{at:04}"), schema, false)
                 })
                 .collect(),
         )
@@ -9910,18 +9910,18 @@ fn the_refuted_branches_are_kept_at_the_root_alone() {
 // THEORY: semantic-subtyping
 /// A union is decided a part at a time where both deciders decline it whole.
 ///
-/// Four exits, each on a pair only that exit decides. Forty patterns past the
-/// set representation's node bound are below a pattern each is below, asked a
-/// member at a time, and a digit pattern is equivalent to forty patterns, one
-/// of them the same set spelled in a group and each below it, both ways round.
-/// A member the set representation empties is below forty patterns too wide
-/// for it to lower, which is lowered once rather than once a member.
+/// Four exits, each on a pair only that exit decides. Patterns past the set
+/// representation's node bound are below a pattern each is below, asked a member
+/// at a time, and a digit pattern is equivalent to as many patterns, one of them
+/// the same set spelled in a group and each below it, both ways round. A member
+/// the set representation empties is below patterns too wide for it to lower,
+/// which are lowered once rather than once a member.
 /// `str` against a fixpoint of lists beside a pattern is the pattern's
 /// question once the fixpoint, which shares no value with `str`, is dropped,
 /// and the set representation refutes it at a string the pattern refuses,
 /// where the whole pair holds a reference cut at the root of its unfolding --
 /// a definition naming another beside `None` -- and could only be proved. A
-/// subject below one branch of forty is proved by that branch where nothing
+/// subject below one branch of those is proved by that branch where nothing
 /// narrows.
 ///
 /// And the rules' own exit: a union is refuted by a member whose refutation
@@ -9933,7 +9933,10 @@ fn a_union_is_decided_a_part_at_a_time() {
         base: Arc::new(Schema::Str),
         constraints: vec![Constraint::Regex(words.into())].into(),
     };
-    let numbered = |prefix: &str| Schema::union((0..40).map(|i| pattern(&format!("{prefix}{i}"))));
+    // Two nodes a pattern, so this many are past the bound however they are met.
+    let wide = BUDGET as usize / 2 + 1;
+    let numbered =
+        |prefix: &str| Schema::union((0..wide).map(|i| pattern(&format!("{prefix}{i}"))));
     let some = numbered("p");
     let whole =
         |sub: &Schema, sup: &Schema| sub.descriptor_contained_in(sup, &NoLeafRelations, &[]);
@@ -9945,7 +9948,10 @@ fn a_union_is_decided_a_part_at_a_time() {
     let digit = pattern("p[0-9]");
     let spelled = Schema::union(
         (0..10)
-            .flat_map(|i| [format!("p{i}"), format!("(p{i})"), format!("((p{i}))")])
+            .flat_map(|i| {
+                (0..=wide / 10)
+                    .map(move |groups| format!("{}p{i}{}", "(".repeat(groups), ")".repeat(groups)))
+            })
             .chain(["(p[0-9])".to_owned(), "p1|p2".to_owned()])
             .map(|words| pattern(&words)),
     );
@@ -9978,7 +9984,7 @@ fn a_union_is_decided_a_part_at_a_time() {
     );
 
     let branches = Schema::union(
-        (0..39)
+        (0..wide - 1)
             .map(|i| pattern(&format!("q{i}")))
             .chain([pattern("p[0-9]")]),
     );

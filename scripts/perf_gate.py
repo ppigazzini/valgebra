@@ -38,8 +38,9 @@ Three workloads, and the shapes each is read in:
   counts are what a rule's answer saves over building the sets for it, and
   length bounds over a list asked of the sets (`--decision-lengths`), which
   read what a bound costs an element, floats under a whole step
-  (`--decision-steps`), which read a list of intervals per residue, and dicts
-  keyed by words (`--decision-keys`), which read a split of the `str` keys.
+  (`--decision-steps`), which read a list of intervals per residue, dicts keyed
+  by words (`--decision-keys`), which read a split of the `str` keys, and unions
+  of tagged records (`--decision-unions`), which read what a join holds.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
   thirty-one shapes: the membership walk (`--binding`), the call boundary
@@ -178,6 +179,7 @@ BRANCH_MODES = frozenset(
         "decision-lengths",
         "decision-steps",
         "decision-keys",
+        "decision-unions",
     }
 )
 # Both workloads print one trailing line holding the checksum, bare or prefixed.
@@ -460,6 +462,7 @@ MODES = {
     "decision-lengths": ("decision_sets_workload", "length bounds asked of the sets"),
     "decision-steps": ("decision_sets_workload", "whole steps asked of the sets"),
     "decision-keys": ("decision_sets_workload", "keys by words asked of the sets"),
+    "decision-unions": ("decision_sets_workload", "wide unions asked of the sets"),
     "binding": ("binding_workload", "binding walk"),
     "binding-boundary": ("binding_workload", "binding call boundary"),
     "binding-record": ("binding_workload", "binding record walk"),
@@ -496,19 +499,20 @@ MODES = {
     "binding-set": ("binding_workload", "binding set walk"),
 }
 
-#: The reading a core shape passes its example, for the five that share one.
+#: The reading a core shape passes its example, for the six that share one.
 #:
 #: The rules and the sets are asked the same pairs, so the ratio of the two
 #: counts is a ratio over one question rather than over two corpora. One
 #: example holds the corpus, and the argument names which decider answers it.
-#: The length bounds, the whole steps and the keys are corpora of their own, asked
-#: of the sets through the same reading.
+#: The length bounds, the whole steps, the keys and the wide unions are corpora of
+#: their own, asked of the sets through the same reading.
 CORE_READINGS = {
     "decision-rules": "rules",
     "decision-sets": "sets",
     "decision-lengths": "lengths",
     "decision-steps": "steps",
     "decision-keys": "keys",
+    "decision-unions": "unions",
 }
 
 #: The iteration pair each binding mode runs at.

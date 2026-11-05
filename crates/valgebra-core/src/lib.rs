@@ -95,9 +95,100 @@ pub(crate) fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> 
     })
 }
 
+/// `items` joined two at a time, each round halving the list, or `None` where a
+/// join refuses; `identity` where there are none.
+///
+/// A fold joining the whole so far with each item in turn reads the whole again
+/// at every item, which costs the square of the width where a join reads what it
+/// holds once, and the cube where it reads each of those against the others.
+/// Joined in rounds, an item is read once a round, and there are as many rounds
+/// as the width has binary digits. Up to three items, these are the fold's joins.
+pub(crate) fn joined_in_rounds<T>(
+    mut read: Vec<T>,
+    identity: impl FnOnce() -> T,
+    join: impl Fn(T, T) -> Option<T>,
+) -> Option<T> {
+    // Read as the shape of the list, two members or more, so the loop's end
+    // is no comparison a slip could keep open.
+    while let [_, _, ..] = read.as_slice() {
+        let mut pairs = read.into_iter();
+        let mut next = Vec::with_capacity(pairs.len().div_ceil(2));
+        while let Some(first) = pairs.next() {
+            next.push(match pairs.next() {
+                Some(second) => join(first, second)?,
+                None => first,
+            });
+        }
+        read = next;
+    }
+    Some(read.pop().unwrap_or_else(identity))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::unordered_pairs;
+    use core::cell::Cell;
+
+    use super::{joined_in_rounds, unordered_pairs};
+
+    /// A join that concatenates, and counts what it reads, so a test holds both
+    /// the order the items are joined in and the shape of the rounds.
+    fn joined_counting(width: u32, read: &Cell<usize>) -> Option<Vec<u32>> {
+        joined_in_rounds(
+            (0..width).map(|item| vec![item]).collect(),
+            Vec::new,
+            |mut first, second| {
+                read.set(read.get() + first.len() + second.len());
+                first.extend(second);
+                Some(first)
+            },
+        )
+    }
+
+    /// Each item is read once a round, which is what the rounds are for: eight
+    /// items in three rounds read twenty-four, where folding reads thirty-five.
+    #[test]
+    fn joined_in_rounds_reads_an_item_once_a_round() {
+        let read = Cell::new(0);
+        assert_eq!(joined_counting(8, &read), Some((0..8).collect()));
+        assert_eq!(read.get(), 24, "three rounds of eight");
+    }
+
+    /// An item the round leaves without a pair waits for the next, in its place,
+    /// and a list of one or none is no join at all.
+    #[test]
+    fn joined_in_rounds_keeps_the_order_at_every_width() {
+        for width in 0..=33 {
+            let read = Cell::new(0);
+            let joined = joined_counting(width, &read);
+            assert_eq!(joined, Some((0..width).collect()), "width {width}");
+            if width < 2 {
+                assert_eq!(read.get(), 0, "width {width} joins nothing");
+            }
+        }
+        let three = Cell::new(0);
+        joined_counting(3, &three);
+        assert_eq!(three.get(), 5, "two and then three, as folding reads them");
+    }
+
+    /// A join that refuses refuses the whole, at once.
+    #[test]
+    fn joined_in_rounds_stops_at_a_refusal() {
+        let asked = Cell::new(0);
+        let joined = joined_in_rounds(
+            vec![1, 2, 3, 4],
+            || 0,
+            |first: i32, second| {
+                asked.set(asked.get() + 1);
+                (first != 3).then_some(first + second)
+            },
+        );
+        assert_eq!(joined, None);
+        assert_eq!(
+            asked.get(),
+            2,
+            "the second pair refuses, and no round follows"
+        );
+    }
 
     /// Every unordered pair of *distinct* items, each once.
     ///

@@ -1093,6 +1093,15 @@ as a list against a length-bounded list of the same element.
   104 ms, and `MinLen(500) ⊆ MinLen(1000)` decides in 5.9 ms against 146 ms.
   `--decision-lengths` reads 19.85% fewer instructions and `--decision-sets`
   0.88% fewer.
+- **A union's members are joined in rounds.** A lowering reads every member of a
+  union and joins them two at a time, each round halving the list
+  (`joined_in_rounds` in `crates/valgebra-core/src/lib.rs`). A join admits what
+  it holds against what it has kept, so joining the whole so far with each member
+  in turn reads the cube of the width, and a member past the bound on a line's
+  atoms retries the full line. A relation between two unions of 2,048 tagged
+  records, which the node bound refuses, declines in 37 ms on a release build,
+  where the fold takes 5.9 s, and `--decision-unions` holds it: the fold reads
+  1,825 times the instructions.
 
 **A pair's constants are read once per validator, not once per question.**
 Relating two validators pools one's constants into the other's, and the key a

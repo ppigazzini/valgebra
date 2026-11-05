@@ -979,14 +979,14 @@ jobs:
       # is invisible here in both directions: neither what a new rule costs nor
       # what a cheaper one saves. Two shapes ask one corpus of the rules and of
       # the sets, which is the ratio the pages give between them, and the last
-      # three ask the sets length bounds over a list, a state per element, floats
-      # under a whole step and dicts keyed by words.
+      # four ask the sets length bounds over a list, a state per element, floats
+      # under a whole step, dicts keyed by words and unions of tagged records.
       - name: Decision-path instruction-count regression gate
         run: >
           uv run --no-sync python scripts/perf_gate.py
           --decision --decision-refute --decision-repeat --decision-matrix
           --decision-rules --decision-sets --decision-lengths
-          --decision-steps --decision-keys
+          --decision-steps --decision-keys --decision-unions
           --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}

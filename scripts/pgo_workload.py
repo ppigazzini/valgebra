@@ -148,6 +148,10 @@ UNTRAINED: dict[str, str] = {
         "A split of a map's `str` keys, met at the refinement of two: `_relations` "
         "and `_mappings` read no clause narrowing its key."
     ),
+    "decision-unions": (
+        "A union of records read up to the node ceiling, joined in rounds: no "
+        "union `_relations` asks is wide enough to reach a second round's join."
+    ),
     "binding-narrowed-key": (
         "A mapping whose key is narrowed by a pattern, read by the scan that "
         "matches each key's text: no call here validates one."

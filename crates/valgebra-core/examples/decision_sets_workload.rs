@@ -38,6 +38,11 @@
 //! holds a list of intervals per residue, up to the longest period it reads.
 //! `keys` asks dicts keyed by words, whose `str` keys a split holds, each meet
 //! reading the refinement of two.
+//!
+//! `unions` asks records told apart by a tag, against the same records with a
+//! wider field: the widest whose difference the sets decide, and one the node
+//! ceiling refuses after reading more members than a map lattice holds atoms. What
+//! a join reads is what the second moves.
 
 use std::sync::Arc;
 
@@ -68,6 +73,10 @@ const STEPS_ITERATIONS: usize = 1;
 
 /// Iterations of the keys through the sets.
 const KEYS_ITERATIONS: usize = 4;
+
+/// Iterations of the wide unions through the sets. One pass is already far above
+/// the startup, since it reads two unions at the node ceiling.
+const UNIONS_ITERATIONS: usize = 1;
 
 /// A pool that reads every operand and constant as its own index, and orders
 /// two bounds by it, so both deciders can read what a literal and a bound name
@@ -192,10 +201,27 @@ fn lengths() -> Vec<(Schema, Schema)> {
 
 /// Floats under a whole step: a step inside one it divides, the converse, the
 /// longest period against a divisor and against the integers it meets, a range
-/// holding no multiple, and the integers a JSON document writes either way.
+/// holding no multiple, the integers a JSON document writes either way, and a
+/// cell of a model checker, a range with thirty-two taken out of it.
 fn steps() -> Vec<(Schema, Schema)> {
     let by = |step: usize| Constraint::MultipleOf(OperandIx::new(step));
     let floats = |constraints| Schema::refine(Schema::Float, constraints);
+    let range = |low: usize, high: usize| {
+        let bounds = || {
+            vec![
+                Constraint::Ge(OperandIx::new(low)),
+                Constraint::Le(OperandIx::new(high)),
+            ]
+        };
+        Schema::union([
+            Schema::refine(Schema::Int, bounds()),
+            floats(std::iter::once(by(1)).chain(bounds()).collect()),
+        ])
+    };
+    let cell = Schema::meet(
+        std::iter::once(range(0, 40 * 32))
+            .chain((0..32).map(|i| range(40 * i, 40 * i + 20).complement())),
+    );
     vec![
         (floats(vec![by(2)]), floats(vec![by(1)])),
         (floats(vec![by(1)]), floats(vec![by(2)])),
@@ -213,6 +239,7 @@ fn steps() -> Vec<(Schema, Schema)> {
             floats(vec![by(1)]),
             Schema::union([Schema::Int, floats(vec![by(1)])]),
         ),
+        (cell, Schema::Nothing),
     ]
 }
 
@@ -254,6 +281,27 @@ fn keys() -> Vec<(Schema, Schema)> {
     ]
 }
 
+/// Records told apart by a tag, against the same records with a wider field, at
+/// the width whose difference the sets decide and at one past the node ceiling.
+fn unions() -> Vec<(Schema, Schema)> {
+    let tagged = |width: usize, field: fn() -> Schema| {
+        Schema::union((0..width).map(|tag| {
+            Schema::keyed_map(
+                vec![
+                    required("tag", Schema::Literal(ConstIx::new(tag))),
+                    required("v", field()),
+                ],
+                Vec::new(),
+            )
+        }))
+    };
+    let wider = || Schema::union([Schema::Int, Schema::Str]);
+    vec![
+        (tagged(16, || Schema::Int), tagged(16, wider)),
+        (tagged(2048, || Schema::Int), tagged(2048, wider)),
+    ]
+}
+
 fn main() {
     // A reading is named rather than defaulted: a run measuring the wrong
     // half would print a checksum of the wrong size and nothing else.
@@ -269,8 +317,9 @@ fn main() {
             Some("lengths") => (LENGTHS_ITERATIONS, by_the_sets, lengths()),
             Some("steps") => (STEPS_ITERATIONS, by_the_sets, steps()),
             Some("keys") => (KEYS_ITERATIONS, by_the_sets, keys()),
+            Some("unions") => (UNIONS_ITERATIONS, by_the_sets, unions()),
             _ => {
-                eprintln!("usage: decision_sets_workload rules|sets|lengths|steps|keys");
+                eprintln!("usage: decision_sets_workload rules|sets|lengths|steps|keys|unions");
                 std::process::exit(2);
             }
         };

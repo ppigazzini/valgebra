@@ -24,6 +24,7 @@ use crate::ir::{
     ClassIx, CollKind, ConstIx, Constraint, Field, MapClause, OperandIx, Polarity, Schema, SeqKind,
     SeqShape,
 };
+use crate::joined_in_rounds;
 use crate::kind::Kind;
 use std::cell::Cell;
 
@@ -108,13 +109,26 @@ pub trait Constants {
 /// through that nesting: past roughly a hundred the stack goes rather than the
 /// clock.
 ///
-/// **This is the bound an ordinary annotation reaches first**, and it reaches
-/// it by width. A record whose fields each take two types, against the union of
-/// the records that fix every field, reads 22 nodes at two fields, 45 at three
-/// and 96 at four -- so three fields decide and four are refused before they
-/// are answered. `tests/test_completeness_ledger.py` carries all three as rows,
-/// which is what makes these figures re-derivable: the row fails on the commit
-/// that moves the number either way.
+/// **The figure is a meet of ranges.** A JSON integer range, an `int` that is no
+/// `bool` or a float that is a multiple of one, reads about nine nodes, so a cell
+/// of a model checker, one range with others taken out of it, is read up to 112 of
+/// them and declined at 120. Each one taken out adds a span to a component, which
+/// is linear in them: 112 take 2.5 ms. `tests/test_universe.py` holds both widths,
+/// so a commit moving the figure either way fails there.
+///
+/// **It is not what stops a product.** A record whose fields each take two types,
+/// against the union of the records that fix every field, reads 22 nodes at two
+/// fields, 45 at three and 96 at four, and it is [`WORK`] that refuses the fourth.
+/// A tree that doubles a level reads alike under any figure here, past [`WORK`] or
+/// [`DEPTH`] first.
+///
+/// **It is what stops a wide union**, at what reading that union costs. Records told
+/// apart by a tag read three nodes each, so this stops a union of them at 341, past
+/// the 256 atoms a map lattice holds. [`descend`] joins a union's members in rounds
+/// ([`joined_in_rounds`]), so a relation between two such unions declines in 37 ms
+/// on a release build, where folding the members takes 5.9 s: a fold's every join
+/// admits what it holds again, and a member past the lattice's bound retries the full
+/// line. `--decision-unions` in `scripts/perf_gate.py` counts the refusal.
 ///
 /// **This bound is debt.** It counts work rather than limiting what the
 /// representation can hold, and it is here for the reason the decision's own
@@ -122,7 +136,7 @@ pub trait Constants {
 /// Construction shares those subtrees where they are built alike
 /// (`ir/intern.rs`), which is what gives the memo that would replace this
 /// ceiling a cheap key; the memo is the half not written.
-pub(crate) const BUDGET: u32 = 64;
+pub(crate) const BUDGET: u32 = 1024;
 
 /// The set a schema denotes, or `None` where the descriptor cannot yet hold it.
 ///
@@ -144,7 +158,7 @@ pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
 /// recursive schema admits -- a meet with a disjoint kind, an inclusion in a
 /// wider union -- and that is the whole of what the structural rules cannot
 /// read. Each further unfolding multiplies the schema this must build against
-/// [`BUDGET`]'s 64 nodes, for relations nobody has asked for.
+/// [`BUDGET`]'s nodes, for relations nobody has asked for.
 ///
 /// A bound like the three in [`Bounds`], and unlike them in one way worth
 /// stating: those three say what a build may spend, and this says what it is
@@ -669,11 +683,9 @@ impl Bounds {
 /// refuses an ordinary question. The blow-ups the number exists to stop are
 /// further out still, so the margin is real rather than nominal.
 ///
-/// The field after the third is outside on both counts: four fields against
-/// sixteen corners spend 10,132 units and read 96 nodes against a `BUDGET` of
-/// 64, so raising either bound alone leaves the refusal where it is. That is
-/// the width of the decided fragment, and `docs/15-decidability.md` states it
-/// as one.
+/// The field after the third is outside: four fields against sixteen corners
+/// spend 10,132 units, though they read 96 nodes of `BUDGET`'s. That is the width
+/// of the decided fragment, and `docs/15-decidability.md` states it as one.
 ///
 /// `tests/test_completeness_ledger.py` carries the record shapes and the dict
 /// shapes as rows, which is what makes this figure re-derivable: the row fails
@@ -818,9 +830,9 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Room, depth: u32) -> 
         // refusal alone, so a union that lowers pays nothing for the look.
         Schema::Union(members) => members
             .iter()
-            .try_fold(Descr::nothing(), |whole, member| {
-                whole.union(&descend(member, pool, budget, depth)?)
-            })
+            .map(|member| descend(member, pool, budget, depth))
+            .collect::<Option<Vec<_>>>()
+            .and_then(|read| joined_in_rounds(read, Descr::nothing, |a, b| a.union(&b)))
             .or_else(|| holds_the_top(members).then(Descr::anything)),
         Schema::Intersection(members) => {
             members.iter().try_fold(Descr::anything(), |whole, member| {

@@ -315,7 +315,7 @@ def _guarded_fields(width: int, first: object) -> dict[object, object]:
     """
     rest = union(complement(int), Annotated[int, at.Ge(0)])
     return {
-        **{f"g{index:02d}?": (first if index == 0 else rest) for index in range(width)},
+        **{f"g{index:03d}?": (first if index == 0 else rest) for index in range(width)},
         str: anything,
     }
 
@@ -331,20 +331,20 @@ _DECIDED = [
         id="protocol-of-a-fixpoint<=int-is-refuted",
     ),
     pytest.param("subtype", bool, int, id="bool<=int"),
-    # Thirteen guarded fields are past the set representation's node bound as a
-    # pair, and each field is a few nodes: a field refuted refutes the record,
+    # Two hundred guarded fields are past the set representation's node bound as
+    # a pair, and each field is a few nodes: a field refuted refutes the record,
     # and every field proved proves it.
     pytest.param(
         "refutes",
-        _guarded_fields(13, union(complement(int), Annotated[int, at.Ge(-1)])),
-        _guarded_fields(13, union(complement(int), Annotated[int, at.Ge(0)])),
-        id="map:thirteen-guarded-fields-one-wider!<=",
+        _guarded_fields(200, union(complement(int), Annotated[int, at.Ge(-1)])),
+        _guarded_fields(200, union(complement(int), Annotated[int, at.Ge(0)])),
+        id="map:two-hundred-guarded-fields-one-wider!<=",
     ),
     pytest.param(
         "subtype",
-        _guarded_fields(13, union(complement(int), Annotated[int, at.Ge(0)])),
-        _guarded_fields(13, union(complement(int), Annotated[int, at.Ge(-1)])),
-        id="map:thirteen-guarded-fields<=one-wider",
+        _guarded_fields(200, union(complement(int), Annotated[int, at.Ge(0)])),
+        _guarded_fields(200, union(complement(int), Annotated[int, at.Ge(-1)])),
+        id="map:two-hundred-guarded-fields<=one-wider",
     ),
     # A key the supertype requires and the subject leaves optional refutes on
     # `{}`, whatever the field's types say of each other, so a depth the rules

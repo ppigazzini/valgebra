@@ -16,10 +16,17 @@ answer of its own, or a repair to a change not yet released.
 - feat: a step over floats is decided as a set of whole floats
 - feat: a map key is narrowed by a pattern or a length of a str
 - feat: numpy's generic reads as the class met with a record
+- feat: a relation reads a schema of up to 1024 nodes through the sets
 
 -->
 
 ### Added
+
+- **A relation reads a wider schema.** The set representation takes a schema of up to
+  1024 nodes, where it took 64: a range of JSON integers with 112 others taken out of
+  it is decided, in 2.5 ms, where six made it `undecided`. A product is stopped by the
+  work it spends, as it was, and a union's members are joined in rounds, so the shapes
+  that reach those bounds decline in about the time they did.
 
 - **numpy's own generic builds.** `np.ndarray[S, np.dtype[T]]` and `npt.NDArray[T]`
   denote the instances of `np.ndarray` whose `shape` is in `S` and whose elements are

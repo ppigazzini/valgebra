@@ -775,7 +775,7 @@ pub(super) fn empty_without_the_maps_unread(members: &[Schema], cx: &Cx<'_>) -> 
 /// both records declare is read by each through its field alone. So a value
 /// outside the supertype's field, carried under that key by a value of the
 /// subject, is a value of the subject outside the supertype, which stands on
-/// the subject holding a value -- the caller's to read. Thirteen guarded fields
+/// the subject holding a value -- the caller's to read. Two hundred guarded fields
 /// are past the node bound as a pair, and each field is a pair of a few nodes.
 pub(super) fn a_shared_field_refuted_by_the_sets(fa: &[Field], fb: &[Field], cx: &Cx<'_>) -> bool {
     let order = Cell::new(None);

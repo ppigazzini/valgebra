@@ -304,6 +304,33 @@ def test_one_keyword_denotes_a_set_per_universe() -> None:
     assert intersection(JSON_VALUE, dt.date).is_empty()
 
 
+def _json_integers(low: int, high: int) -> object:
+    bounds = (at.Ge(low), at.Le(high))
+    return intersection(
+        union(Annotated[int, *bounds], Annotated[float, at.MultipleOf(1), *bounds]),
+        complement(bool),
+    )
+
+
+def test_a_cell_of_a_checker_reads_every_range_taken_out_of_it() -> None:
+    # A model checker's cell over JSON integers: one range with others taken out of
+    # it, which is what the lowering's ceiling is sized from. The widest it reads
+    # holds the one integer left, and nothing at all with that integer gone.
+    def cell(width: int, top: int) -> Validator[object]:
+        taken = [complement(_json_integers(i * 2, i * 2 + 1)) for i in range(width)]
+        return Validator(intersection(_json_integers(0, top), *taken))
+
+    left = cell(112, 224)
+    assert left.relation_to(nothing) == "not_subset"
+    assert left.is_valid(224)
+    assert left.is_valid(224.0)
+    assert not left.is_valid(223)
+    assert not left.is_valid(True)
+    assert left.relation_to(_json_integers(224, 224)) == "subset"
+    assert cell(112, 223).relation_to(nothing) == "subset"
+    assert cell(120, 240).relation_to(nothing) == "undecided"
+
+
 def test_a_document_of_each_universe_is_a_value_of_its_top() -> None:
     document = tomllib.loads(
         """

@@ -25,6 +25,7 @@ use crate::descr::budget;
 use crate::descr::interval::IntervalSet;
 use crate::descr::lower::WORK;
 use crate::ir::{Constraint, LONGEST, REACHED, Schema};
+use crate::joined_in_rounds;
 use crate::verdict::Relation;
 
 use super::MAX_DECISION_DEPTH;
@@ -210,24 +211,11 @@ fn joined<'a>(
     identity: impl FnOnce() -> ByLength<'a>,
     join: impl Fn(ByLength<'a>, ByLength<'a>) -> Option<ByLength<'a>>,
 ) -> Option<ByLength<'a>> {
-    let mut read = members
+    let read = members
         .iter()
         .map(|member| lengths_of(member, depth))
         .collect::<Option<Vec<_>>>()?;
-    // Read as the shape of the list, two members or more, so the loop's end
-    // is no comparison a slip could keep open.
-    while let [_, _, ..] = read.as_slice() {
-        let mut pairs = read.into_iter();
-        let mut next = Vec::with_capacity(pairs.len().div_ceil(2));
-        while let Some(first) = pairs.next() {
-            next.push(match pairs.next() {
-                Some(second) => join(first, second)?,
-                None => first,
-            });
-        }
-        read = next;
-    }
-    Some(read.pop().unwrap_or_else(identity))
+    joined_in_rounds(read, identity, join)
 }
 
 /// The base two parts of a term count over: the one either names, or `None`

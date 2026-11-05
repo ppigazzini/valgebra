@@ -1264,7 +1264,7 @@ the shape. What is left below is what the descriptor cannot hold.
   asked a member at a time too: `int` is outside `Ge(0)` met with a predicate,
   `-1` being outside the first member whatever the predicate says. A record
   against a record is asked a shared field at a time, so one field outside its
-  counterpart refutes the pair however many fields stand beside it -- thirteen
+  counterpart refutes the pair however many fields stand beside it -- two hundred
   guarded fields are past the node bound as a pair. Records told apart
   by a tag meet one branch each, so a union of them is decided a record at a
   time, as wide as the rules leave steps for: forty and two hundred records are

@@ -369,10 +369,10 @@ NOTES_STEPS = (
 #: those: two builds of one workload, in the clone that keeps the history.
 #:
 #: One mode: `--decision-matrix`, the relation matrix whose shapes reach the
-#: set representation. `--decision-sets`, `--decision-lengths`, `--decision-steps`
-#: and `--decision-keys` reach it too, and are read in the lane alone. A
-#: binding-path regression is held by the `--binding-*` modes, which want the
-#: extension built into an interpreter and are left to the lane.
+#: set representation. `--decision-sets`, `--decision-lengths`, `--decision-steps`,
+#: `--decision-keys` and `--decision-unions` reach it too, and are read in the lane
+#: alone. A binding-path regression is held by the `--binding-*` modes, which want
+#: the extension built into an interpreter and are left to the lane.
 PERF_STEPS = (
     (
         "local only (the instruction gate)",
