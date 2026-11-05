@@ -1,5 +1,5 @@
 use super::{
-    FloatSet, MAX_PERIOD, Part, STRETCHES, ceiling, normalize, stepless_at_or_above,
+    FloatSet, MAX_PERIOD, Part, STRETCHES, ceiling, gcd, inverse, normalize, stepless_at_or_above,
     whole_at_or_above,
 };
 use crate::descr::lattice_tests::Algebra;
@@ -546,11 +546,13 @@ fn a_class_search_is_the_floats_a_walk_finds() {
             starts.extend([below, above]);
         }
     }
+    // From each of the largest floats, where the last stretch ends and no float follows.
     let mut last = f64::MAX;
+    starts.extend([last, -f64::MAX]);
     for _ in 0..6 {
         last = last.next_down();
+        starts.push(last);
     }
-    starts.extend([last, -f64::MAX]);
     let wide = |value: i64| {
         #[expect(clippy::cast_precision_loss, reason = "the moduli here are small")]
         let value = value as f64;
@@ -594,6 +596,26 @@ fn a_class_search_is_the_floats_a_walk_finds() {
             }
         }
     }
+}
+
+/// An inverse is read off the two sequences Euclid's algorithm keeps, each step of which
+/// matters past the first few quotients.
+#[test]
+fn an_inverse_is_the_inverse() {
+    for period in 2..=64 {
+        for a in 1..period {
+            if gcd(a, period) == 1 {
+                assert_eq!(a * inverse(a, period) % period, 1, "{a} modulo {period}");
+            }
+        }
+    }
+    assert_eq!(
+        inverse(0, 1),
+        0,
+        "every value is the inverse of every other modulo one"
+    );
+    assert_eq!(gcd(0, 12), 12);
+    assert_eq!(gcd(8, 12), 4);
 }
 
 /// A residue holding fewer twos than the modulus has no float past the spacing its

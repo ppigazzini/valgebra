@@ -641,9 +641,6 @@ impl FloatSet {
     /// a multiple of its own period: the table the pointwise operations take.
     fn split_at(&self, modulus: i64) -> (Vec<Span>, Vec<Vec<Span>>) {
         let spans = match &self.stepped {
-            Some(stepped) if stepped.modulus == modulus => {
-                return (self.spans.clone(), stepped.classes.clone());
-            }
             Some(_) => self.spans.clone(),
             None => fitted(Part::Stepless, self.spans.clone()),
         };
