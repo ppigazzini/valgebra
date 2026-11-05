@@ -710,6 +710,29 @@ holds what stands before a quantifier). A count is read by this
 engine's grammar (`counted`), so a brace it refuses at the parse is left to
 the parse rather than called a count.
 
+## numpy's generic is the class met with a record
+
+`numpy.ndarray[S, numpy.dtype[T]]`, and `numpy.typing.NDArray[T]`, the alias numpy
+writes of it, denote the instances of the class whose `shape` is in `S` and whose
+dtype reads as `T`'s does: its `kind` and, for a scalar of a fixed width, its
+`itemsize`. Both are attributes, so `build_array` in `build/generics.rs` writes the
+`Instance` met with the `AttrRecord` a `Protocol` over them would, and adds no node.
+
+**By kind and width, and not by `dtype.type`.** A dtype's class is a constant no set
+holds, so a record over it decides nothing: two scalar types would not read apart.
+And it is the wrong reading. `numpy.int64` and `numpy.longlong` are one element under
+two classes where the platform makes them one width, and a byte order is storage.
+
+**Nothing is imported.** The class is known by identity in `sys.modules`, as
+`is_pattern_marker` knows its two, so a form naming it means numpy is loaded and a
+class of that name elsewhere is refused with every other generic. `numpy.dtype` is
+called once per form, at build.
+
+What names no array is refused rather than built empty: a shape that is no tuple, an
+argument that is no `numpy.dtype[T]`, and an abstract scalar type, of which
+`numpy.dtype` makes no dtype. An element bound is not read: the element set is a
+generator of its own, refused on [01-schema-ir.md](01-schema-ir.md).
+
 ## Recursion is tied by `recursive` or by an alias
 
 A class whose own type appears in its fields is recursive, and the frontend

@@ -2007,6 +2007,162 @@ fn a_key_narrowed_past_words_is_found_under_every_connective() {
     }
 }
 
+/// A stand-in for numpy, as much of it as the frontend reads: the embedded interpreter
+/// starts on the base prefix, where numpy may not be installed.
+const NUMPY_STAND_IN: &str = "import types\n\
+    class generic:\n\
+    \x20   def __class_getitem__(cls, args):\n\
+    \x20       return types.GenericAlias(cls, args)\n\
+    class ndarray(generic): pass\n\
+    class float64: kind, itemsize = 'f', 8\n\
+    class str_: kind, itemsize = 'U', 0\n\
+    class floating: pass\n\
+    class dtype(generic):\n\
+    \x20   def __init__(self, scalar):\n\
+    \x20       if scalar not in (float64, str_):\n\
+    \x20           raise TypeError(scalar)\n\
+    \x20       self.type, self.kind, self.itemsize = scalar, scalar.kind, scalar.itemsize\n\
+    class elsewhere(generic): pass\n";
+
+/// Run `read` with the stand-in loaded as `numpy`, and take it out again.
+fn with_numpy<T>(py: Python<'_>, read: impl FnOnce(Python<'_>) -> T) -> PyResult<T> {
+    let names = PyDict::new(py);
+    py.run(&CString::new(NUMPY_STAND_IN)?, Some(&names), None)?;
+    let module = py
+        .import("types")?
+        .getattr("ModuleType")?
+        .call1(("numpy",))?;
+    module
+        .getattr("__dict__")?
+        .call_method1("update", (&names,))?;
+    let modules = super::loaded_modules(py)?;
+    modules.set_item("numpy", &module)?;
+    let answer = read(py);
+    modules.del_item("numpy")?;
+    Ok(answer)
+}
+
+/// What `built` answers for an annotation naming the stand-in.
+fn built_with_numpy(py: Python<'_>, expression: &str) -> PyResult<String> {
+    let annotation = py.eval(
+        &CString::new(format!(
+            "__import__('sys').modules['numpy'] and ({expression})"
+        ))?,
+        Some(&numpy_globals(py)?),
+        None,
+    )?;
+    let mut pool = Pool::default();
+    let mut defs = Vec::new();
+    let schema = build_schema(&annotation, &mut pool, &mut defs)?;
+    render(py, &schema, pool.items(), &defs)
+}
+
+/// The names an annotation over the stand-in reads.
+fn numpy_globals(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    let globals = namespace(py)?;
+    globals.set_item("numpy", super::loaded_modules(py)?.get_item("numpy")?)?;
+    Ok(globals)
+}
+
+/// One test, since the stand-in sits in `sys.modules` while it runs and the tests of
+/// this file share a process.
+#[test]
+fn numpy_generic_is_read_with_numpy_loaded_and_only_then() {
+    numpy_generic_reads_as_the_class_met_with_a_record();
+    numpy_generic_refuses_what_names_no_array();
+    a_class_named_for_numpys_is_not_numpys();
+}
+
+/// numpy's generic is the class met with a record of what its two arguments ask, and
+/// an argument that asks nothing adds nothing.
+fn numpy_generic_reads_as_the_class_met_with_a_record() {
+    Python::attach(|py| {
+        with_numpy(py, |py| {
+            let read = |expression: &str| built_with_numpy(py, expression).unwrap();
+            assert_eq!(
+                read("numpy.ndarray[tuple[int, int], numpy.dtype[numpy.float64]]"),
+                "intersection(ndarray, object(dtype=object(itemsize=Literal[8], \
+                 kind=Literal['f']), shape=tuple[int, int]))"
+            );
+            // A scalar of no fixed width is its kind alone.
+            assert_eq!(
+                read("numpy.ndarray[typing.Any, numpy.dtype[numpy.str_]]"),
+                "intersection(ndarray, object(dtype=object(kind=Literal['U'])))"
+            );
+            assert_eq!(
+                read("numpy.ndarray[tuple[int], typing.Any]"),
+                "intersection(ndarray, object(shape=tuple[int]))"
+            );
+            assert_eq!(read("numpy.ndarray[typing.Any, typing.Any]"), "ndarray");
+            assert_eq!(
+                read("numpy.ndarray[typing.Any, numpy.dtype[typing.Any]]"),
+                "ndarray"
+            );
+            // A union of shapes holds tuples and nothing else.
+            assert_eq!(
+                read("numpy.ndarray[tuple[int] | tuple[int, int], typing.Any]"),
+                "intersection(ndarray, object(shape=tuple[int, int] | tuple[int]))"
+            );
+        })
+        .unwrap();
+    });
+}
+
+/// What names no array is refused by what it fails, rather than built empty or read
+/// as the class alone.
+fn numpy_generic_refuses_what_names_no_array() {
+    Python::attach(|py| {
+        with_numpy(py, |py| {
+            for (expression, says) in [
+                ("numpy.ndarray[int, typing.Any]", "is no shape"),
+                ("numpy.ndarray[int | tuple[int], typing.Any]", "is no shape"),
+                ("numpy.ndarray[typing.Any, int]", "is no dtype"),
+                ("numpy.ndarray[typing.Any, list[int]]", "is no dtype"),
+                (
+                    "numpy.ndarray[typing.Any, numpy.elsewhere[int]]",
+                    "is no dtype",
+                ),
+                (
+                    "numpy.ndarray[typing.Any, numpy.dtype[numpy.floating]]",
+                    "no one scalar",
+                ),
+                ("numpy.ndarray[int]", "needs a shape and a dtype"),
+                ("numpy.ndarray[int, int, int]", "needs a shape and a dtype"),
+                ("numpy.elsewhere[int]", "unsupported typing form"),
+            ] {
+                let refused = built_with_numpy(py, expression).expect_err(expression);
+                assert!(
+                    refused.to_string().contains(says),
+                    "{expression}: {refused}"
+                );
+            }
+        })
+        .unwrap();
+    });
+}
+
+/// A class of that name in another module is no such class, and with no numpy loaded
+/// nothing is read as one, which imports nothing to find out.
+fn a_class_named_for_numpys_is_not_numpys() {
+    Python::attach(|py| {
+        let names = PyDict::new(py);
+        py.run(&CString::new(NUMPY_STAND_IN).unwrap(), Some(&names), None)
+            .unwrap();
+        let mut pool = Pool::default();
+        let mut defs = Vec::new();
+        let form = py
+            .eval(c"ndarray[tuple[int], float64]", Some(&names), None)
+            .unwrap();
+        let refused = with_numpy(py, |_| {
+            build_schema(&form, &mut pool, &mut defs).expect_err("another module's class")
+        })
+        .unwrap();
+        assert!(refused.to_string().contains("unsupported typing form"));
+        let refused = build_schema(&form, &mut pool, &mut defs).expect_err("no numpy");
+        assert!(refused.to_string().contains("unsupported typing form"));
+    });
+}
+
 /// The frontend descends one level past the construction bound and no
 /// further, so the schema *at* the bound builds and the one past it is
 /// refused by name.

@@ -237,9 +237,41 @@ assert not Validator(int).is_valid(np.int64(1))
 assert not Validator(bool).is_valid(np.bool_(True))
 ```
 
-An array's `shape` and its `dtype` are attributes, so a `Protocol` reads them, met with
-the class, and the relations decide what it says. Read a dtype by its `kind`, since a
-dtype compares by byte order as well as by what its elements are:
+numpy's own generic reads what it names. `np.ndarray[S, np.dtype[T]]` denotes the
+instances of `np.ndarray` whose `shape` is in `S` and whose elements are `T`'s, read
+by the `kind` and the width of its dtype. So a byte order is storage and reads alike,
+and `np.int64` and `np.longlong` are one element where the platform makes them one
+width. `Any` in either place asks nothing, a shape is a tuple or a union of tuples, and
+an abstract scalar type such as `np.floating` is refused, since `np.dtype` makes no
+dtype of it. The relations decide what it says:
+
+```python
+from typing import Literal
+
+import numpy as np
+import numpy.typing as npt
+
+from valgebra import Validator, intersection
+
+rows_of_three = Validator(np.ndarray[tuple[int, Literal[3]], np.dtype[np.float64]])
+assert rows_of_three.is_valid(np.zeros((4, 3)))
+assert rows_of_three.is_valid(np.zeros((4, 3), dtype=">f8"))  # whichever its byte order
+assert not rows_of_three.is_valid(np.zeros((4, 4)))
+assert not rows_of_three.is_valid(np.zeros((4, 3), dtype="float32"))
+
+doubles = Validator(npt.NDArray[np.float64])
+assert doubles.is_valid(np.zeros(3))
+assert doubles.is_valid(np.zeros((2, 2)))
+assert rows_of_three.relation_to(doubles) == "subset"
+assert rows_of_three.relation_to(np.ndarray) == "subset"
+assert intersection(doubles, npt.NDArray[np.float32]).is_empty()
+
+# A refutation names a value, and no decider builds an array.
+assert doubles.relation_to(rows_of_three) == "undecided"
+```
+
+A set that form does not name, floating elements of any width, is a `Protocol` over the
+same attributes, met with the class:
 
 ```python
 from typing import Literal, Protocol
@@ -247,14 +279,6 @@ from typing import Literal, Protocol
 import numpy as np
 
 from valgebra import instance_of, intersection
-
-
-class Rows3(Protocol):
-    shape: tuple[int, Literal[3]]
-
-
-class Rank2(Protocol):
-    shape: tuple[int, int]
 
 
 class FloatKind(Protocol):
@@ -265,16 +289,8 @@ class FloatElements(Protocol):
     dtype: FloatKind
 
 
-array = instance_of(np.ndarray)
-rows_of_three = intersection(array, Rows3)
-assert rows_of_three.is_valid(np.zeros((4, 3)))
-assert not rows_of_three.is_valid(np.zeros((4, 4)))
-assert not rows_of_three.is_valid(np.zeros(3))
-assert rows_of_three.relation_to(intersection(array, Rank2)) == "subset"
-assert rows_of_three.relation_to(np.ndarray) == "subset"
-
-floats = intersection(array, FloatElements)
-assert floats.is_valid(np.zeros(3, dtype=">f8"))  # whichever its byte order
+floats = intersection(instance_of(np.ndarray), FloatElements)
+assert floats.is_valid(np.zeros(3, dtype=">f8"))
 assert floats.is_valid(np.zeros(3, dtype="float32"))
 assert not floats.is_valid(np.zeros(3, dtype="int64"))
 ```

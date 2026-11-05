@@ -14,12 +14,12 @@ use pyo3::prelude::*;
 use pyo3::types::iter::BoundTupleIterator;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
 use rustc_hash::FxHashSet;
-use valgebra_core::{Field, MapClause, Schema, SeqShape};
+use valgebra_core::{Attribute, Field, MapClause, Schema, SeqKind, SeqShape};
 
 use super::classes::{build_object, build_typed_dict, declares_fields, field_name, is_truthy_attr};
 use super::{
     Pool, build_applied_alias, build_constant, build_schema, checked_key, forms, forward_reference,
-    is_extension, is_forward_reference, is_type_alias, not_implemented,
+    is_extension, is_forward_reference, is_type_alias, loaded_modules, not_implemented,
 };
 use crate::errors::summarize;
 use crate::validator::Validator;
@@ -155,13 +155,154 @@ pub(super) fn build_parametrized(
             return build_object(class, Some(args), lits, defs);
         }
     }
+    if is_numpy_class(origin, intern!(py, "ndarray"))? {
+        return build_array(origin, args, lits, defs);
+    }
     Err(not_implemented(format!(
         "unsupported typing form with origin {}; the subscripted forms read are \
          list, set, frozenset, dict, tuple, Union, Optional, Literal, Annotated, \
          Callable, a generic type alias, a generic TypedDict, dataclass or named \
-         tuple, and the TypedDict qualifiers Required, NotRequired and ReadOnly",
+         tuple, numpy's ndarray, and the TypedDict qualifiers Required, NotRequired \
+         and ReadOnly",
         summarize(origin)?
     )))
+}
+
+/// Whether `class` is the class `numpy` binds under `name`.
+///
+/// Read out of `sys.modules`: a form naming numpy's class exists only once numpy is
+/// loaded, so this imports nothing, and a class of the same name elsewhere is no
+/// such class.
+fn is_numpy_class(class: &Bound<'_, PyAny>, name: &Bound<'_, PyString>) -> PyResult<bool> {
+    let py = class.py();
+    let Some(numpy) = loaded_modules(py)?.get_item(intern!(py, "numpy"))? else {
+        return Ok(false);
+    };
+    Ok(numpy
+        .getattr_opt(name)?
+        .is_some_and(|bound| bound.is(class)))
+}
+
+/// `numpy.ndarray[S, D]`: the instances of the class whose `shape` is in `S` and
+/// whose `dtype` reads `D`.
+///
+/// Both are attributes, so the set is the class met with a record, which is what a
+/// `Protocol` over the two spells, and this adds no node. A shape is a tuple or
+/// `Any`: `ndarray.shape` is one, so any other argument names no array, and it is
+/// refused rather than built empty.
+fn build_array(
+    class: &Bound<'_, PyAny>,
+    args: &Bound<'_, PyTuple>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    if args.len() != 2 {
+        return Err(not_implemented(
+            "numpy.ndarray[...] needs a shape and a dtype",
+        ));
+    }
+    let shape_argument = args.get_item(0)?;
+    let shape = build_type_argument(&shape_argument, lits, defs)?;
+    let mut attributes = Vec::with_capacity(2);
+    if !matches!(shape, Schema::Anything(_)) {
+        if !names_a_shape(&shape) {
+            return Err(not_implemented(format!(
+                "{} is no shape: numpy.ndarray[...] takes a tuple or Any for its first \
+                 argument",
+                summarize(&shape_argument)?
+            )));
+        }
+        attributes.push(Attribute {
+            name: "shape".into(),
+            schema: shape,
+        });
+    }
+    if let Some(dtype) = dtype_record(&args.get_item(1)?, lits)? {
+        attributes.push(Attribute {
+            name: "dtype".into(),
+            schema: dtype,
+        });
+    }
+    let instance = Schema::Instance(lits.intern_class(class));
+    if attributes.is_empty() {
+        return Ok(instance);
+    }
+    Ok(Schema::meet([instance, Schema::attr_record(attributes)]))
+}
+
+/// Whether a built schema holds tuples and nothing else: a tuple, or a union of them.
+fn names_a_shape(schema: &Schema) -> bool {
+    match schema {
+        Schema::Seq {
+            container: SeqKind::Tuple,
+            ..
+        } => true,
+        Schema::Union(members) => members.iter().all(names_a_shape),
+        _ => false,
+    }
+}
+
+/// What `numpy.dtype[T]` asks of an array's `dtype`: the `kind` and the `itemsize`
+/// `T`'s elements have, which are the elements by value. A byte order is storage, and
+/// `numpy.int64` and `numpy.longlong` are one element under two classes where the
+/// platform makes them one width. A scalar of no fixed width, `numpy.str_` say, is its
+/// kind alone. `None` where the argument asks nothing, `Any` or `dtype[Any]`.
+///
+/// An abstract scalar type, `numpy.floating` say, is refused: `numpy.dtype` makes no
+/// dtype of it, and the classes under it are numpy's to list.
+fn dtype_record(argument: &Bound<'_, PyAny>, lits: &mut Pool) -> PyResult<Option<Schema>> {
+    let py = argument.py();
+    let any = forms(py)?.any.bind(py);
+    if argument.is(any) {
+        return Ok(None);
+    }
+    let origin = argument.getattr_opt(intern!(py, "__origin__"))?;
+    let scalar = match (origin, argument.getattr_opt(intern!(py, "__args__"))?) {
+        (Some(origin), Some(args)) if is_numpy_class(&origin, intern!(py, "dtype"))? => {
+            args.cast_into::<PyTuple>()?.get_item(0)?
+        }
+        _ => {
+            return Err(not_implemented(format!(
+                "{} is no dtype: numpy.ndarray[...] takes numpy.dtype[T] or Any for its \
+                 second argument",
+                summarize(argument)?
+            )));
+        }
+    };
+    if scalar.is(any) {
+        return Ok(None);
+    }
+    let dtype = numpy_dtype(py)?.call1((&scalar,)).ok().filter(|dtype| {
+        dtype
+            .getattr(intern!(py, "type"))
+            .is_ok_and(|read| read.is(&scalar))
+    });
+    let Some(dtype) = dtype else {
+        return Err(not_implemented(format!(
+            "{} names no one scalar type: numpy.dtype[T] takes a concrete one, such as \
+             numpy.float64. Write a union of them for several",
+            summarize(&scalar)?
+        )));
+    };
+    let read = |name: &Bound<'_, PyString>, lits: &mut Pool| -> PyResult<Attribute> {
+        Ok(Attribute {
+            name: name.to_str()?.into(),
+            schema: Schema::Literal(lits.intern_const(&dtype.getattr(name)?)),
+        })
+    };
+    let mut attributes = vec![read(intern!(py, "kind"), lits)?];
+    if dtype.getattr(intern!(py, "itemsize"))?.is_truthy()? {
+        attributes.push(read(intern!(py, "itemsize"), lits)?);
+    }
+    Ok(Some(Schema::attr_record(attributes)))
+}
+
+/// `numpy.dtype`, which a form naming numpy's `ndarray` has already loaded.
+fn numpy_dtype(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    loaded_modules(py)?
+        .get_item(intern!(py, "numpy"))?
+        .ok_or_else(|| not_implemented("numpy is not loaded"))?
+        .getattr(intern!(py, "dtype"))
 }
 
 /// Refuse a `Literal` argument the typing spec does not allow, where reading it

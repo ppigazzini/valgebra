@@ -15,10 +15,18 @@ answer of its own, or a repair to a change not yet released.
 
 - feat: a step over floats is decided as a set of whole floats
 - feat: a map key is narrowed by a pattern or a length of a str
+- feat: numpy's generic reads as the class met with a record
 
 -->
 
 ### Added
+
+- **numpy's own generic builds.** `np.ndarray[S, np.dtype[T]]` and `npt.NDArray[T]`
+  denote the instances of `np.ndarray` whose `shape` is in `S` and whose elements are
+  `T`'s, by the `kind` and the width of the dtype, where both were refused. It adds no
+  node: the class met with an attribute record, which the relations decide, so
+  `npt.NDArray[np.float64]` and `npt.NDArray[np.float32]` share no value. An abstract
+  scalar type is refused, and the elements are not read.
 
 - **A map key narrowed by a pattern or a length.** `dict[Annotated[str,
   Regex("x-.*")], V]` builds, where it was refused, and so do `MinLen`, `MaxLen`
