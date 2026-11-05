@@ -203,6 +203,46 @@ assert rest.relation_to(between(31, 1000)) == "subset"
 assert between(31, 1000).relation_to(rest) == "subset"
 ```
 
+Another format is another set. What `tomllib` returns has no `None`, keeps an `int`
+and a `float` apart, and holds dates and times, so `1.0` is an integer over JSON's
+values and a float over TOML's, and the algebra is the same one:
+
+```python
+import datetime as dt
+import tomllib
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import complement, intersection, recursive, union
+
+toml_value = recursive(
+    lambda value: union(
+        bool,
+        intersection(int, complement(bool)),
+        float,
+        str,
+        dt.datetime,
+        dt.date,
+        dt.time,
+        list[value],
+        dict[str, value],
+    )
+)
+document = tomllib.loads("released = 2020-01-02\nversion = 1.0")
+assert toml_value.is_valid(document)
+assert not toml_value.is_valid(None)
+assert intersection(toml_value, bytes).is_empty()
+
+toml_integer = intersection(int, complement(bool))
+json_integer = intersection(
+    union(int, Annotated[float, at.MultipleOf(1)]), complement(bool)
+)
+assert not toml_integer.is_valid(document["version"])
+assert json_integer.is_valid(document["version"])
+assert toml_integer.relation_to(json_integer) == "subset"
+```
+
 A JSON number is one number however it is written, and Python holds `1` and `1.0`
 as two values. A set of JSON values admits both or neither, so a constant is a union
 of its spellings, and a `bool` is no spelling of a number. A bound written with an

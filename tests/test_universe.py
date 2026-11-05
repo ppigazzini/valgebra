@@ -9,7 +9,9 @@ inside it answer as the walk does.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
+import tomllib
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
@@ -225,3 +227,106 @@ def test_one_element_is_a_complement_and_a_count_is_a_predicate() -> None:
     assert not twice.is_valid([1, "a"])
     # The count is opaque: exact on membership, and every relation declines.
     assert twice.relation_to(some_int) == "undecided"
+
+
+#: What `tomllib` returns: no `None`, an `int` and a `float` two kinds apart, and the
+#: dates and times as values.
+TOML_VALUE: Validator[Any] = recursive(
+    lambda value: union(
+        bool,
+        intersection(int, complement(bool)),
+        float,
+        str,
+        dt.datetime,
+        dt.date,
+        dt.time,
+        list[value],  # ty: ignore[invalid-type-form]
+        dict[str, value],  # ty: ignore[invalid-type-form]
+    )
+)
+
+#: JSON Schema's `integer`, read in each universe: the keyword is one, and the sets are
+#: two, because each format says what a number is.
+TOML_INTEGER = intersection(int, complement(bool))
+
+_toml_values = st.recursive(
+    st.booleans()
+    | st.integers(min_value=-(2**63), max_value=2**63 - 1)
+    | st.floats(allow_nan=False)
+    | st.text(alphabet=st.characters(exclude_categories=("Cs",)))
+    | st.dates()
+    | st.datetimes()
+    | st.times(),
+    lambda inner: (
+        st.lists(inner, max_size=3)
+        | st.dictionaries(
+            st.text(alphabet=st.characters(exclude_categories=("Cs",))),
+            inner,
+            max_size=3,
+        )
+    ),
+    max_leaves=6,
+)
+
+
+# THEORY: a-universe-is-a-set
+@given(_toml_values, sets, sets)
+def test_the_laws_hold_below_a_second_universe(
+    value: object, a: Validator[Any], b: Validator[Any]
+) -> None:
+    within_it = intersection(TOML_VALUE, a)
+    outside_it = intersection(TOML_VALUE, complement(a))
+    assert TOML_VALUE.is_valid(value), "the generator draws what `tomllib` returns"
+    assert within_it.is_valid(value) != outside_it.is_valid(value)
+    both = intersection(TOML_VALUE, complement(union(a, b)))
+    assert both.is_valid(value) == (
+        outside_it.is_valid(value) and not b.is_valid(value)
+    )
+
+
+# THEORY: a-universe-is-a-set
+def test_one_keyword_denotes_a_set_per_universe() -> None:
+    # `1.0` is an integer in JSON's number model and a float in TOML's, so one schema
+    # takes two sets, and the frontend and the universe are apart by construction.
+    from_json = json.loads('{"a": 1.0}')["a"]
+    from_toml = tomllib.loads("a = 1.0")["a"]
+    assert from_json == from_toml
+    assert INTEGER.is_valid(from_json)
+    assert not TOML_INTEGER.is_valid(from_toml)
+    assert TOML_INTEGER.relation_to(INTEGER) == "subset"
+    assert INTEGER.relation_to(TOML_INTEGER) == "not_subset"
+    # The two tops part on what each format holds, and the algebra reads both.
+    assert JSON_VALUE.is_valid(None)
+    assert not TOML_VALUE.is_valid(None)
+    assert not JSON_VALUE.is_valid(dt.date(2020, 1, 2))
+    assert TOML_VALUE.is_valid(dt.date(2020, 1, 2))
+    assert intersection(TOML_VALUE, type(None)).is_empty()
+    assert intersection(JSON_VALUE, dt.date).is_empty()
+
+
+def test_a_document_of_each_universe_is_a_value_of_its_top() -> None:
+    document = tomllib.loads(
+        """
+        a = 1
+        b = 1.0
+        c = 2020-01-02
+        d = 2020-01-02T03:04:05
+        e = 03:04:05
+        f = [1, "x"]
+        [g]
+        h = true
+        """
+    )
+    assert TOML_VALUE.is_valid(document)
+    assert not JSON_VALUE.is_valid(document), "a date is no JSON value"
+    assert not TOML_VALUE.is_valid({"a": None}), "and a TOML document holds no null"
+
+
+def test_a_date_is_ordered_below_its_universe() -> None:
+    later = Validator(Annotated[dt.date, at.Ge(dt.date(2021, 1, 1))])
+    earlier = Validator(Annotated[dt.date, at.Ge(dt.date(2020, 1, 1))])
+    assert later.relation_to(earlier) == "subset"
+    assert later.is_valid(dt.date(2021, 1, 2))
+    assert not later.is_valid(dt.date(2020, 6, 1))
+    assert Validator(dt.datetime).relation_to(dt.date) == "subset"
+    assert intersection(dt.date, dt.time).is_empty()

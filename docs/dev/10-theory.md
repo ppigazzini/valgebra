@@ -113,12 +113,15 @@ reads every term as its meet with `u`, and `s ≤ t` in the restricted model is
 model whose values embed in Python's takes a set for its top and a frontend for
 its keywords, and no parameter on the algebra: JSON's values are what `json.loads`
 returns ([docs/07-json.md](../07-json.md)), and a number spelled two ways is two
-Python values that every set the frontend builds admits together.
+Python values that every set the frontend builds admits together. TOML's are what
+`tomllib` returns, so one JSON Schema denotes two sets: `{"type": "integer"}` holds
+`1.0` over JSON's values and not over TOML's, where it is a float, and the two
+frontends differ where the algebra does not.
 **[LOAD-BEARING: a-universe-is-a-set]**
 
 IMPLEMENTED-BY: ir.rs::Schema::meet_within, ir.rs::Schema::complement, decision/emptiness.rs::intersection_verdict
 
-HELD-BY: the_sets_below_a_universe_are_a_boolean_algebra, test_the_sets_below_a_universe_are_a_boolean_algebra, test_a_value_outside_the_universe_is_outside_every_set_below_it, test_a_number_written_two_ways_is_admitted_alike
+HELD-BY: the_sets_below_a_universe_are_a_boolean_algebra, test_the_sets_below_a_universe_are_a_boolean_algebra, test_a_value_outside_the_universe_is_outside_every_set_below_it, test_a_number_written_two_ways_is_admitted_alike, test_the_laws_hold_below_a_second_universe, test_one_keyword_denotes_a_set_per_universe
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING: stone-duality]** — the license for treating the scalar fragment
