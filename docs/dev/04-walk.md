@@ -667,7 +667,9 @@ most of what they cost, and each asks the test directly:
   entries of two clauses cost 41% to 42% fewer instructions on the profiled 3.12
   and 3.14 wheels, and 35% on 3.14t. A clause that is not two scalars, the
   walk's bound and a recorded signal decline to the scan, which asks both halves
-  of each entry in `covered` as a record asks a field.
+  of each entry in `covered` as a record asks a field. A key narrowed by a pattern
+  or a length is such a clause, since a refinement is no scalar: its text is read
+  once an entry, where the type test it narrows reads none.
 - **A tuple whose every position is a scalar.** `tuple[int, str, float]`, and a
   `NamedTuple` of builtin fields, is a type test a position
   (`scalar_positions_tuple_matches`): a thousand such tuples cost 37% fewer

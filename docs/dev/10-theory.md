@@ -1260,7 +1260,10 @@ HELD-BY: two_spellings_of_one_keyed_map_are_one_term, opening_drops_a_field_the_
 advance because two maps with overlapping domains meet in one whose domains
 overlap [Cas23, §4.4]. Languages stay a partition at that meet, since each has a
 complement and two an intersection, which is how a checker of JSON Schema keeps
-`patternProperties` disjoint [HSHP20, §4.1]. So an atom carries its own split of
+`patternProperties` disjoint [HSHP20, §4.1]. That checker's algebra is not closed
+under negation, `patternProperties` being one of the operators that stop it
+[BBC+26, §5.1]; a split closes it here, the complement of an atom saying of one cell
+that a key of it maps outside the cell's field. So an atom carries its own split of
 the `str` keys, a meet reads two splits at their common refinement, and a clause
 list reads the join of its values on each cell, overlap being a disjunction here.
 The property the emptiness rests on asks a key type to be infinite

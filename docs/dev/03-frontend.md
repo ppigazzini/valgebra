@@ -683,7 +683,9 @@ or orders by.
 
 **A map key narrowed past a language of `str` keys.** A clause's key says which
 keys it governs, and a map reads that as whole *kinds* of key, the constants a
-`Literal` names, or the words a pattern or a length of a `str` spells. Those are
+`Literal` names, or the words a pattern or a length of a `str` spells. Those words
+are a regular language because the engine refuses the backreference that would take
+them past one, so a complement and an intersection of them are languages too. They are
 held by a split of the map's `str` part, the partition of a quasi `K`-step function
 being any finite one [Cas23, Def. 4.6], and two clauses that overlap read the join
 of their values on the common refinement of their keys. `Annotated[int, Gt(0)]`, a
@@ -726,7 +728,10 @@ two classes where the platform makes them one width, and a byte order is storage
 **Nothing is imported.** The class is known by identity in `sys.modules`, as
 `is_pattern_marker` knows its two, so a form naming it means numpy is loaded and a
 class of that name elsewhere is refused with every other generic. `numpy.dtype` is
-called once per form, at build.
+called once per form, at build, and `kind` and `itemsize` are then read by name off
+what it makes, as `pattern` and `flags` are off a compiled pattern. That stands with
+"an attribute name is no protocol": the rule refuses a name read off an object nothing
+identified, and these two objects are identified first.
 
 What names no array is refused rather than built empty: a shape that is no tuple, an
 argument that is no `numpy.dtype[T]`, and an abstract scalar type, of which

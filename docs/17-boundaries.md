@@ -241,9 +241,11 @@ numpy's own generic reads what it names. `np.ndarray[S, np.dtype[T]]` denotes th
 instances of `np.ndarray` whose `shape` is in `S` and whose elements are `T`'s, read
 by the `kind` and the width of its dtype. So a byte order is storage and reads alike,
 and `np.int64` and `np.longlong` are one element where the platform makes them one
-width. `Any` in either place asks nothing, a shape is a tuple or a union of tuples, and
-an abstract scalar type such as `np.floating` is refused, since `np.dtype` makes no
-dtype of it. The relations decide what it says:
+width. The width is read where the validator is built, so `np.long`, 8 bytes on 64-bit
+Linux and 4 on 64-bit Windows, is a different set on each, and an array that crosses
+keeps the width it has: write `np.int32` where arrays cross platforms. `Any` in either
+place asks nothing, a shape is a tuple or a union of tuples, and an abstract scalar type
+such as `np.floating` is refused, since `np.dtype` makes no dtype of it. The relations decide what it says:
 
 ```python
 from typing import Literal

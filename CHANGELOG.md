@@ -43,7 +43,7 @@ answer of its own, or a repair to a change not yet released.
   `Annotated[float, MultipleOf(1)]` is `not_subset` of `Annotated[float,
   MultipleOf(2)]`, and the complement of a range of JSON integers, an `int` that
   is no `bool` or a float that is a multiple of one, is decided. A step that is
-  fractional or past `4096` is read as it was.
+  fractional or past `4096` is left to the rules.
 
 ## [0.0.23] - 2026-11-04
 

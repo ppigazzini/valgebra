@@ -50,6 +50,7 @@ that defines it -- so a rename dates the entry.
 | **unfolding** | replacing a `Ref` with the definition it names, once: `Schema::unfolded` in `crates/valgebra-core/src/ir/transform.rs`. The fixpoint reading a relation over a recursive schema needs: the subject is unfolded to widen and the supertype to narrow, which is what `Polarity`, in the same file, names ([02-decision.md](02-decision.md)) |
 | **goal** | one pair a decision is asked about, subject and supertype together, as the recursion carries it. The unit a trail of seen goals would memoize, and the unit `DECISION_BUDGET` charges ([02-decision.md](02-decision.md)) |
 | **the readings** | the two ways a relation is answered -- the rules and the descriptor -- and, in `decision/readings.rs`, the structural cases the rules decide by reading a schema's shape rather than its set |
+| **split** (of the `str` keys) | the partition of a map's `str` part into regular languages, a value set for each: `Narrowed` in `crates/valgebra-core/src/descr/maps.rs`, whose `cells` name the languages and whose `rest` holds the keys none of them names. A meet reads two at their common refinement |
 | **the ledger** (of completeness) | `tests/test_completeness_ledger.py`, enumerated relations the procedure must *decide*, failing in both directions |
 
 ## Verification
@@ -88,6 +89,8 @@ Say which one you mean.
 | **snapshot** | a recorded expected output a test compares against, held by `syrupy` under `tests/__snapshots__` | the tuple copy a list walk reads in place of the list where the interpreter makes the copy the cheaper read (`snapshot_pays` in `crates/valgebra-py/src/check/walk/sequence.rs`): a cost reading that never changes an answer |
 | **floor** | the oldest interpreter release the package supports, which `ci.yml` names and `scripts/gate.py` builds beside the caller's | a committed minimum a figure may not fall below: a coverage scope's, or a ratchet's |
 | **region** | one part of the scalar partition `Region` computes | the key-type region a mapping's clauses leave unclaimed, which `open` frees and `close` refuses |
+| **universe** | a set values are read in: all of them, which the kinds of `crates/valgebra-core/src/kind.rs` partition, or a set below that, which a complement is read against, as JSON's values are ([10-theory.md](10-theory.md)) | the finite values a probe draws ([08-testing.md](08-testing.md)): what it finds is a ledger to read and no proof |
+| **cell** | one language of a **split**, with what its keys map to: `Cell` in `crates/valgebra-core/src/descr/maps.rs` | the interior-mutable slot a walk records a stop in ([04-walk.md](04-walk.md)) |
 | **witness** | the value a probe looks for: one inside the subtype and outside the supertype, which disproves inclusion | the value a *refutation* stands on, which the `witnessed` guard reads against the subject's own emptiness before believing a mismatch |
 
 ## Words this set avoids
