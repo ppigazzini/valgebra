@@ -5,8 +5,11 @@ use crate::carries::{
     Carries, OrderGroup, StepGroup, carries_division, carries_length, carries_order,
 };
 use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
+use crate::descr::Descr;
+use crate::descr::budget;
 use crate::descr::classes::{Attributes, Class, Hook, Member};
 use crate::descr::lower::{Constants, Operand, lower, lower_widened};
+use crate::descr::symbolic::Guard;
 use crate::ir::{Clauses, Polarity};
 use crate::kind::Kind;
 use crate::verdict::Relation;
@@ -2460,6 +2463,42 @@ proptest! {
         // Absorption, likewise.
         prop_assert!(same(&union(a.clone(), intersection(a.clone(), b.clone())), &a));
         prop_assert!(same(&intersection(a.clone(), union(a.clone(), b.clone())), &a));
+    }
+
+    // THEORY: kinds-decompose-emptiness
+    /// A difference is the meet with the complement, to the form: a kind the
+    /// subject holds no line of holds no line of either, and every other kind is
+    /// that one meet. It charges fewer units, so a draw that spent the allowance
+    /// may land on another spelling of one set and is not compared.
+    #[test]
+    fn a_difference_is_the_meet_with_the_complement(
+        a in decidable_schema(),
+        b in decidable_schema(),
+    ) {
+        let _held = budget::law();
+        let (Some(a), Some(b)) = (lower(&a, &CorpusOracle), lower(&b, &CorpusOracle)) else {
+            return Ok(());
+        };
+        let (minus, met) = (a.minus(&b), a.intersect(&b.complement()));
+        if budget::spend() {
+            prop_assert_eq!(minus, met);
+        }
+    }
+
+    // THEORY: kinds-decompose-emptiness
+    /// What a set leaves reads as its complement's emptiness does, a part at a
+    /// time, however few of the parts it holds.
+    #[test]
+    fn what_a_set_leaves_is_what_its_complement_holds(a in decidable_schema()) {
+        let _held = budget::law();
+        let Some(a) = lower(&a, &CorpusOracle) else {
+            return Ok(());
+        };
+        let a = Arc::new(a);
+        let (left, read) = (Guard::leaves(&a), Descr::complement(&a).emptiness());
+        if budget::spend() {
+            prop_assert_eq!(left, read);
+        }
     }
 
     /// The complement laws, as statements about the sets.

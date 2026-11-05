@@ -1096,6 +1096,17 @@ lattice holds and stopped there by the node bound, declines beside the rules in
 37 ms, where folding it takes 5.9 s. `--decision-unions` holds the count, and the
 metamorphic gate's `tagged-2048` holds the time to the last release.
 
+**A complement is built only where it is read.** The parts of the universe are
+questions of their own [FCB08, (4)], and most sets hold a kind or two, so a
+complement spends most of what it costs on a top for every kind the set misses.
+`Guard::leaves` answers what a table asks of a letter and of its else edge: a part
+holding no line leaves a value there, and past those the first part proved to leave
+one is the answer. `Descr::minus` answers what a relation and a product ask of two
+sets: a kind the subject holds no line of holds no line of the difference. A meet
+starts from its first member, since met with every value it is itself, and a union of
+up to three holds no list. `a_difference_is_the_meet_with_the_complement` and
+`what_a_set_leaves_is_what_its_complement_holds` hold each to the reading it replaces.
+
 **Building a set costs about three orders of magnitude more than a rule that
 already answers**, which is the whole reason the rules are asked first and the
 descriptor second. `scripts/perf_gate.py --decision-rules` and
@@ -1104,8 +1115,9 @@ scalar, a sequence, a record, a literal table, a bound and a set write, which
 the rules answer without the sets and the sets answer alike -- and
 `scripts/perf_budget.json` holds the two counts; the two halves fold one
 checksum at two iteration counts, so a pair either decider stops answering, or
-answers the other way, shows. Pair by pair the gap runs from two orders, for
-two lower bounds, to nearly four, for two lists and for two tuples. The rules'
+answers the other way, shows. Pair by pair the gap runs from about two hundred
+times, for two lower bounds, to about a thousand, for two records and for two literal
+tables. The rules'
 half is the public relation, and the sets' half is the reading it takes where
 the rules decline (`crates/valgebra-core/examples/decision_sets_workload.rs`).
 `tests/test_perf_gate.py` holds the phrase to the record: a re-recorded count

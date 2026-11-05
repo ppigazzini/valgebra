@@ -724,7 +724,7 @@ a pop per state; and the start block is renumbered first. The canonical
 numbering then removes the renaming, so two spellings of one word language have
 one table.
 
-IMPLEMENTED-BY: descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::determinize, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::partition, descr/symbolic.rs::rest_of, descr/regular.rs::Dfa::wtf8, descr/regular.rs::RegularSet, descr/regular.rs::Dfa::dead_state
+IMPLEMENTED-BY: descr/automaton.rs::reaches, descr/automaton.rs::canonical_order, descr/regular.rs, descr/regular.rs::Dfa::is_empty, descr/regular.rs::Dfa::word, descr/regular.rs::Dfa::complement, descr/regular.rs::Dfa::product, descr/regular.rs::Dfa::minimal, descr/regular.rs::Dfa::merge_equivalent, descr/regular.rs::Dfa::equivalent_states, descr/regular.rs::Dfa::coarsen, descr/regular.rs::Dfa::renumber, descr/regular.rs::refine_alphabets, descr/regular.rs::Predecessors::of, descr/regular.rs::Predecessors::leading_to, descr/regular.rs::Partition::by_acceptance, descr/regular.rs::Partition::mark, descr/regular.rs::Partition::cut_marked, descr/regular.rs::RegularSet::determinize, descr/regular.rs::RegularSet::intersect, descr/symbolic.rs, descr/symbolic.rs::Guard, descr/symbolic.rs::SymbolicDfa, descr/symbolic.rs::SymbolicDfa::chain, descr/symbolic.rs::SymbolicDfa::emptiness, descr/symbolic.rs::SymbolicDfa::accepts_under, descr/symbolic.rs::SymbolicDfa::complement, descr/symbolic.rs::SymbolicDfa::intersect, descr/symbolic.rs::SymbolicDfa::product, descr/symbolic.rs::SymbolicDfa::merge_targets, descr/symbolic.rs::SymbolicDfa::sorted, descr/symbolic.rs::partition, descr/symbolic.rs::taken_by, descr/regular.rs::Dfa::wtf8, descr/regular.rs::RegularSet, descr/regular.rs::Dfa::dead_state
 
 HELD-BY: the_halves_cut_where_the_rounds_do, a_cut_moves_the_smaller_part, a_cut_of_a_queued_block_queues_both_parts, two_spellings_of_one_language_are_one_set, being_equal_is_holding_the_same_language, a_complement_is_already_minimal
 
@@ -879,9 +879,9 @@ kind being its own question [FCB08, (4)] and inhabited. **[LOAD-BEARING: kinds-d
 
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
-IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::meet_disjoint_with, decision/readings.rs::Schema::spills_a_kind, decision/readings.rs::Schema::misses_a_kind, decision/readings.rs::Schema::kinds_held_whole, decision/readings.rs::Schema::kinds_possibly_held, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness, decision/readings.rs::spills_a_kind_into
+IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::meet_disjoint_with, decision/readings.rs::Schema::spills_a_kind, decision/readings.rs::Schema::misses_a_kind, decision/readings.rs::Schema::kinds_held_whole, decision/readings.rs::Schema::kinds_possibly_held, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness, decision/readings.rs::spills_a_kind_into, descr/mod.rs::Descr::minus, descr/mod.rs::<Arc as Guard>::leaves
 
-HELD-BY: the_same_shape_under_two_kinds_does_not_meet, a_kind_read_whole_or_absent_agrees_with_membership, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question, a_meet_is_disjoint_from_what_one_of_its_members_is, a_pair_read_disjoint_shares_no_value, test_a_meet_with_a_union_of_guarded_patterns_is_empty
+HELD-BY: the_same_shape_under_two_kinds_does_not_meet, a_kind_read_whole_or_absent_agrees_with_membership, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question, a_meet_is_disjoint_from_what_one_of_its_members_is, a_pair_read_disjoint_shares_no_value, test_a_meet_with_a_union_of_guarded_patterns_is_empty, a_difference_is_the_meet_with_the_complement, what_a_set_leaves_is_what_its_complement_holds
 
 **A set type is a powerset, and a line of them is empty where one powerset
 covers it.** `set[T]` and `frozenset[T]` denote the finite sets whose members
@@ -1433,7 +1433,7 @@ SOURCE: §14.5 "`RegularSet`: a minimized DFA per word kind"
 
 IMPLEMENTED-BY: decision/lengths.rs, decision/lengths.rs::lengths_of
 
-HELD-BY: a_term_of_length_bounds_is_decided_as_the_lengths_it_holds, a_length_bound_costs_three_units_an_element
+HELD-BY: a_term_of_length_bounds_is_decided_as_the_lengths_it_holds, a_length_bound_costs_two_units_an_element
 
 **The dict key partition is by kind.** `1` and `True` are one key to a dict and
 two labels to the partition, so an atom requiring both under distinct values

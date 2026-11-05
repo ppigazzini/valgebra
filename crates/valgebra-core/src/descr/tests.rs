@@ -9,6 +9,58 @@ use core::mem::size_of;
 use proptest::prelude::*;
 use std::sync::{Arc, LazyLock};
 
+/// Every value leaves nothing, and a set missing any part of the universe leaves
+/// a value there, whichever part it is: a kind or the values of no kind.
+#[test]
+fn a_set_leaves_a_value_unless_it_holds_every_value() {
+    let leaves = |set: Descr| Guard::leaves(&Arc::new(set));
+    assert_eq!(leaves(Descr::anything()), Verdict::Empty);
+    assert_eq!(leaves(Descr::nothing()), Verdict::Inhabited);
+    for kind in Kind::ALL {
+        assert_eq!(leaves(Descr::of_kind(kind)), Verdict::Inhabited, "{kind:?}");
+        let the_rest = Descr::of_kind(kind).complement();
+        assert_eq!(leaves(the_rest), Verdict::Inhabited, "all but {kind:?}");
+    }
+    let no_kindless = Kind::ALL
+        .into_iter()
+        .map(Descr::of_kind)
+        .try_fold(Descr::nothing(), |whole, kind| whole.union(&kind))
+        .expect("the kinds join");
+    assert_eq!(leaves(no_kindless), Verdict::Inhabited, "the kindless part");
+}
+
+/// The reading that answers before a complement is built, asked directly: it moves
+/// no answer, so no question about one can see it read the wrong way.
+#[test]
+fn a_set_misses_a_part_where_it_holds_no_line_of_it() {
+    assert!(Descr::nothing().misses_a_part());
+    assert!(Descr::of_kind(Kind::Int).misses_a_part());
+    assert!(!Descr::anything().misses_a_part());
+    assert!(Lines::bottom().is_bottom());
+    let every = Descr::anything();
+    assert!(!every.other.is_bottom(), "the kindless part holds a line");
+    assert!(every.kinds.iter().all(|lines| !lines.is_bottom()));
+}
+
+/// A kind the subject holds no line of is no kind of the difference, whatever the
+/// other set holds there, and a subject the other set misses is what is left.
+#[test]
+fn a_difference_reads_only_the_kinds_its_subject_holds() {
+    let ints = Descr::of_kind(Kind::Int);
+    let strs = Descr::of_kind(Kind::Str);
+    assert_eq!(ints.minus(&Descr::anything()), Some(Descr::nothing()));
+    assert_eq!(ints.minus(&ints), ints.intersect(&ints.complement()));
+    assert_eq!(ints.minus(&strs), ints.intersect(&strs.complement()));
+    assert_eq!(Descr::nothing().minus(&strs), Some(Descr::nothing()));
+    let left = Descr::anything().minus(&ints).expect("a difference");
+    assert_eq!(
+        left,
+        Descr::anything()
+            .intersect(&ints.complement())
+            .expect("a meet")
+    );
+}
+
 /// A guard met or joined with itself is that guard, and the handle settles
 /// it without a walk or a third allocation.
 ///

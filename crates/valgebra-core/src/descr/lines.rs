@@ -240,6 +240,12 @@ impl Lines {
         Lines(PolarUnion::of(Vec::new()))
     }
 
+    /// Whether this is the empty set as [`bottom`](Lines::bottom) spells it: no
+    /// lines, held positively.
+    pub(crate) const fn is_bottom(&self) -> bool {
+        self.0.is_bottom()
+    }
+
     /// Every value of the kind whose structure this describes.
     pub(crate) fn everything(structure: Component) -> Lines {
         Lines::of(Line::everything(structure))
@@ -334,6 +340,15 @@ impl Lines {
                 Some(Lines(PolarUnion::of(tidy(lines)?)))
             }
         }
+    }
+
+    /// Every value in this union and not in `other`, where this holds a line to
+    /// meet the complement with.
+    pub(crate) fn minus(&self, other: &Lines, whole: Whole) -> Option<Lines> {
+        if self.is_bottom() {
+            return Some(Lines::bottom());
+        }
+        self.combine(&other.complement(whole), Op::Intersect, whole)
     }
 
     /// Every value of the kind this union does not admit.

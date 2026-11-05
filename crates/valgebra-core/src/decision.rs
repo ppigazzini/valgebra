@@ -748,14 +748,12 @@ impl Schema {
                 }
                 let theirs = theirs()?;
                 let (emptiness, refuted) = budget::under(WORK, || {
-                    let complemented;
-                    let outside = if negate {
-                        complemented = theirs.complement();
-                        &complemented
+                    let difference = if negate {
+                        mine.minus(theirs)
                     } else {
-                        theirs
+                        mine.intersect(theirs)
                     };
-                    mine.intersect(outside).map(|difference| {
+                    difference.map(|difference| {
                         let emptiness = difference.emptiness();
                         // With no definitions nothing was unfolded: a
                         // reference none resolves is a set no lowering reads,
@@ -845,15 +843,12 @@ impl Schema {
             let mine = lower_unfolded(self, defs, Polarity::Narrow, pool)?;
             let theirs = lower_unfolded(read, defs, side.flipped(), pool)?;
             budget::under(WORK, || {
-                let complemented;
-                let outside = if side == Polarity::Narrow {
-                    complemented = theirs.complement();
-                    &complemented
+                let difference = if side == Polarity::Narrow {
+                    mine.minus(&theirs)
                 } else {
-                    &theirs
+                    mine.intersect(&theirs)
                 };
-                mine.intersect(outside)
-                    .map(|difference| difference.emptiness() == Verdict::Inhabited)
+                difference.map(|difference| difference.emptiness() == Verdict::Inhabited)
             })
         };
         if refuted() == Some(true) {

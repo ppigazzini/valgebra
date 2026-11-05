@@ -122,6 +122,26 @@ pub(crate) trait Guard: Clone + Eq + Ord + core::fmt::Debug {
             Verdict::Inhabited
         }
     }
+
+    /// The values this set holds and `other` does not, or `None` where a guard
+    /// refuses.
+    ///
+    /// The meet with `other`'s complement, and a letter whose complement is dear
+    /// builds only as much of it as this set can meet.
+    fn minus(&self, other: &Self) -> Option<Self> {
+        self.meet(&other.complement())
+    }
+
+    /// What is known about the set of values this one leaves holding a value: the
+    /// [`emptiness`](Guard::emptiness) of its [`complement`](Guard::complement).
+    ///
+    /// What a table asks of a letter and of its else edge, and neither reads the
+    /// complement past the answer. A letter whose complement is dear answers it
+    /// without building one where it can.
+    fn leaves(&self) -> Verdict {
+        self.complement().emptiness()
+    }
+
     /// Whether the set holds `value`.
     #[cfg(test)]
     fn holds(&self, value: &Self::Value) -> bool;
@@ -148,7 +168,7 @@ impl<G: Guard> Edge<G> {
     }
 
     /// Whether no value takes this edge. The else edge's own set is what the
-    /// others leave, which only [`rest_of`] can say.
+    /// others leave, which only [`taken_by`] can say.
     fn is_dead(&self) -> bool {
         self.guard.as_ref().is_some_and(Guard::is_empty)
     }
@@ -287,7 +307,7 @@ impl<G: Guard> SymbolicDfa<G> {
             {
                 return (*covers, *holds);
             }
-            let covers = guard.complement().is_empty();
+            let covers = guard.leaves() == Verdict::Empty;
             let holds = guard.emptiness() == Verdict::Inhabited;
             before = Some((guard.clone(), covers, holds));
             (covers, holds)
@@ -394,8 +414,7 @@ impl<G: Guard> SymbolicDfa<G> {
             |state| self.accepts(state),
             |state, pending| {
                 let row = self.outgoing(state);
-                let rest = rest_of(row);
-                let rest_verdict = rest.as_ref().map_or(Verdict::Unknown, Guard::emptiness);
+                let rest_verdict = taken_by(row).map_or(Verdict::Unknown, |taken| taken.leaves());
                 for edge in row {
                     let verdict = match &edge.guard {
                         Some(guard) => guard.emptiness(),
@@ -532,11 +551,11 @@ impl<G: Guard> SymbolicDfa<G> {
         let mut edges: Vec<Vec<Edge<G>>> = Vec::new();
         let mut accepting: Vec<bool> = Vec::new();
         let mut held = 0usize;
-        // What each side's else edge takes, which is what its guarded edges
-        // leave: needed to meet an else edge with a guarded one, and the one
-        // place the letters are asked to complement. The rests and the meets
-        // the pairs of edges ask are kept for the pairs to come, since a chain
-        // -- which a length bound is -- repeats its rows state after state.
+        // What each side's guarded edges take: an else edge takes the rest, so a
+        // guarded edge met with it is that edge less these, and this is the one
+        // place the letters are asked to subtract. The rests and the meets the
+        // pairs of edges ask are kept for the pairs to come, since a chain --
+        // which a length bound is -- repeats its rows state after state.
         let mut our_rests = Rests::of(self.state_count());
         let mut your_rests = Rests::of(other.state_count());
         let mut met = Met::default();
@@ -549,16 +568,17 @@ impl<G: Guard> SymbolicDfa<G> {
             for (at_ours, ours) in ours.iter().enumerate() {
                 for (at_yours, yours) in yours.iter().enumerate() {
                     // A pair of edges meets on the values both take. The else
-                    // edge's set is the rest, so each of the four combinations
-                    // is one meet -- and the else-with-else pair is the
-                    // product's own else edge, which needs no guard at all.
+                    // edge's set is the rest, so a guarded edge met with one is
+                    // the guard less what that side's guarded edges take -- and
+                    // the else-with-else pair is the product's own else edge,
+                    // which needs no guard at all.
                     let at = (at_ours, at_yours);
                     let guard = match (&ours.guard, &yours.guard, &our_rest, &your_rest) {
                         (Some(a), Some(b), _, _) => Some(met.meet(at, a, b)?),
                         (Some(a), None, _, Rest::Everything) => Some(a.clone()),
-                        (Some(a), None, _, Rest::Left(rest)) => Some(met.meet(at, a, rest)?),
+                        (Some(a), None, _, Rest::Taken(taken)) => Some(met.minus(at, a, taken)?),
                         (None, Some(b), Rest::Everything, _) => Some(b.clone()),
-                        (None, Some(b), Rest::Left(rest), _) => Some(met.meet(at, rest, b)?),
+                        (None, Some(b), Rest::Taken(taken), _) => Some(met.minus(at, b, taken)?),
                         (None, None, _, _) => None,
                     };
                     // The product's own else edge is the pair of else edges, and
@@ -973,10 +993,11 @@ fn partition<G: Guard>(guard: &G, covers: bool, taken: u32, sink: u32) -> Vec<Ed
 #[derive(Clone)]
 enum Rest<G> {
     /// Every value: the row has no guarded edge, so a guard met with its else
-    /// edge is the guard, and nothing needs complementing to say so.
+    /// edge is the guard, and nothing needs subtracting to say so.
     Everything,
-    /// What the row's guarded edges leave.
-    Left(G),
+    /// All but what the row's guarded edges take, which is what this holds: a
+    /// guard met with this else edge is that guard less these.
+    Taken(G),
 }
 
 /// The rests one side's states leave, as one product asks them.
@@ -998,7 +1019,7 @@ impl<G: Guard> Rests<G> {
     }
 
     /// The rest of `row`, the row of `state`, or `None` where a guard
-    /// refuses, as [`rest_of`] does.
+    /// refuses, as [`taken_by`] does.
     fn at(&mut self, state: u32, row: &[Edge<G>]) -> Option<Rest<G>> {
         if let Some(Some(rest)) = self.by_state.get(state as usize) {
             return Some(rest.clone());
@@ -1011,7 +1032,7 @@ impl<G: Guard> Rests<G> {
         {
             rest.clone()
         } else {
-            let rest = Rest::Left(rest_of(row)?);
+            let rest = Rest::Taken(taken_by(row)?);
             self.last = Some((guards().cloned().collect(), rest.clone()));
             rest
         };
@@ -1028,12 +1049,17 @@ impl<G: Guard> Rests<G> {
 /// a shared handle answers by pointer.
 struct Met<G> {
     asked: FxHashMap<(usize, usize), (G, G, G)>,
+    /// What [`minus`](Met::minus) was asked, apart from the meets: at one place a
+    /// state's guard is met and another's is less the same two guards, and the
+    /// two answers differ.
+    subtracted: FxHashMap<(usize, usize), (G, G, G)>,
 }
 
 impl<G> Default for Met<G> {
     fn default() -> Met<G> {
         Met {
             asked: FxHashMap::default(),
+            subtracted: FxHashMap::default(),
         }
     }
 }
@@ -1052,22 +1078,35 @@ impl<G: Guard> Met<G> {
             .insert(at, (left.clone(), right.clone(), met.clone()));
         Some(met)
     }
+
+    /// `guard` less `taken`, the guards of the edges at `at`.
+    fn minus(&mut self, at: (usize, usize), guard: &G, taken: &G) -> Option<G> {
+        if let Some((seen_guard, seen_taken, left)) = self.subtracted.get(&at)
+            && seen_guard == guard
+            && seen_taken == taken
+        {
+            return Some(left.clone());
+        }
+        let left = guard.minus(taken)?;
+        self.subtracted
+            .insert(at, (guard.clone(), taken.clone(), left.clone()));
+        Some(left)
+    }
 }
 
-/// The values a state's else edge takes: everything its guarded edges do not,
-/// the edge completion adds [DV14, §2].
+/// The values a state's guarded edges take, which leaves its else edge everything
+/// else, the edge completion adds [DV14, §2].
 ///
-/// `None` where a guard refuses to join or complement, which is the bounded
-/// case: the answer is then unknown rather than empty, and a caller that was
-/// asking whether the edge is dead has to assume it is not.
-fn rest_of<G: Guard>(row: &[Edge<G>]) -> Option<G> {
-    let mut taken = G::none();
-    for edge in row {
-        if let Some(guard) = &edge.guard {
-            taken = taken.join(guard)?;
-        }
-    }
-    Some(taken.complement())
+/// `None` where a guard refuses to join, which is the bounded case: the answer is
+/// then unknown rather than empty, and a caller that was asking whether the edge
+/// is dead has to assume it is not. The first guard is taken as it stands: joining
+/// it to no value is the guard, and asks the guard to rebuild itself to say so.
+fn taken_by<G: Guard>(row: &[Edge<G>]) -> Option<G> {
+    let mut guards = row.iter().filter_map(|edge| edge.guard.as_ref());
+    let Some(first) = guards.next() else {
+        return Some(G::none());
+    };
+    guards.try_fold(first.clone(), |taken, guard| taken.join(guard))
 }
 
 #[cfg(test)]

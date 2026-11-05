@@ -833,14 +833,21 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Room, depth: u32) -> 
         // so a member the lowering refuses refuses no such union. The
         // constructors fold one; a term built raw carries it, and is read on a
         // refusal alone, so a union that lowers pays nothing for the look.
-        Schema::Union(members) => members
-            .iter()
-            .map(|member| descend(member, pool, budget, depth))
-            .collect::<Option<Vec<_>>>()
-            .and_then(|read| joined_in_rounds(read, Descr::nothing, |a, b| a.union(&b)))
-            .or_else(|| holds_the_top(members).then(Descr::anything)),
+        Schema::Union(members) => joined_in_rounds(
+            members,
+            |member| descend(member, pool, budget, depth),
+            Descr::nothing,
+            |a, b| a.union(&b),
+        )
+        .or_else(|| holds_the_top(members).then(Descr::anything)),
+        // A meet starts from its first member: met with every value it is itself,
+        // and the top of every kind is what building that value costs.
         Schema::Intersection(members) => {
-            members.iter().try_fold(Descr::anything(), |whole, member| {
+            let mut members = members.iter();
+            let Some(first) = members.next() else {
+                return Some(Descr::anything());
+            };
+            members.try_fold(descend(first, pool, budget, depth)?, |whole, member| {
                 whole.intersect(&descend(member, pool, budget, depth)?)
             })
         }

@@ -465,8 +465,8 @@ answers `"undecided"`.
   as their lengths at any length (the next entry). Met with anything else --
   a pattern, an element shape, a second base -- a bound over a list is an
   automaton with a state per element, and the sets compare two such bounds up
-  to about 1,340 elements over a list of integers before the work a relation
-  may spend runs out; past that they decline. A bound over a `str` or `bytes`
+  to 2,046 elements over a list of integers, where the automaton reaches the
+  state bound; past that they decline. A bound over a `str` or `bytes`
   is there a pattern counting code points or bytes, a few states a code point,
   and the sets read one up to about 250 code points or 2,000 bytes before its
   table passes the state bound; past 4,094 the bound is refused before it is

@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use super::{Summand, product};
+use super::{PolarUnion, Summand, product};
 
 thread_local! {
     /// The longest list [`Summand::admit`] has been handed on this thread.
@@ -45,6 +45,16 @@ impl Summand for Counted {
 
 fn counted(values: &[u8]) -> Vec<Counted> {
     values.iter().copied().map(Counted).collect()
+}
+
+/// No summand held positively is the empty set; none held negated is everything,
+/// and a summand of either polarity is no such reading.
+#[test]
+fn the_bottom_is_no_summand_held_positively() {
+    assert!(PolarUnion::<Counted>::of(Vec::new()).is_bottom());
+    assert!(!PolarUnion::<Counted>::with_polarity(Vec::new(), true).is_bottom());
+    assert!(!PolarUnion::of(counted(&[1])).is_bottom());
+    assert!(!PolarUnion::with_polarity(counted(&[1]), true).is_bottom());
 }
 
 /// A product admits each pair as it is met, so the list it holds stands at its

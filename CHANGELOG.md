@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: numpy's generic reads as the class met with a record
 - feat: a relation reads a schema of up to 1024 nodes through the sets
 - feat: a rational bound over a float is read at the float on its side
+- feat: a relation builds no complement it does not read
 
 -->
 
@@ -66,6 +67,14 @@ PyTorch's arrays.
   MultipleOf(2)]`, and the complement of a range of JSON integers, an `int` that
   is no `bool` or a float that is a multiple of one, is decided. A step that is
   fractional or past `4096` is left to the rules.
+
+### Changed
+
+- **A relation builds less to answer, and declines a little less.** A set's complement is
+  built only where it is read: what a list's element leaves, and what one set leaves of
+  another, are read a kind at a time, so a kind a set misses costs nothing. The relations
+  of the JSON Schema containment suite read 37% fewer instructions, and what a relation
+  keeps of its allowance decides a few it left `undecided`. No answer it gave moves.
 
 ## [0.0.23] - 2026-11-04
 

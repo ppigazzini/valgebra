@@ -1839,13 +1839,12 @@ fn a_length_bound_over_a_list_lowers_two_hundred_elements_deep() {
 }
 
 // THEORY: a-length-is-a-count-beside-the-automaton
-/// What a length bound over a list costs: three units of the build's allowance
-/// an element, for a lower bound and an upper one, and 134 at twenty elements
-/// for a lower one. So the longest lower bound the default allowance of 4,096
-/// lowers is 1,340 elements. Asking every position its own letter and every
-/// pair its own rest costs 83 an element, which stops a bound near 48.
+/// What a length bound over a list costs: two units of the build's allowance an
+/// element, for a lower bound and an upper one, and 95 at twenty elements for a
+/// lower one. So the default allowance reaches past four thousand elements, and it
+/// is the state bound that stops a relation, at 2,046.
 #[test]
-fn a_length_bound_costs_three_units_an_element() {
+fn a_length_bound_costs_two_units_an_element() {
     let pool = empty_pool();
     let cost = |constraint: Constraint| {
         let schema = bounded_list(constraint);
@@ -1877,9 +1876,9 @@ fn a_length_bound_costs_three_units_an_element() {
     };
     for bound in [Constraint::MinLen, Constraint::MaxLen] {
         let (twenty, forty) = (cost(bound(20)), cost(bound(40)));
-        assert_eq!(forty - twenty, 60, "{:?}", bound(0));
+        assert_eq!(forty - twenty, 40, "{:?}", bound(0));
     }
-    assert_eq!(cost(Constraint::MinLen(20)), 134);
+    assert_eq!(cost(Constraint::MinLen(20)), 95);
 }
 
 /// An integer bound no float equals is read against the neighbor on the

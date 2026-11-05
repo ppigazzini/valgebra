@@ -3245,10 +3245,9 @@ fn a_length_bound_over_a_set_asks_its_element_for_that_many_values() {
 /// a shorter one, each by a list the length of the bound it falls short of.
 ///
 /// The difference is a product of two chains, and the rows of a chain repeat:
-/// each state's rest and each pair of guards is the same as the last. Asked
-/// once, a relation reaches 1,340 elements before the allowance is spent; with
-/// the meets asked at every state it stops at 508, with the rests at 239, and
-/// with both at 169.
+/// each state's rest and each pair of guards is the same as the last, so each is
+/// asked once, and the allowance outlasts the state bound, which stops a relation
+/// at 2,046 elements.
 #[test]
 fn two_length_bounds_six_hundred_elements_long_are_compared() {
     let bounded = |constraint| {

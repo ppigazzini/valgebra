@@ -1068,9 +1068,8 @@ as a list against a length-bounded list of the same element.
   and the meets it has asked for the pairs to come, since a chain repeats its
   rows (`Rests`, `Met`); and a side that is the whole language or the empty
   one is answered without a product. A bound of forty elements over
-  `list[int]` lowers on 194 units of the allowance, against 3,409 when every
-  position asks its own letter and every pair its own rest, and two bounds are
-  compared up to 1,340 elements where asking at every pair stops at 169;
+  `list[int]` lowers on 135 units of the allowance, so two bounds are compared up
+  to the state bound, 2,046 elements, with allowance to spare;
   `MinLen(4000)` refuses in 4 ms against 1.2 s.
   `--decision-lengths` reads 88.31% fewer instructions and `--decision-sets`
   21.80% fewer.
@@ -1101,7 +1100,19 @@ as a list against a length-bounded list of the same element.
   atoms retries the full line. A relation between two unions of 2,048 tagged
   records, which the node bound refuses, declines in 37 ms on a release build,
   where the fold takes 5.9 s, and `--decision-unions` holds it: the fold reads
-  1,825 times the instructions.
+  1,825 times the instructions. Up to three members, those are a fold's joins, and
+  they hold no list, since a list of descriptors is a request past the allocator's
+  bins whose consolidating costs more than the union it would hold.
+- **A complement is built only where it is read.** Most sets hold a kind or two, and
+  a complement builds a top for every kind a set misses. Whether a letter takes
+  every value, and whether an else edge is dead, ask only whether a complement holds
+  a value, and a kind holding no line answers that with nothing built (`leaves` in
+  `descr/mod.rs`). A difference reads only the kinds its subject holds (`minus`), and
+  a product holds what an edge's neighbors take in place of their complement. A meet
+  starts from its first member rather than from every value. The relations of the
+  JSON Schema containment suite read 37% fewer instructions on a release build,
+  `--decision-sets` 29.82% fewer and `--decision-lengths` 66.37%, and what a
+  relation keeps of its allowance decides a few a dearer reading declines.
 
 **A pair's constants are read once per validator, not once per question.**
 Relating two validators pools one's constants into the other's, and the key a
@@ -1255,6 +1266,10 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   shape moves about 1% either way under either, inside its own shape's spread.
   Read with `perf_inspect.py cycles`, thirty rounds.
 
+- **Reading a meet's complemented member as a difference while lowering**: the
+  relations of the JSON Schema containment suite read 0.6% fewer instructions, since
+  the complement a meet stops building is mostly built again by the record that holds
+  it, for five more lines at the build's busiest match.
 - **Forcing the emptiness entry into its callers**: `#[inline]` on `verdict_rec`
   or `empty_and_region` changes no count, and `#[inline(always)]` moves the call
   one frame down and reads the relation matrix 0.06% dearer.

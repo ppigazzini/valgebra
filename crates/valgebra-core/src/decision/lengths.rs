@@ -211,11 +211,7 @@ fn joined<'a>(
     identity: impl FnOnce() -> ByLength<'a>,
     join: impl Fn(ByLength<'a>, ByLength<'a>) -> Option<ByLength<'a>>,
 ) -> Option<ByLength<'a>> {
-    let read = members
-        .iter()
-        .map(|member| lengths_of(member, depth))
-        .collect::<Option<Vec<_>>>()?;
-    joined_in_rounds(read, identity, join)
+    joined_in_rounds(members, |member| lengths_of(member, depth), identity, join)
 }
 
 /// The base two parts of a term count over: the one either names, or `None`

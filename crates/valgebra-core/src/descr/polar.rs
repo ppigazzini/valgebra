@@ -128,6 +128,12 @@ impl<S: Summand> PolarUnion<S> {
         self.negated
     }
 
+    /// Whether this holds no summand, positively: the empty set as a constructor
+    /// and a meet spell it. A negated form holding nothing is the universe.
+    pub(super) const fn is_bottom(&self) -> bool {
+        !self.negated && self.summands.is_empty()
+    }
+
     /// The summands of the values this holds, complementing a negated form,
     /// or `None` where that complement passes the bound.
     ///
