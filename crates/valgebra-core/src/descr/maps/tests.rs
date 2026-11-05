@@ -1243,28 +1243,67 @@ fn of(entries: &[(&str, i64)]) -> Vec<Entry<i64>> {
     entries.iter().map(|(key, value)| at(key, *value)).collect()
 }
 
-/// The dicts over a few keys and values a split tells apart: every dict of up to
-/// three keys, each mapping to one of three values.
+/// A key for each region [`narrow_lattice`]'s languages cut the `str` keys into, two
+/// where a region holds more than one key: a want can ask for two keys of a region.
+const NARROW_KEYS: [&str; 14] = [
+    "a", "aa", "ac", "ab", "aab", "b", "bb", "cb", "xa", "xc", "xb", "xxb", "c", "d",
+];
+
+/// The values a dict maps a key to. `3` is outside every value [`narrow_lattice`]
+/// draws, where a complement's want is met.
+const NARROW_VALUES: [i64; 3] = [1, 2, 3];
+
+/// The dicts the laws compare over: every dict of up to two keys, one key to a
+/// region, alone or beside an integer key.
 fn narrow_dicts() -> Vec<Vec<Entry<i64>>> {
-    const KEYS: [&str; 6] = ["a", "ab", "b", "xa", "c", "xb"];
+    const KEYS: [&str; 8] = ["a", "aa", "ab", "b", "cb", "xa", "xb", "c"];
     let mut dicts = vec![Vec::new()];
     for (first, a) in KEYS.iter().enumerate() {
-        for va in 1..=3 {
+        for va in NARROW_VALUES {
             dicts.push(vec![at(a, va)]);
-            for (second, b) in KEYS.iter().enumerate().skip(first + 1) {
-                for vb in 1..=3 {
+            dicts.push(vec![at(a, va), at_an_integer(1)]);
+            for b in KEYS.iter().skip(first + 1) {
+                for vb in NARROW_VALUES {
                     dicts.push(vec![at(a, va), at(b, vb)]);
-                    for c in KEYS.iter().skip(second + 1) {
-                        for vc in 1..=3 {
-                            dicts.push(vec![at(a, va), at(b, vb), at(c, vc)]);
-                        }
-                    }
                 }
             }
         }
     }
     dicts.push(vec![at_an_integer(1)]);
     dicts
+}
+
+/// Whether `set` holds a dict of `room` more entries over `keys` beside `dict`.
+fn holds_with_room(
+    set: &MapLattice<IntSet>,
+    keys: &[&str],
+    room: usize,
+    dict: &mut Vec<Entry<i64>>,
+) -> bool {
+    if room == 0 {
+        return set.holds(dict);
+    }
+    for (next, key) in keys.iter().enumerate() {
+        for value in NARROW_VALUES {
+            dict.push(at(key, value));
+            let found = holds_with_room(set, &keys[next + 1..], room - 1, dict);
+            dict.pop();
+            if found {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Whether `set` holds some dict a draw of [`narrow_lattice`] can ask for: four leaves
+/// want at most four keys, read smallest first, and a want of another kind is met by
+/// an integer key beside them.
+fn holds_a_dict(set: &MapLattice<IntSet>) -> bool {
+    (0..=4).any(|size| {
+        holds_with_room(set, &NARROW_KEYS, size, &mut Vec::new())
+            || holds_with_room(set, &NARROW_KEYS, size, &mut vec![at_an_integer(1)])
+    })
 }
 
 /// One dict entry under an integer key, which a split of the `str` keys leaves to
@@ -1301,7 +1340,7 @@ fn narrow_lattice() -> impl Strategy<Value = MapLattice<IntSet>> {
         Just(words("a|b")),
         Just(words("a")),
     ];
-    let value = (1i64..=3).prop_map(IntSet::just);
+    let value = (1i64..=2).prop_map(IntSet::just);
     let leaf = prop_oneof![
         (language.clone(), value.clone()).prop_map(|(keys, ty)| {
             MapLattice::narrowed_record([], [], [(keys, ty)]).expect("a small record")
@@ -1331,9 +1370,10 @@ fn narrow_lattice() -> impl Strategy<Value = MapLattice<IntSet>> {
 }
 
 proptest! {
-    // A fixed count, since a case reads every dict of the universe a dozen times over.
+    // A quarter of the default, since a case reads every dict of the universe a dozen
+    // times over, and a share of it rather than a number, so the deep lane deepens it.
     #![proptest_config(ProptestConfig {
-        cases: 96,
+        cases: ProptestConfig::default().cases / 4,
         max_shrink_time: 2_000,
         ..ProptestConfig::default()
     })]
@@ -1357,13 +1397,37 @@ proptest! {
     #[test]
     fn emptiness_over_a_split_is_the_dicts_it_holds(a in narrow_lattice()) {
         let _allowance = budget::law();
-        let held = narrow_dicts().iter().any(|d| a.holds(d));
         match a.emptiness() {
-            Verdict::Empty => prop_assert!(!held, "read empty, and it holds a dict"),
-            Verdict::Inhabited => prop_assert!(held, "read inhabited, and it holds no dict"),
+            Verdict::Empty => prop_assert!(
+                !narrow_dicts().iter().any(|d| a.holds(d)),
+                "read empty, and it holds a dict"
+            ),
+            Verdict::Inhabited => prop_assert!(holds_a_dict(&a), "read inhabited, and it holds no dict"),
             Verdict::Unknown => {}
         }
     }
+}
+
+/// A key can be wanted from a region no clause names alone: `a.*` outside `.*b` and
+/// `a|b` is `aa` and its like, which the clauses reach only together.
+#[test]
+fn a_want_reads_the_region_its_languages_leave() {
+    let clause = MapLattice::narrowed_record([], [], [(words("a.*"), IntSet::just(3))])
+        .expect("a small record");
+    let shut = MapLattice::narrowed_record(
+        [],
+        [],
+        [(words("a|b"), IntSet::all()), (words(".*b"), IntSet::all())],
+    )
+    .expect("a small record");
+    let set = clause.intersect(&shut.complement()).expect("a small meet");
+    assert_eq!(set.emptiness(), Verdict::Inhabited);
+    assert!(set.holds(&of(&[("aa", 3)])));
+    assert!(
+        !set.holds(&of(&[("a", 3)])),
+        "`a` is in `a|b`, so the want is unmet"
+    );
+    assert!(!set.holds(&of(&[("ab", 3)])), "`ab` is in `.*b`");
 }
 
 /// A clause reads its keys and leaves the others shut, and a key outside it is no

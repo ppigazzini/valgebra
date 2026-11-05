@@ -141,6 +141,22 @@ def test_a_relation_over_narrowed_keys_is_decided(
     assert Validator(narrow).relation_to(wide) == expected
 
 
+def test_a_length_holds_the_lone_surrogate_a_pattern_does_not() -> None:
+    # `(?s)` leaves the surrogate as the one word between the two: a length counts a
+    # code point, and a pattern matches text, which a lone surrogate has none of. A
+    # length read over text alone would prove this subset, which the walk refutes.
+    counted = dict[Annotated[str, at.MinLen(1)], int]
+    matched = dict[Annotated[str, Regex("(?s).+")], int]
+    apart = {"\ud800": 1}
+    assert Validator(counted).is_valid(apart)
+    assert not Validator(matched).is_valid(apart)
+    assert Validator(counted).relation_to(matched) == "not_subset"
+    assert Validator(matched).relation_to(counted) == "subset"
+    difference = Validator(intersection(counted, complement(matched)))
+    assert difference.is_valid(apart)
+    assert difference.relation_to(nothing) == "not_subset"
+
+
 def test_clauses_that_overlap_give_a_key_one_answer() -> None:
     both = Validator({A: int, Z: str})
     assert both.is_valid({"az": 1})
