@@ -3792,6 +3792,30 @@ PLANTS = (
         trips=("test_the_descriptor_modules_are_read_at_all",),
     ),
     Plant(
+        # A kernel reading the partition, which is the value model.
+        "tests/test_module_direction.py",
+        ("crates/valgebra-core/src/descr/floats.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/descr/floats.rs",
+            "/// The floats from `lo` to `hi`, both held.",
+            "use crate::kind::Kind;\n\n/// The floats from `lo` to `hi`, both held.",
+        ),
+        trips=("test_no_kernel_names_a_fact_of_the_value_model",),
+    ),
+    Plant(
+        # A module the claim is true of, dropped from the list that states it.
+        "tests/test_module_direction.py",
+        ("tests/test_module_direction.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_module_direction.py",
+            '    "automaton.rs",\n',
+            "",
+        ),
+        trips=("test_every_module_free_of_the_value_model_is_a_kernel",),
+    ),
+    Plant(
         # The answer type read from the decider rather than from the frame.
         "tests/test_module_direction.py",
         ("crates/valgebra-core/src/descr/polar.rs",),

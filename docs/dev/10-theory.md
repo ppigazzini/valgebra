@@ -103,6 +103,23 @@ IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/reading
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference, a_complement_is_below_its_complements_pushed_in, a_set_is_below_its_own_split, a_complement_the_relation_empties_is_read_empty, a_meet_of_guards_reads_as_the_meet_of_their_branches, a_reference_and_its_complement_meet_in_nothing
 
+**A universe is a set, and the algebra below it is Boolean again.** A
+set-theoretic interpretation is a domain and a map into its subsets
+[FCB08, Def. 4.1], and for a set `u` the sets below it form a Boolean algebra
+with `u` for its top and `u ∧ ¬s` for the complement of `s`: `s ∨ (u ∧ ¬s) = u`
+and `s ∧ (u ∧ ¬s) = ∅` where `s ≤ u`. Restricting the domain to `u` therefore
+reads every term as its meet with `u`, and `s ≤ t` in the restricted model is
+`u ∧ s ∧ ¬t = ∅`, one question of the model this tree already decides. So a value
+model whose values embed in Python's takes a set for its top and a frontend for
+its keywords, and no parameter on the algebra: JSON's values are what `json.loads`
+returns ([docs/07-json.md](../07-json.md)), and a number spelled two ways is two
+Python values that every set the frontend builds admits together.
+**[LOAD-BEARING: a-universe-is-a-set]**
+
+IMPLEMENTED-BY: ir.rs::Schema::meet_within, ir.rs::Schema::complement, decision/emptiness.rs::intersection_verdict
+
+HELD-BY: the_sets_below_a_universe_are_a_boolean_algebra, test_the_sets_below_a_universe_are_a_boolean_algebra, test_a_value_outside_the_universe_is_outside_every_set_below_it
+
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING: stone-duality]** — the license for treating the scalar fragment
 as a bitset over disjoint regions, which is what makes emptiness and subtyping
@@ -1128,6 +1145,14 @@ is a surface the decision must be sound over for nothing.
 SOURCE: §14.7 "The IR should be exactly as expressive as its producers"
 
 HELD-BY: every_variant_is_built_by_a_producer_and_the_placeholder_by_none, test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone, test_the_node_table_covers_every_ir_variant
+
+**The kernels hold no value model.** The sets of integers and of floats, the two
+automata's walks, the union of summands, the build's budget and the `T⊥` of a key
+read nothing of what their letters are, so a universe the kernels cannot hold
+fails at the component that reads it and not in them.
+**[OBLIGATION: the-kernels-hold-no-value-model]**
+
+HELD-BY: test_no_kernel_names_a_fact_of_the_value_model, test_every_module_free_of_the_value_model_is_a_kernel
 
 **The definition imports nothing from the optimization.** The partition and the
 answer types sit below both deciders; no descriptor module names the structural

@@ -2484,6 +2484,45 @@ proptest! {
         ));
     }
 
+    // THEORY: a-universe-is-a-set
+    /// The sets below a set are a Boolean algebra whose top is that set and whose
+    /// complement of `s` is `u ∧ ¬s`, and inclusion read there is one question of
+    /// the whole model: a universe needs no parameter on the algebra.
+    #[test]
+    fn the_sets_below_a_universe_are_a_boolean_algebra(
+        u in scalar_or_set_schema(),
+        a in scalar_or_set_schema(),
+        b in scalar_or_set_schema(),
+    ) {
+        let same = |left: &Schema, right: &Schema| {
+            samples_v().iter().all(|value| member_v(left, value) == member_v(right, value))
+        };
+        let within = |s: &Schema| intersection(u.clone(), s.clone());
+        let outside = |s: &Schema| intersection(u.clone(), not(s.clone()));
+        prop_assert!(same(&union(within(&a), outside(&a)), &u));
+        prop_assert!(same(&intersection(within(&a), outside(&a)), &Schema::Nothing));
+        prop_assert!(same(
+            &outside(&union(a.clone(), b.clone())),
+            &intersection(outside(&a), outside(&b)),
+        ));
+        prop_assert!(same(
+            &outside(&intersection(a.clone(), b.clone())),
+            &union(outside(&a), outside(&b)),
+        ));
+        // A proof below the universe holds of every sample inside it, and a meet
+        // proved empty holds none: both readings of `u ∧ a ∧ ¬b = ∅`.
+        if within(&a).is_subtype_of(&within(&b)) {
+            for value in &samples_v() {
+                prop_assert!(!member_v(&within(&a), value) || member_v(&b, value));
+            }
+        }
+        if intersection(within(&a), not(b.clone())).is_empty() {
+            for value in &samples_v() {
+                prop_assert!(!member_v(&within(&a), value) || member_v(&b, value));
+            }
+        }
+    }
+
     /// Building two sides of a law reaches one normal form. A property of the
     /// constructors, not of the algebra: the law itself is above.
     #[test]

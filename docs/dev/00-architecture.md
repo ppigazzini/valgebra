@@ -487,6 +487,18 @@ vocabulary rather than a check, and the holder keeps the root workspace to its
 two members and the cargo configuration to no alias. Held by
 `test_the_workspace_is_the_two_crates` in `tests/test_refusals_ledger.py`.
 
+**A crate or a trait for the value universe.** A universe whose values embed in
+Python's is a set below the top ([10-theory.md](10-theory.md)), so it has no second
+instance of a component to share: `Schema`, the deciders and the walk read it as
+they stand, and a trait over the kinds would be designed from one implementor, as
+an uncertain change is. What such a crate would hold is already free of the value
+model, which the holder reads, and the move waits on a carrier that does not embed
+in Python's: a crate is two lines of a manifest then, and the zone table, the
+sweeps and the per-file floors read a third crate from that day. Held by
+`test_no_kernel_names_a_fact_of_the_value_model` in
+`tests/test_module_direction.py`, and `test_the_workspace_is_the_two_crates` in
+`tests/test_refusals_ledger.py`.
+
 **A per-file lint ratchet.** The lints are one rule for the workspace --
 clippy's pedantic group under `-D warnings`, which every member takes, and three
 restriction lints on the library targets -- rather than a baseline per file that

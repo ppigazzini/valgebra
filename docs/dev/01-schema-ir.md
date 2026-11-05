@@ -265,6 +265,18 @@ dict display that reads back as the last of them
 takes out values a clause claims
 (`a_clause_list_rewritten_twice_gives_the_term_once_did`).
 
+**A node, a kind or a parameter for another value universe.** Refused where its
+values embed in Python's. JSON's are what `json.loads` returns, so every JSON set
+is a set of Python values below the JSON values' own top
+([docs/07-json.md](../07-json.md)), reached by the nodes as they stand, and case 1
+of the admission test is what it fails: write it as a combination and add
+nothing. `1` and `1.0` being one JSON number is no node either: every set a JSON
+frontend builds admits both. A fact that decides less than it denotes, as the
+integer spelled with a float does where a step reads it, is a gap in a decider
+and is closed there.
+`test_a_value_outside_the_universe_is_outside_every_set_below_it` in
+`tests/test_universe.py` holds the reading.
+
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labeling than the record model
 assumes.

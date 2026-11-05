@@ -144,6 +144,33 @@ assert is_float.is_valid(float("inf"))
 assert is_float.is_valid_json("1e400")
 ```
 
+## The JSON values as a set
+
+The values a document parses to are a set like any other, so the sets of JSON
+values are the sets below it, and asking inside it takes a meet and no new
+vocabulary. Its complement of `s` is the JSON values outside `s`:
+
+```python
+from valgebra import complement, intersection, recursive, union
+
+number = intersection(int | float, complement(bool))
+json_value = recursive(
+    lambda value: union(None, bool, number, str, list[value], dict[str, value])
+)
+assert json_value.is_valid({"a": [1, 2.5, None]})
+assert not json_value.is_valid((1, 2))  # a tuple is no JSON value
+assert not number.is_valid(True)  # and a JSON boolean is no number
+
+# Bytes are outside the universe, so the universe's "not a string" refuses them
+# where a bare complement admits them.
+assert complement(str).is_valid(b"x")
+assert not intersection(json_value, complement(str)).is_valid(b"x")
+
+# Relations asked inside it are relations of the meet.
+assert intersection(json_value, bytes).is_empty()
+assert intersection(json_value, list[int]).is_subtype_of(list[int | float])
+```
+
 ## Malformed JSON
 
 Unparseable input never reaches the validation walk. `validate_json` reports it

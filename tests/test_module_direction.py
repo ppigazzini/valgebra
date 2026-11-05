@@ -116,6 +116,76 @@ def test_the_term_imports_nothing_from_the_optimization() -> None:
         )
 
 
+#: The parts of the set representation that hold sets of numbers, automata and
+#: unions of summands for any alphabet: the theory, which reads no value model.
+_KERNELS = (
+    "automaton.rs",
+    "budget.rs",
+    "floats.rs",
+    "integers.rs",
+    "interval.rs",
+    "polar.rs",
+    "symbolic.rs",
+    "values.rs",
+)
+#: What a line of code names when it reads Python's values: the node set, the
+#: partition, the host's questions and the class snapshot.
+_VALUE_MODEL = re.compile(
+    r"\b(?:Schema|Kind|LeafRelations|Constants|Class)\b|\bcrate::(?:ir|kind|oracle)\b"
+)
+
+
+# THEORY: the-kernels-hold-no-value-model
+def test_no_kernel_names_a_fact_of_the_value_model() -> None:
+    """A kernel is generic because it cannot see what its letters are.
+
+    A universe is a set below the top (`docs/dev/10-theory.md`), so no second
+    instance of these modules exists to prove them generic. This is what says
+    they are: a fact about Python's values reaching one fails here.
+    """
+    offenders: list[str] = []
+    for name in _KERNELS:
+        source = DESCR / name
+        assert source.exists(), f"{name} is gone; this rule names a file that moved"
+        for number, line in enumerate(
+            source.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            code = line.split("//", 1)[0]
+            if _VALUE_MODEL.search(code):
+                offenders.append(f"{name}:{number}: {line.strip()}")
+    assert not offenders, (
+        "a kernel of the set representation reads the value model:\n"
+        + "\n".join(offenders)
+        + "\nA fact about Python's values belongs where a schema is lowered, in "
+        "`descr/lower.rs` or the component that holds that kind."
+    )
+
+
+def _names_the_value_model(source: Path) -> bool:
+    return any(
+        _VALUE_MODEL.search(line.split("//", 1)[0])
+        for line in source.read_text(encoding="utf-8").splitlines()
+    )
+
+
+# THEORY: the-kernels-hold-no-value-model
+def test_every_module_free_of_the_value_model_is_a_kernel() -> None:
+    """The other direction: the list names every module the claim is true of.
+
+    A list that only had to be a subset of the truth could shrink to nothing and
+    keep the test above green.
+    """
+    free = {
+        source.name
+        for source in _descr_sources()
+        if not lib.is_test_module(source) and not _names_the_value_model(source)
+    }
+    assert free == set(_KERNELS), (
+        "the kernels are the descriptor modules that read no value model: "
+        f"{sorted(free ^ set(_KERNELS))} stands on one side of that only"
+    )
+
+
 def test_the_frame_is_where_the_definition_can_reach_it() -> None:
     # The other direction of the same claim: the frame modules the descriptor
     # reads exist and hold what it needs. Without this the test above
