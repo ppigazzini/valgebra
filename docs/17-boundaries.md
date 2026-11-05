@@ -327,6 +327,27 @@ assert non_negative.relation_to(np.ndarray) == "subset"
 assert Validator(np.ndarray).relation_to(non_negative) == "undecided"
 ```
 
+**Another library's array is read the same way.** The spelling asks for attributes, so
+it holds of whatever has them, met with that library's class. No other library's array
+has a generic form to read:
+
+| Array | `shape` | Its elements |
+|---|---|---|
+| `jax.Array`, met as `instance_of(jax.Array)` | a `tuple` | `dtype` is numpy's, so `kind` reads as above |
+| `torch.Tensor`, met as `instance_of(torch.Tensor)` | `torch.Size`, a `tuple` subclass, which a `tuple` schema reads | `dtype` has no `kind`: `is_floating_point`, `is_complex` and `is_signed` are its attributes |
+
+jaxtyping's `Float[Array, "n 3"]` builds as what it is, a class with an `isinstance`
+hook: membership reads its dtype and shape exactly, and every relation is `undecided`.
+The Array API's `isdtype` is a function, so a set over it is a predicate, and a
+`torch.Tensor` has no `__array_namespace__` to ask. These were read on JAX 0.12 and
+PyTorch 2.15, and no lane here installs either.
+
+**Under `jax.jit` the attributes still read and the elements do not.** A traced value
+is a tracer with a `shape` and a `dtype`, so a record reads it as it reads an array. A
+predicate over its elements raises what a tracer's truth raises, which is
+`predicate_error`, so `is_valid` answers `False` inside `jit` for an array it admits
+outside. Keep what a traced function checks to the attributes.
+
 ## It does not generate, infer, or export
 
 - **No schema inference from values or code.** A schema is written, not guessed.

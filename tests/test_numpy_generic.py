@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import sys
 import types
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 
 import annotated_types as at
 import pytest
 
-from valgebra import Validator, intersection
+from valgebra import Validator, instance_of, intersection
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -132,6 +132,121 @@ def test_a_class_of_that_name_with_no_numpy_is_refused() -> None:
         patch.delitem(sys.modules, "numpy", raising=False)
         with pytest.raises(NotImplementedError, match="unsupported typing form"):
             Validator(_Ndarray[Any, Any])
+
+
+class _ThreeColumns(Protocol):
+    shape: tuple[int, Literal[3]]
+
+
+class _FloatKind(Protocol):
+    kind: Literal["f"]
+
+
+class _ElementsOfAFloatKind(Protocol):
+    dtype: _FloatKind
+
+
+class _FloatingPoint(Protocol):
+    is_floating_point: Literal[True]
+
+
+class _FloatingElements(Protocol):
+    dtype: _FloatingPoint
+
+
+class _Size(tuple[int, ...]):
+    """As `torch.Size` is: a `shape` that is a subclass of `tuple`."""
+
+    __slots__ = ()
+
+
+class _TensorDtype:
+    def __init__(self, *, floating: bool) -> None:
+        self.is_floating_point = floating
+
+
+class _Tensor:
+    """As much of `torch.Tensor` as the spelling reads: no numpy, and no `kind`."""
+
+    def __init__(self, *shape: int, floating: bool = True) -> None:
+        self.shape = _Size(shape)
+        self.dtype = _TensorDtype(floating=floating)
+
+
+def test_another_librarys_array_reads_through_what_it_exposes() -> None:
+    # The page's table without either library, so a lane installing neither holds it.
+    tensors = instance_of(_Tensor)
+    rows = Validator(intersection(tensors, _ThreeColumns))
+    assert rows.is_valid(_Tensor(4, 3))
+    assert not rows.is_valid(_Tensor(4, 4))
+    assert not rows.is_valid(_Tensor(3))
+    floats = Validator(intersection(tensors, _FloatingElements))
+    assert floats.is_valid(_Tensor(4))
+    assert not floats.is_valid(_Tensor(4, floating=False))
+    # The numpy attribute is one this array does not have, so that spelling reads
+    # nothing of it, and the class keeps out what has the attributes and is not one.
+    assert not Validator(_ElementsOfAFloatKind).is_valid(_Tensor(4))
+    both = Validator(intersection(tensors, _ThreeColumns, _FloatingElements))
+    assert both.relation_to(rows) == "subset"
+    assert both.relation_to(floats) == "subset"
+    assert rows.relation_to(both) == "not_subset"
+
+
+def test_jax_reads_through_the_spelling_numpy_does() -> None:
+    jax = pytest.importorskip("jax")
+    np = pytest.importorskip("numpy")
+    array = jax.numpy.zeros((4, 3))
+    arrays = instance_of(jax.Array)
+    floats = Validator(intersection(arrays, _ElementsOfAFloatKind))
+    rows = Validator(intersection(arrays, _ThreeColumns))
+    assert floats.is_valid(array)
+    assert not floats.is_valid(jax.numpy.zeros(3, dtype=jax.numpy.int32))
+    assert not floats.is_valid(np.zeros(3))
+    assert rows.is_valid(array)
+    assert not rows.is_valid(jax.numpy.zeros((4, 4)))
+    assert not Validator(np.ndarray).is_valid(array)
+    assert rows.relation_to(jax.Array) == "subset"
+
+
+def test_a_traced_array_reads_its_attributes_and_no_element() -> None:
+    jax = pytest.importorskip("jax")
+    rows = Validator(_ThreeColumns)
+    elements = Validator(
+        Annotated[object, at.Predicate(lambda x: bool((x >= 0).all()))]
+    )
+    array = jax.numpy.zeros((4, 3))
+    assert elements.is_valid(array)
+    read: list[bool] = []
+
+    def traced(value: object) -> object:
+        read.extend([rows.is_valid(value), elements.is_valid(value)])
+        return value
+
+    jax.jit(traced)(array)
+    assert read == [True, False], "the record reads it, and the predicate raises"
+
+
+def test_jaxtyping_builds_as_a_hooked_class() -> None:
+    jax = pytest.importorskip("jax")
+    jaxtyping = pytest.importorskip("jaxtyping")
+    columns = Validator(jaxtyping.Float[jaxtyping.Array, "n 3"])
+    assert columns.is_valid(jax.numpy.zeros((4, 3)))
+    assert not columns.is_valid(jax.numpy.zeros((4, 4)))
+    assert columns.relation_to(jax.Array) == "undecided"
+
+
+def test_torch_reads_through_its_own_attribute() -> None:
+    torch = pytest.importorskip("torch")
+    tensors = instance_of(torch.Tensor)
+    rows = Validator(intersection(tensors, _ThreeColumns))
+    floats = Validator(intersection(tensors, _FloatingElements))
+    assert isinstance(torch.zeros((4, 3)).shape, tuple)
+    assert rows.is_valid(torch.zeros((4, 3)))
+    assert not rows.is_valid(torch.zeros((4, 4)))
+    assert floats.is_valid(torch.zeros(3))
+    assert not floats.is_valid(torch.zeros(3, dtype=torch.int32))
+    assert not Validator(_ElementsOfAFloatKind).is_valid(torch.zeros(3))
+    assert not hasattr(torch.zeros(3), "__array_namespace__")
 
 
 def test_an_array_element_bound_is_a_predicate() -> None:
