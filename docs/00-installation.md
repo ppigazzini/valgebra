@@ -32,11 +32,14 @@ packages it does not:
 - [FastAPI](https://pypi.org/project/fastapi/) and
   [pydantic](https://pypi.org/project/pydantic/), which the
   [FastAPI recipe](19-recipes.md#a-field-of-a-fastapi-request) uses.
+- [numpy](https://pypi.org/project/numpy/), which the
+  [arrays section](17-boundaries.md#it-reads-an-array-through-what-the-array-exposes)
+  of the boundaries page uses.
 
 Install them to run the examples as printed:
 
 ```bash
-pip install annotated-types typing-extensions pytest fastapi pydantic
+pip install annotated-types typing-extensions pytest fastapi pydantic numpy
 ```
 
 Wheels are published for Linux (manylinux, x86_64 and aarch64), macOS (Intel and

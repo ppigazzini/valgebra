@@ -216,6 +216,99 @@ value was ever in, so the answer is `mutated_during_validation` and a non-member
 free-threaded interpreter, which is the case that cannot be written out of a
 program by discipline.
 
+## It reads an array through what the array exposes
+
+A numpy array is an instance of a class, so `numpy.ndarray` builds as that class and
+reads no element. A scalar belongs where its class derives: `np.float64` subclasses
+`float` and is a `float`, and `np.float32`, `np.int64` and `np.bool_` subclass no
+builtin and are none of `float`, `int` and `bool`:
+
+```python
+import numpy as np
+
+from valgebra import Validator
+
+assert Validator(np.ndarray).is_valid(np.zeros(3))
+assert not Validator(list[float]).is_valid(np.zeros(3))
+
+assert Validator(float).is_valid(np.float64(1.0))
+assert not Validator(float).is_valid(np.float32(1.0))
+assert not Validator(int).is_valid(np.int64(1))
+assert not Validator(bool).is_valid(np.bool_(True))
+```
+
+An array's `shape` and its `dtype` are attributes, so a `Protocol` reads them, met with
+the class, and the relations decide what it says. Read a dtype by its `kind`, since a
+dtype compares by byte order as well as by what its elements are:
+
+```python
+from typing import Literal, Protocol
+
+import numpy as np
+
+from valgebra import instance_of, intersection
+
+
+class Rows3(Protocol):
+    shape: tuple[int, Literal[3]]
+
+
+class Rank2(Protocol):
+    shape: tuple[int, int]
+
+
+class FloatKind(Protocol):
+    kind: Literal["f"]
+
+
+class FloatElements(Protocol):
+    dtype: FloatKind
+
+
+array = instance_of(np.ndarray)
+rows_of_three = intersection(array, Rows3)
+assert rows_of_three.is_valid(np.zeros((4, 3)))
+assert not rows_of_three.is_valid(np.zeros((4, 4)))
+assert not rows_of_three.is_valid(np.zeros(3))
+assert rows_of_three.relation_to(intersection(array, Rank2)) == "subset"
+assert rows_of_three.relation_to(np.ndarray) == "subset"
+
+floats = intersection(array, FloatElements)
+assert floats.is_valid(np.zeros(3, dtype=">f8"))  # whichever its byte order
+assert floats.is_valid(np.zeros(3, dtype="float32"))
+assert not floats.is_valid(np.zeros(3, dtype="int64"))
+```
+
+**The elements are not read.** An element is no attribute, so a set over them is a
+predicate: exact on membership, and every relation that looks inside it declines.
+
+**An order bound on an array holds one-element arrays alone.** `Annotated[np.ndarray,
+Ge(0)]` denotes the arrays for which `x >= 0` holds. For an array that is an array, its
+truth raises unless it holds one element, and a comparison that raises does not hold.
+So the bound refuses `np.zeros(3)`, every element of which is `>= 0`. No value is
+misread, and the set is not what the spelling suggests. Write the predicate:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+import numpy as np
+
+from valgebra import Validator
+
+bounded = Validator(Annotated[np.ndarray, at.Ge(0)])
+assert bounded.is_valid(np.zeros(1))
+assert not bounded.is_valid(np.zeros(3))
+
+non_negative = Validator(
+    Annotated[np.ndarray, at.Predicate(lambda x: bool((x >= 0).all()))]
+)
+assert non_negative.is_valid(np.zeros(3))
+assert not non_negative.is_valid(np.array([-1.0, 2.0]))
+assert non_negative.relation_to(np.ndarray) == "subset"
+assert Validator(np.ndarray).relation_to(non_negative) == "undecided"
+```
+
 ## It does not generate, infer, or export
 
 - **No schema inference from values or code.** A schema is written, not guessed.
