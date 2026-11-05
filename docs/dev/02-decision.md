@@ -323,6 +323,13 @@ two kinds that hold their values alike share one:
 | `Maps` | `dict` | a union of map atoms -- finitely many named keys plus a per-kind default, a split of the `str` part by regular languages where a clause narrows its keys, and a negative set | `descr/maps.rs` |
 | `Coarse` | `NoneType`, the kindless slot | every value of the kind or none, which is **exact** where the kind has one value | `descr/mod.rs` |
 
+**A fractional step stays out of `Floats`, on its figures.** A dyadic step such as `0.25`
+is a table over a finer grid, so the component could hold one, and it would carry that grid
+through every reading of a stretch and re-fit a set's classes where a meet moves it. Of the
+243 `multipleOf` in the 9,558 schemas of JSONSchemaBench, 3 are dyadic, all `0.25`, against
+154 decimal steps no grid holds and 86 whole ones, so it would decide for almost nobody and
+leave the step callers write, `0.01`, where it is. A proposal starts from those figures.
+
 `Component::top` is the one place that says which kind takes which
 representation, and it is the sentence to read rather than this table. Every
 listed kind has a representation that separates its values; `Coarse` survives
