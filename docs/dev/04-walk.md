@@ -669,7 +669,9 @@ most of what they cost, and each asks the test directly:
   walk's bound and a recorded signal decline to the scan, which asks both halves
   of each entry in `covered` as a record asks a field. A key narrowed by a pattern
   or a length is such a clause, since a refinement is no scalar: its text is read
-  once an entry, where the type test it narrows reads none.
+  once an entry, where the type test it narrows reads none, and sixty-four entries
+  cost about 640 instructions an entry where `dict[str, int]` costs 90
+  (`--binding-narrowed-key`).
 - **A tuple whose every position is a scalar.** `tuple[int, str, float]`, and a
   `NamedTuple` of builtin fields, is a type test a position
   (`scalar_positions_tuple_matches`): a thousand such tuples cost 37% fewer

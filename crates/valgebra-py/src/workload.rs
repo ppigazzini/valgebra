@@ -277,6 +277,11 @@ pub enum BindingShape {
     /// reader of its own settles, so without this shape the scan is measured
     /// by nothing.
     MappingLists,
+    /// The keys of [`Mapping`](BindingShape::Mapping) under
+    /// `dict[Annotated[str, Regex("k.*")], int]`: a clause narrowing its key, which no
+    /// type test decides, so the scan reads each key's text, where the shape beside
+    /// it reads none.
+    NarrowedKey,
     /// Sixty-four records in a list, against `list[User]` where `User` is a
     /// `TypedDict` of an integer, a string and a list of strings: the list a
     /// payload is, read by the list's reader for records. That reader inlines
@@ -325,6 +330,7 @@ impl BindingShape {
             "refined" => BindingShape::Refined,
             "mapping" => BindingShape::Mapping,
             "mapping-lists" => BindingShape::MappingLists,
+            "narrowed-key" => BindingShape::NarrowedKey,
             "record-list" => BindingShape::RecordList,
             "nullable" => BindingShape::Nullable,
             "set" => BindingShape::Set,
@@ -788,6 +794,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::Refined => spelled_walk(py, iters, REFINED),
         BindingShape::Mapping => spelled_walk(py, iters, MAPPING),
         BindingShape::MappingLists => spelled_walk(py, iters, MAPPING_LISTS),
+        BindingShape::NarrowedKey => spelled_walk(py, iters, NARROWED_KEY),
         BindingShape::RecordList => spelled_walk(py, iters, RECORD_LIST),
         BindingShape::Nullable => spelled_walk(py, iters, NULLABLE),
         BindingShape::Set => spelled_walk(py, iters, SET),
@@ -1023,6 +1030,12 @@ const MAPPING: &str = "SPELLING = dict[str, int]\n\
 /// Sixty-four string keys, each holding two integers.
 const MAPPING_LISTS: &str = "SPELLING = dict[str, list[int]]\n\
      VALUE = {f'k{i}': [i, i] for i in range(64)}\n";
+
+/// The keys of [`MAPPING`], each a member of a language.
+const NARROWED_KEY: &str = "import re\n\
+     from typing import Annotated\n\
+     SPELLING = dict[Annotated[str, re.compile('k.*')], int]\n\
+     VALUE = {f'k{i}': i for i in range(64)}\n";
 
 /// Sixty-four of the records `scripts/perf_shapes.py` reads, each a member.
 const RECORD_LIST: &str = "from typing import TypedDict\n\

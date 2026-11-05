@@ -140,6 +140,18 @@ UNTRAINED: dict[str, str] = {
         "automaton's product through a meet of lists, and no call here relates "
         "a length-bounded list."
     ),
+    "decision-steps": (
+        "A float line under a whole step, a list of intervals per residue: "
+        "`_relations` asks no float a step, so no call here reaches the residues."
+    ),
+    "decision-keys": (
+        "A split of a map's `str` keys, met at the refinement of two: `_relations` "
+        "and `_mappings` read no clause narrowing its key."
+    ),
+    "binding-narrowed-key": (
+        "A mapping whose key is narrowed by a pattern, read by the scan that "
+        "matches each key's text: no call here validates one."
+    ),
     "binding-mapping-lists": (
         "A mapping whose value is a list, read by the scan that asks the "
         "clause of each key and walks each value: no call here validates one, "

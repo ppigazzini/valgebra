@@ -979,12 +979,14 @@ jobs:
       # is invisible here in both directions: neither what a new rule costs nor
       # what a cheaper one saves. Two shapes ask one corpus of the rules and of
       # the sets, which is the ratio the pages give between them, and the last
-      # asks the sets length bounds over a list, a state per element.
+      # three ask the sets length bounds over a list, a state per element, floats
+      # under a whole step and dicts keyed by words.
       - name: Decision-path instruction-count regression gate
         run: >
           uv run --no-sync python scripts/perf_gate.py
           --decision --decision-refute --decision-repeat --decision-matrix
           --decision-rules --decision-sets --decision-lengths
+          --decision-steps --decision-keys
           --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}
@@ -1014,6 +1016,7 @@ jobs:
               --binding-json-open --binding-json-bounded --binding-json-deep \
               --binding-deep \
               --binding-refined --binding-mapping --binding-mapping-lists \
+              --binding-narrowed-key \
               --binding-record-list --binding-nullable --binding-set \
               --against "$BASE"
         env:

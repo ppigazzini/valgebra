@@ -32,6 +32,12 @@
 //! element; no pair of the nine has one. Its bounds are short enough that
 //! every pair is decided, so a change that lets a longer bound lower moves
 //! the count and not the answers.
+//!
+//! Two more readings ask the sets corpora of their own, on the components no
+//! other pair reaches. `steps` asks floats under a whole step, whose component
+//! holds a list of intervals per residue, up to the longest period it reads.
+//! `keys` asks dicts keyed by words, whose `str` keys a split holds, each meet
+//! reading the refinement of two.
 
 use std::sync::Arc;
 
@@ -39,8 +45,8 @@ use valgebra_core::descr::budget;
 use valgebra_core::descr::classes::Class;
 use valgebra_core::descr::lower::{Constants, Operand, WORK, lower};
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, Field, LeafRelations, Openness, OperandIx, Relation, Schema,
-    SeqShape, Verdict,
+    ClassIx, ConstIx, Constraint, Field, LeafRelations, MapClause, Openness, OperandIx, Relation,
+    Schema, SeqShape, Verdict,
 };
 
 /// Iterations of the corpus through the rules: a rule's answer is a few
@@ -55,6 +61,13 @@ const SETS_ITERATIONS: usize = 20;
 /// element and meets it with the element's shape, so two passes are already
 /// far above the startup.
 const LENGTHS_ITERATIONS: usize = 2;
+
+/// Iterations of the whole steps through the sets. One pass is already far above
+/// the startup, since the longest period reads a list of intervals per residue.
+const STEPS_ITERATIONS: usize = 1;
+
+/// Iterations of the keys through the sets.
+const KEYS_ITERATIONS: usize = 4;
 
 /// A pool that reads every operand and constant as its own index, and orders
 /// two bounds by it, so both deciders can read what a literal and a bound name
@@ -177,6 +190,70 @@ fn lengths() -> Vec<(Schema, Schema)> {
     ]
 }
 
+/// Floats under a whole step: a step inside one it divides, the converse, the
+/// longest period against a divisor and against the integers it meets, a range
+/// holding no multiple, and the integers a JSON document writes either way.
+fn steps() -> Vec<(Schema, Schema)> {
+    let by = |step: usize| Constraint::MultipleOf(OperandIx::new(step));
+    let floats = |constraints| Schema::refine(Schema::Float, constraints);
+    vec![
+        (floats(vec![by(2)]), floats(vec![by(1)])),
+        (floats(vec![by(1)]), floats(vec![by(2)])),
+        (floats(vec![by(4096)]), floats(vec![by(1024)])),
+        (floats(vec![by(1024)]), floats(vec![by(4096)])),
+        (
+            floats(vec![
+                by(1),
+                Constraint::Gt(OperandIx::new(30)),
+                Constraint::Lt(OperandIx::new(31)),
+            ]),
+            Schema::Nothing,
+        ),
+        (
+            floats(vec![by(1)]),
+            Schema::union([Schema::Int, floats(vec![by(1)])]),
+        ),
+    ]
+}
+
+/// Dicts keyed by words: a language inside the whole of `str` and the converse, a
+/// longer length inside a shorter, and two clauses that overlap, against a clause
+/// their join is inside and against one it is not.
+fn keys() -> Vec<(Schema, Schema)> {
+    let word = |constraint| Schema::refine(Schema::Str, vec![constraint]);
+    let pattern = |text: &str| word(Constraint::Regex(text.into()));
+    let clause = |key, value| MapClause { key, value };
+    let map = |key, value| Schema::mapping(clause(key, value));
+    let overlapping = || {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![
+                clause(pattern("a.*"), Schema::Int),
+                clause(pattern(".*z"), Schema::Str),
+            ],
+        )
+    };
+    vec![
+        (
+            map(pattern("x-.*"), Schema::Int),
+            map(Schema::Str, Schema::Int),
+        ),
+        (
+            map(Schema::Str, Schema::Int),
+            map(pattern("x-.*"), Schema::Int),
+        ),
+        (
+            map(word(Constraint::MinLen(2)), Schema::Int),
+            map(word(Constraint::MinLen(1)), Schema::Int),
+        ),
+        (
+            overlapping(),
+            map(Schema::Str, Schema::union([Schema::Int, Schema::Str])),
+        ),
+        (overlapping(), map(pattern("a.*"), Schema::Int)),
+    ]
+}
+
 fn main() {
     // A reading is named rather than defaulted: a run measuring the wrong
     // half would print a checksum of the wrong size and nothing else.
@@ -190,8 +267,10 @@ fn main() {
             ),
             Some("sets") => (SETS_ITERATIONS, by_the_sets, corpus()),
             Some("lengths") => (LENGTHS_ITERATIONS, by_the_sets, lengths()),
+            Some("steps") => (STEPS_ITERATIONS, by_the_sets, steps()),
+            Some("keys") => (KEYS_ITERATIONS, by_the_sets, keys()),
             _ => {
-                eprintln!("usage: decision_sets_workload rules|sets|lengths");
+                eprintln!("usage: decision_sets_workload rules|sets|lengths|steps|keys");
                 std::process::exit(2);
             }
         };

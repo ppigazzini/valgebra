@@ -37,16 +37,19 @@ Three workloads, and the shapes each is read in:
   the rules (`--decision-rules`) and of the sets (`--decision-sets`), whose two
   counts are what a rule's answer saves over building the sets for it, and
   length bounds over a list asked of the sets (`--decision-lengths`), which
-  read what a bound costs an element.
+  read what a bound costs an element, floats under a whole step
+  (`--decision-steps`), which read a list of intervals per residue, and dicts
+  keyed by words (`--decision-keys`), which read a split of the `str` keys.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  thirty shapes: the membership walk (`--binding`), the call boundary
+  thirty-one shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
   (`--binding-open`), a list of records (`--binding-record-list`), a mapping
   read through its clause (`--binding-mapping`), a mapping whose value is
-  walked (`--binding-mapping-lists`), walking a `tuple` subclass
+  walked (`--binding-mapping-lists`), a mapping whose key is narrowed by a pattern
+  (`--binding-narrowed-key`), walking a `tuple` subclass
   (`--binding-subclass`), matching a string against a compiled pattern
   (`--binding-pattern`), walking a value against a recursive schema
   (`--binding-recursive`), walking a value nested twenty-five deep
@@ -173,6 +176,8 @@ BRANCH_MODES = frozenset(
         "decision-rules",
         "decision-sets",
         "decision-lengths",
+        "decision-steps",
+        "decision-keys",
     }
 )
 # Both workloads print one trailing line holding the checksum, bare or prefixed.
@@ -453,6 +458,8 @@ MODES = {
     "decision-rules": ("decision_sets_workload", "relations asked of the rules"),
     "decision-sets": ("decision_sets_workload", "relations asked of the sets"),
     "decision-lengths": ("decision_sets_workload", "length bounds asked of the sets"),
+    "decision-steps": ("decision_sets_workload", "whole steps asked of the sets"),
+    "decision-keys": ("decision_sets_workload", "keys by words asked of the sets"),
     "binding": ("binding_workload", "binding walk"),
     "binding-boundary": ("binding_workload", "binding call boundary"),
     "binding-record": ("binding_workload", "binding record walk"),
@@ -483,22 +490,25 @@ MODES = {
     "binding-refined": ("binding_workload", "binding refined element walk"),
     "binding-mapping": ("binding_workload", "binding mapping walk"),
     "binding-mapping-lists": ("binding_workload", "binding mapping of lists walk"),
+    "binding-narrowed-key": ("binding_workload", "binding narrowed key walk"),
     "binding-record-list": ("binding_workload", "binding list of records walk"),
     "binding-nullable": ("binding_workload", "binding nullable element walk"),
     "binding-set": ("binding_workload", "binding set walk"),
 }
 
-#: The reading a core shape passes its example, for the three that share one.
+#: The reading a core shape passes its example, for the five that share one.
 #:
 #: The rules and the sets are asked the same pairs, so the ratio of the two
 #: counts is a ratio over one question rather than over two corpora. One
 #: example holds the corpus, and the argument names which decider answers it.
-#: The length bounds are a corpus of their own, asked of the sets through the
-#: same reading.
+#: The length bounds, the whole steps and the keys are corpora of their own, asked
+#: of the sets through the same reading.
 CORE_READINGS = {
     "decision-rules": "rules",
     "decision-sets": "sets",
     "decision-lengths": "lengths",
+    "decision-steps": "steps",
+    "decision-keys": "keys",
 }
 
 #: The iteration pair each binding mode runs at.
@@ -534,6 +544,7 @@ BINDING_ITERATIONS = {
     "binding-refined": (20_000, 5_000),
     "binding-mapping": (20_000, 5_000),
     "binding-mapping-lists": (20_000, 5_000),
+    "binding-narrowed-key": (20_000, 5_000),
     "binding-record-list": (20_000, 5_000),
     "binding-nullable": (150_000, 50_000),
     "binding-set": (150_000, 50_000),
@@ -571,6 +582,7 @@ BINDING_SHAPES = {
     "binding-refined": "refined",
     "binding-mapping": "mapping",
     "binding-mapping-lists": "mapping-lists",
+    "binding-narrowed-key": "narrowed-key",
     "binding-record-list": "record-list",
     "binding-nullable": "nullable",
     "binding-set": "set",
