@@ -1166,6 +1166,20 @@ SOURCE: §14.8 "The definition should not import"
 
 HELD-BY: test_the_definition_imports_nothing_from_the_optimization, test_the_term_imports_nothing_from_the_optimization, test_the_optimization_may_still_depend_on_the_definition
 
+**A frontend over a quotient builds saturated sets.** A value model whose equality
+is coarser than Python's reads a quotient of Python's values: JSON holds `1` and
+`1.0` as one number, so an `int` that is no `bool` and a `float` it compares equal
+to are one class. A set is saturated when it holds a whole class or none of it, and
+saturated sets are closed under union, meet and complement, so they are a Boolean
+algebra, the one of the sets of classes. `s ≤ t` over Python's values is then
+`s ≤ t` over the quotient's, and an answer here is that model's answer. The algebra
+cannot enforce it: `Literal[1]` is a set like any other, holding `1` and not `1.0`,
+and a relation over it speaks of Python's values. So the frontend owes it, on every
+leaf it writes, and the connectives keep it from there.
+**[OBLIGATION: a-quotient-universe-builds-saturated-sets]**
+
+HELD-BY: test_a_number_written_two_ways_is_admitted_alike, test_a_leaf_of_one_spelling_tells_the_spellings_apart
+
 ### Where this tree departs from its sources
 
 Each is a decision, and none is unsoundness: a `True` from any relation remains

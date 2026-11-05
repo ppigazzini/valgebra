@@ -245,7 +245,10 @@ assert toml_integer.relation_to(json_integer) == "subset"
 
 A JSON number is one number however it is written, and Python holds `1` and `1.0`
 as two values. A set of JSON values admits both or neither, so a constant is a union
-of its spellings, and a `bool` is no spelling of a number. A bound written with an
+of its spellings, and a `bool` is no spelling of a number. Every set you build from
+such pieces keeps that, through a union, a meet or a complement, and that is what makes
+a relation between two of them an answer about JSON; `Literal[1]` alone is a set of
+Python values. A bound written with an
 exponent is the integer it names where it names one: `1e23` parses to the double
 below `10**23`, and reading it as a double would refuse the integer. Read the schema
 with `json.loads(text, parse_float=Decimal)` to see which number was written:

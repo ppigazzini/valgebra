@@ -172,14 +172,66 @@ _NUMBER_SETS = [
 ]
 
 
+#: The sets a JSON frontend can build: a leaf of both spellings, or any connective.
+_number_sets = st.recursive(
+    st.one_of(
+        st.sampled_from(_NUMBER_SETS),
+        st.builds(
+            lambda marker, bound: _bounded(marker(bound)),
+            st.sampled_from([at.Ge, at.Gt, at.Le, at.Lt]),
+            st.sampled_from([-3, 0, 3, 2.5, 2**53, 1e300]),
+        ),
+        st.builds(
+            lambda step: _bounded(at.MultipleOf(step)),
+            st.sampled_from([1, 2, 3, 1024, 0.5]),
+        ),
+    ),
+    lambda inner: st.one_of(
+        st.builds(union, inner, inner),
+        st.builds(intersection, inner, inner),
+        st.builds(complement, inner),
+    ),
+    max_leaves=6,
+)
+
+#: The floats an `int` compares equal to: every float at or past `2**53` is one, so
+#: the integers a float reaches are drawn too, and `-0.0` is the class of `0`.
+_whole_floats = st.one_of(
+    st.just(-0.0),
+    st.integers(min_value=-(2**53), max_value=2**53).map(float),
+    st.floats(min_value=2.0**53, allow_infinity=False),
+    st.floats(max_value=-(2.0**53), allow_infinity=False),
+)
+
+
 # THEORY: a-universe-is-a-set
-@given(st.integers(min_value=-(2**53), max_value=2**53), st.sampled_from(_NUMBER_SETS))
+# THEORY: a-quotient-universe-builds-saturated-sets
+@given(_whole_floats, _number_sets)
 def test_a_number_written_two_ways_is_admitted_alike(
-    number: int, written: Validator[Any]
+    number: float, written: Validator[Any]
 ) -> None:
     # `1` and `1.0` are two Python values and one JSON number, and no set a frontend
     # builds tells them apart: that is what reading JSON's numbers in Python's asks.
-    assert written.is_valid(number) == written.is_valid(float(number))
+    spelled = int(number)
+    assert spelled == number
+    assert written.is_valid(spelled) == written.is_valid(number)
+
+
+# THEORY: a-quotient-universe-builds-saturated-sets
+def test_a_leaf_of_one_spelling_tells_the_spellings_apart() -> None:
+    # The algebra does not enforce the quotient: each of these is a set of Python
+    # values, so it is the frontend that owes both spellings, and a relation over
+    # one of these is about Python's values rather than about JSON's.
+    both = union(Literal[1], Literal[1.0])  # ty: ignore[invalid-type-form]
+    for one_spelling, spelled in (
+        (Literal[1], 1.0),
+        (Annotated[int, at.Ge(0)], 1.0),
+        (Annotated[float, at.Ge(0)], 1),
+    ):
+        narrow = Validator(one_spelling)
+        assert not narrow.is_valid(spelled)
+    assert Validator(Literal[1]).relation_to(both) == "subset"
+    assert both.relation_to(Literal[1]) == "not_subset"
 
 
 def test_a_boolean_is_no_spelling_of_a_number() -> None:
