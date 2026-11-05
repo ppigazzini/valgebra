@@ -1517,7 +1517,11 @@ disagree on, and where the subject is narrowed by its step and integer bounds
 alone the steps name that value too: `MultipleOf(2500)` is outside
 `MultipleOf(5000)` at 2500, at any size. What wants the representation is a
 refutation the subject's other constraints take part in, and the meet, whose
-period is the one the two steps share.
+period is the one the two steps share. The floats hold those too, for a whole
+step up to the period bound: a float is a multiple of it by its own residue, read
+exactly, so a step over floats takes the residue table the integers take, with an
+interval's ends moved in to the floats of the class, since past `2^53` a class
+holds only what the spacing leaves it.
 **[DEVIATION: the-carriers-are-i64-and-f64]**
 
 HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer_carrier_has_a_row, test_the_relation_is_the_one_recorded, test_a_multiple_is_a_remainder_of_zero, test_a_bound_past_the_carrier_is_proved_by_the_order, steps_entail_only_where_the_remainder_reads_them_alike

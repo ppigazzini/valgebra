@@ -8,16 +8,19 @@ admits invalid values, so every constraint is checked in both directions.
 from __future__ import annotations
 
 import datetime as dt
+import math
 import numbers
 import sys
 import typing
 from decimal import Decimal
 from fractions import Fraction
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import annotated_types as at
 import pytest
 import typing_extensions
+from hypothesis import given
+from hypothesis import strategies as st
 
 from valgebra import (
     Regex,
@@ -1080,3 +1083,178 @@ def test_a_sized_base_and_its_least_length_zero_are_one_set() -> None:
     assert Validator(empty_dict).relation_to(Validator({"a": int}).open()) == (
         "not_subset"
     )
+
+
+#: The floats a step over floats reads apart: whole on both sides of the edges
+#: where the spacing changes, fractional, and the three no step holds.
+_FLOATS = [
+    *sorted(
+        {
+            *(float(n) for n in range(-13, 14)),
+            0.5,
+            -0.5,
+            1.5,
+            5e-324,
+            *(
+                sign * edge * factor
+                for sign in (1.0, -1.0)
+                for edge in (2.0**52, 2.0**53, 2.0**63, 2.0**1000)
+                for factor in (1.0, 1 + 2.0**-52, 1 + 2.0**-51, 1 + 3 * 2.0**-52)
+            ),
+            1.7976931348623157e308,
+            -1.7976931348623157e308,
+        }
+    ),
+    math.inf,
+    -math.inf,
+    math.nan,
+]
+
+
+@pytest.mark.parametrize(
+    ("narrow", "wide", "expected"),
+    [
+        pytest.param(
+            Annotated[float, at.MultipleOf(1), at.Gt(30), at.Lt(31)],
+            nothing,
+            "subset",
+            id="no-whole-float-between-two-neighbors",
+        ),
+        pytest.param(
+            Annotated[float, at.MultipleOf(1), at.Ge(30), at.Lt(31)],
+            nothing,
+            "not_subset",
+            id="a-whole-float-at-the-held-end",
+        ),
+        pytest.param(
+            Annotated[float, at.MultipleOf(2)],
+            Annotated[float, at.MultipleOf(1)],
+            "subset",
+            id="two-divides-one",
+        ),
+        pytest.param(
+            Annotated[float, at.MultipleOf(1)],
+            Annotated[float, at.MultipleOf(2)],
+            "not_subset",
+            id="one-is-no-multiple-of-two",
+        ),
+        pytest.param(
+            Annotated[float, at.MultipleOf(3)],
+            Annotated[float, at.MultipleOf(2)],
+            "not_subset",
+            id="neither-divides",
+        ),
+        pytest.param(
+            Annotated[float, at.MultipleOf(6), at.Ge(0), at.Le(5)],
+            Annotated[float, at.Le(0)],
+            "subset",
+            id="only-zero-is-a-multiple-under-five",
+        ),
+        pytest.param(
+            intersection(float, complement(Annotated[float, at.MultipleOf(1)])),
+            Annotated[float, at.Gt(0), at.Lt(1)],
+            "not_subset",
+            id="the-fractional-floats-reach-past-one",
+        ),
+        pytest.param(
+            intersection(
+                complement(Annotated[float, at.MultipleOf(1)]),
+                Annotated[float, at.Ge(2.0**53)],
+            ),
+            Annotated[float, at.Ge(math.inf)],
+            "subset",
+            id="past-2-to-the-53-only-inf-is-not-whole",
+        ),
+        pytest.param(
+            Annotated[float, at.MultipleOf(3), at.Ge(2.0**53), at.Le(2.0**53 + 2)],
+            nothing,
+            "subset",
+            id="the-multiple-of-three-there-is-no-float",
+        ),
+        pytest.param(
+            Annotated[int | float, at.MultipleOf(4)],
+            Annotated[int | float, at.MultipleOf(2)],
+            "subset",
+            id="both-kinds-read-together",
+        ),
+        pytest.param(
+            Annotated[int | float, at.MultipleOf(2)],
+            Annotated[int | float, at.MultipleOf(4)],
+            "not_subset",
+            id="both-kinds-refuted-together",
+        ),
+    ],
+)
+def test_a_step_over_floats_is_decided_as_a_set(
+    narrow: object, wide: object, expected: str
+) -> None:
+    assert Validator(narrow).relation_to(wide) == expected
+
+
+def test_the_integers_of_json_are_decided_against_their_complement() -> None:
+    # The set a JSON `integer` is: a number with no fractional part, however it is
+    # written. Its complement is what a planner's other branch reads.
+    integer = intersection(
+        union(int, Annotated[float, at.MultipleOf(1)]), complement(bool)
+    )
+    number = intersection(int | float, complement(bool))
+
+    def between(lo: int, hi: int) -> Validator[Any]:
+        return intersection(
+            integer,
+            union(
+                Annotated[int, at.Ge(lo), at.Le(hi)],
+                Annotated[float, at.Ge(lo), at.Le(hi)],
+            ),
+        )
+
+    rest = intersection(between(1, 1000), complement(between(1, 30)))
+    assert rest.relation_to(between(31, 1000)) == "subset"
+    assert between(31, 1000).relation_to(rest) == "subset"
+    assert rest.is_valid(31)
+    assert rest.is_valid(31.0)
+    assert not rest.is_valid(30.0)
+    assert integer.relation_to(number) == "subset"
+    assert number.relation_to(integer) == "not_subset"
+    assert intersection(integer, complement(int)).relation_to(float) == "subset"
+    assert intersection(between(1, 30), between(31, 40)).is_empty()
+
+
+_step = st.sampled_from([1, 2, 3, 4, 6, 7, 16, -3])
+_bound = st.sampled_from([-3, 0, 0.5, 4, 2.0**52, 2.0**53, 2.0**63])
+
+
+@st.composite
+def _float_sets(draw: st.DrawFn) -> Validator[Any]:
+    atoms = st.one_of(
+        _step.map(lambda step: Validator(Annotated[float, at.MultipleOf(step)])),
+        _bound.map(lambda bound: Validator(Annotated[float, at.Ge(bound)])),
+        _bound.map(lambda bound: Validator(Annotated[float, at.Lt(bound)])),
+        st.just(Validator(float)),
+    )
+    return draw(
+        st.recursive(
+            atoms,
+            lambda inner: st.one_of(
+                st.tuples(inner, inner).map(lambda pair: union(*pair)),
+                st.tuples(inner, inner).map(lambda pair: intersection(*pair)),
+                inner.map(lambda each: intersection(float, complement(each))),
+            ),
+            max_leaves=5,
+        )
+    )
+
+
+@given(_float_sets(), _float_sets())
+def test_a_relation_over_float_steps_answers_as_the_walk_does(
+    a: Validator[Any], b: Validator[Any]
+) -> None:
+    held_by_a = [value for value in _FLOATS if a.is_valid(value)]
+    answer = a.relation_to(b)
+    if answer == "subset":
+        assert all(b.is_valid(value) for value in held_by_a), (a, b)
+    if a.is_empty():
+        assert not held_by_a, a
+    # A value the walk finds outside is a refutation no proof may contradict.
+    if any(not b.is_valid(value) for value in held_by_a):
+        assert answer != "subset", (a, b)

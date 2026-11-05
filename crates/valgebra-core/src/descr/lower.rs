@@ -1351,14 +1351,22 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         | Constraint::Le(index)
         | Constraint::Lt(index) => integers(integer_bound(constraint, &pool.operand(*index)?)?),
         Constraint::MultipleOf(index) => {
-            let step = match pool.operand(*index)? {
-                Operand::Integer(step) => step,
+            let step = match (pool.operand(*index)?, base_is_floats) {
+                (Operand::Integer(step), _) => step,
                 // `True` is the integer it is to `%`, as to a comparison; a zero
                 // step is refused before it is read.
-                Operand::Boolean(step) => i64::from(step),
+                (Operand::Boolean(step), _) => i64::from(step),
+                // A float reads a whole float step as the integer it equals. An
+                // integer does not: it is rounded to a float first, so `2.0`
+                // over an `int` base is left to the rules.
+                (Operand::Float(step), true) => whole_step(step)?,
                 _ => return None,
             };
-            integers(IntSet::multiple_of(step)?)
+            if base_is_floats {
+                floats(FloatSet::multiples_of(step)?)
+            } else {
+                integers(IntSet::multiple_of(step)?)
+            }
         }
         Constraint::MinLen(least) => {
             lengths(base, &|kind| Descr::words_at_least(*least, kind), &|kind| {
@@ -1375,6 +1383,15 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         // opaque to the procedure beside this one too.
         Constraint::Predicate(_) => None,
     }
+}
+
+/// The integer a whole float step equals, inside the `i64` range.
+fn whole_step(step: f64) -> Option<i64> {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "an integral float inside the i64 range converts exactly"
+    )]
+    (step.fract() == 0.0 && (-I64_EDGE..I64_EDGE).contains(&step)).then_some(step as i64)
 }
 
 /// Where an integer bound falls among the floats.

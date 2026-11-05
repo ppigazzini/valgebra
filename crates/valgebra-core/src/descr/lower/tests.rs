@@ -323,6 +323,88 @@ fn a_step_meets_the_bounds() {
     assert!(!evens.admits(Value::integer(3)), "the step excludes it");
 }
 
+/// A step over floats lands on the whole floats of its residue, whichever number
+/// spells it, and a bound beside it cuts the same floats: no float multiple of one
+/// lies strictly between 30 and 31, where the fractional floats do.
+#[test]
+fn a_step_over_floats_lowers_to_its_multiples() {
+    let pool = Pool(vec![
+        Operand::Integer(3),
+        Operand::Float(3.0),
+        Operand::Boolean(true),
+        Operand::Float(30.0),
+        Operand::Float(31.0),
+        Operand::Integer(-3),
+    ]);
+    let refined = |constraints: Vec<Constraint>| {
+        lower(
+            &Schema::Refine {
+                base: Arc::new(Schema::Float),
+                constraints: constraints.into(),
+            },
+            &pool,
+        )
+    };
+    let step = |at: usize| Constraint::MultipleOf(OperandIx::new(at));
+    let threes = refined(vec![step(0)]).expect("a small step over floats lowers");
+    assert!(threes.admits(Value::float(6.0)) && threes.admits(Value::float(-3.0)));
+    assert!(threes.admits(Value::float(0.0)) && threes.admits(Value::float(-0.0)));
+    assert!(!threes.admits(Value::float(4.0)) && !threes.admits(Value::float(1.5)));
+    assert!(!threes.admits(Value::float(f64::INFINITY)));
+    assert!(!threes.admits(Value::float(f64::NAN)));
+    assert_eq!(
+        refined(vec![step(1)]),
+        Some(threes.clone()),
+        "a whole float step"
+    );
+    assert_eq!(
+        refined(vec![step(5)]),
+        Some(threes),
+        "the sign changes nothing"
+    );
+
+    let wholes = refined(vec![step(2)]).expect("`True` is the step one");
+    assert!(wholes.admits(Value::float(30.0)) && !wholes.admits(Value::float(30.5)));
+
+    let between = |step_first: Vec<Constraint>| refined(step_first).expect("it lowers");
+    let (above, below) = (
+        Constraint::Gt(OperandIx::new(3)),
+        Constraint::Lt(OperandIx::new(4)),
+    );
+    assert_eq!(
+        between(vec![step(2), above.clone(), below.clone()]).emptiness(),
+        Verdict::Empty
+    );
+    assert_eq!(
+        between(vec![above, below]).emptiness(),
+        Verdict::Inhabited,
+        "a float lies there, and only the step refused it"
+    );
+}
+
+/// A step no table holds stays undecided rather than rounded: a fractional float,
+/// one past the period, and a whole float over an `int`, which `%` rounds first.
+#[test]
+fn a_step_the_floats_cannot_hold_refuses_the_lowering() {
+    let refined = |base: Schema, operand: Operand| {
+        lower(
+            &Schema::Refine {
+                base: Arc::new(base),
+                constraints: vec![Constraint::MultipleOf(OperandIx::new(0))].into(),
+            },
+            &Pool(vec![operand]),
+        )
+    };
+    assert!(refined(Schema::Float, Operand::Float(0.5)).is_none());
+    assert!(refined(Schema::Float, Operand::Integer(4097)).is_none());
+    assert!(refined(Schema::Float, Operand::Float(4097.0)).is_none());
+    assert!(refined(Schema::Float, Operand::Float(f64::INFINITY)).is_none());
+    assert!(refined(Schema::Float, Operand::Float(1e300)).is_none());
+    assert!(refined(Schema::Int, Operand::Float(2.0)).is_none());
+    assert!(refined(Schema::Float, Operand::Float(4096.0)).is_some());
+    assert!(refined(Schema::Int, Operand::Integer(2)).is_some());
+}
+
 /// A sequence lowers through the one constructor its three spellings share.
 #[test]
 fn a_sequence_lowers_to_its_shape() {

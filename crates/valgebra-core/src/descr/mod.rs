@@ -237,10 +237,15 @@ impl Component {
                 };
                 Component::Integers(combined?)
             }
-            (Component::Floats(a), Component::Floats(b)) => Component::Floats(match op {
-                Op::Union => a.union(b),
-                Op::Intersect => a.intersect(b),
-            }),
+            (Component::Floats(a), Component::Floats(b)) => {
+                // Refused for the reason the integers above are: two steps meet
+                // at a period past what this holds.
+                let combined = match op {
+                    Op::Union => a.union(b),
+                    Op::Intersect => a.intersect(b),
+                };
+                Component::Floats(combined?)
+            }
             (Component::Words(a), Component::Words(b)) => {
                 // A language operation can pass the automaton bound, and there
                 // is no sound set to substitute -- one too wide is complemented

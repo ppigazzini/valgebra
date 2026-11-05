@@ -104,7 +104,7 @@ answers nothing hands the pair to the next. A scalar nested past the depth is
 read first by the readings that leave its member out, which build less, and in
 the whole build after them, where the caller can read what that build may
 answer: an emptiness the rules find inhabited is not built whole. A constraint no component holds that is no predicate --
-a step over the floats -- refuses the reading as it refuses the schema. The
+a fractional step over the floats -- refuses the reading as it refuses the schema. The
 depth is read off the schema before anything is built (`nests_past_the_depth`),
 so a schema past it costs a walk of the nodes ahead of the deep one rather than
 the sets built from them, and a reading that can only be inhabited -- one

@@ -1356,6 +1356,19 @@ _DECIDED = [
         Annotated[float, at.MultipleOf(0.125)],
         id="divides:0.25<=0.125",
     ),
+    # A step over floats, read with the bounds beside it, as a set of whole floats.
+    pytest.param(
+        "subtype",
+        Annotated[float, at.MultipleOf(1), at.Gt(30), at.Lt(31)],
+        Annotated[float, at.Lt(0)],
+        id="float-step:no-whole-float-between-neighbors",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[float, at.MultipleOf(4), at.Ge(1), at.Le(3)],
+        Annotated[float, at.MultipleOf(5)],
+        id="float-step:no-multiple-between-its-bounds",
+    ),
     # Inclusion in a complement, which is `A ∩ B = ∅` and nothing structural: a
     # complement offers no shape on the right to recurse into.
     pytest.param(

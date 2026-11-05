@@ -171,6 +171,38 @@ assert intersection(json_value, bytes).is_empty()
 assert intersection(json_value, list[int]).is_subtype_of(list[int | float])
 ```
 
+JSON Schema's `integer` is a number with no fractional part, however it is
+written, so `1.0` is one and `True` is not. Its set is a union of the two
+spellings, and a step reads the floats exactly, so a range and its complement are
+decided:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import complement, intersection, union
+
+integer = intersection(union(int, Annotated[float, at.MultipleOf(1)]), complement(bool))
+assert integer.is_valid(1) and integer.is_valid(1.0)
+assert not integer.is_valid(1.5) and not integer.is_valid(True)
+
+
+def between(lo: int, hi: int):
+    return intersection(
+        integer,
+        union(
+            Annotated[int, at.Ge(lo), at.Le(hi)],
+            Annotated[float, at.Ge(lo), at.Le(hi)],
+        ),
+    )
+
+
+rest = intersection(between(1, 1000), complement(between(1, 30)))
+assert rest.relation_to(between(31, 1000)) == "subset"
+assert between(31, 1000).relation_to(rest) == "subset"
+```
+
 ## Malformed JSON
 
 Unparseable input never reaches the validation walk. `validate_json` reports it

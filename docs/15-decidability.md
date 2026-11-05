@@ -213,7 +213,16 @@ answers `"undecided"`.
   floats. `nan` is outside every interval, which is the comparison Python makes.
   No float lies between a float and the next one, so `Gt(1.0)` is decided equal
   to `Ge(math.nextafter(1.0, math.inf))`, and a pair of bounds with no float
-  between them is empty. A bound over **`str`** or **`bytes`** is a set of
+  between them is empty. A **step over a float base** is decided with them:
+  `x % n == 0` holds of the whole floats of one residue class, and of no
+  fractional float and neither infinity, so a set of floats is a list of
+  intervals per residue beside the intervals of the floats no step holds.
+  `Annotated[float, MultipleOf(1), Gt(30), Lt(31)]` is empty, the complement of a
+  stepped range is decided, and past `2**53` the floats that are there are the
+  ones read: `2**53 + 1` is the multiple of three between `2**53` and `2**53 + 2`,
+  and no float, so that meet is empty too. A step that is fractional or past
+  `4096`, a period two steps share past it among them, is read by the rules
+  against another step and otherwise declines. A bound over **`str`** or **`bytes`** is a set of
   words and is decided as one: Python orders two words symbol by symbol, a
   prefix first, so `Annotated[str, Gt("a")]` is `Annotated[str, Ge("a\x00")]`
   and `Annotated[str, Lt("")]` is empty; a lone surrogate is ordered where its
@@ -1137,28 +1146,6 @@ the shape. What is left below is what the descriptor cannot hold.
     the period still bounds is a refutation the subject's other constraints take
     part in -- a float bound beside the step, or a meet of two steps -- since the
     value has to satisfy them too and naming it takes the residues.
-
-- **A step over floats.** A `MultipleOf` becomes a residue class of the
-  integers, and a float multiple of a step is no integer the classes hold, so a
-  step over a `float` base has no set to land in, and the set representation
-  refuses it rather than narrow the floats to integers. The rules decide two
-  steps against each other and bounds against bounds (above), and what turns
-  on a step and its bounds *together* declines: no float multiple of `1` lies
-  strictly between 30 and 31, and over `float` that meet is not proved empty,
-  where over `int` it is.
-
-    ```python
-    from typing import Annotated
-
-    import annotated_types as at
-
-    from valgebra import Validator, nothing
-
-    floats = Annotated[float, at.MultipleOf(1), at.Gt(30), at.Lt(31)]
-    integers = Annotated[int, at.MultipleOf(1), at.Gt(30), at.Lt(31)]
-    assert Validator(floats).relation_to(nothing) == "undecided"
-    assert Validator(integers).relation_to(nothing) == "subset"
-    ```
 
 - **A word boundary inside a pattern.** A pattern matches the whole text, so a
   `\b` or `\B` at either end of it asks about the first or the last character

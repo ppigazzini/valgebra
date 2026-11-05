@@ -1,4 +1,4 @@
-use super::FloatSet;
+use super::{FloatSet, MAX_PERIOD, stepless_at_or_above, whole_at_or_above};
 use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 
@@ -48,8 +48,8 @@ fn same(a: &FloatSet, b: &FloatSet) -> bool {
 /// The float sets' operations, as the shared laws ask them. None of them
 /// refuses.
 const FLOATS: Algebra<FloatSet> = Algebra {
-    join: |a, b| Some(a.union(b)),
-    meet: |a, b| Some(a.intersect(b)),
+    join: FloatSet::union,
+    meet: FloatSet::intersect,
     complement: FloatSet::complement,
     same,
     holds_nothing: FloatSet::is_empty,
@@ -72,8 +72,8 @@ fn float_set() -> impl Strategy<Value = FloatSet> {
     ];
     leaf.prop_recursive(4, 24, 2, |inner| {
         prop_oneof![
-            (inner.clone(), inner.clone()).prop_map(|(a, b)| a.union(&b)),
-            (inner.clone(), inner.clone()).prop_map(|(a, b)| a.intersect(&b)),
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| a.union(&b).unwrap()),
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| a.intersect(&b).unwrap()),
             inner.prop_map(|a| a.complement()),
         ]
     })
@@ -141,14 +141,16 @@ proptest! {
 /// a claim no float supports, because `nan` is a float and is in neither.
 #[test]
 fn the_ordered_halves_leave_nan_outside() {
-    let halves = FloatSet::at_least(0.0).union(&FloatSet::below(0.0));
+    let halves = FloatSet::at_least(0.0)
+        .union(&FloatSet::below(0.0))
+        .unwrap();
     assert!(!halves.holds(f64::NAN));
     assert!(halves.holds(0.0));
     assert!(halves.holds(f64::INFINITY));
     assert!(halves.holds(f64::NEG_INFINITY));
     assert_ne!(halves, FloatSet::all());
     // What is missing is exactly `nan`, and adding it closes the gap.
-    assert_eq!(halves.union(&FloatSet::nan()), FloatSet::all());
+    assert_eq!(halves.union(&FloatSet::nan()).unwrap(), FloatSet::all());
     assert_eq!(halves.complement(), FloatSet::nan());
 }
 
@@ -192,7 +194,9 @@ fn the_two_zeros_are_one_value() {
         FloatSet::just(-0.0).cmp(&FloatSet::just(0.0)),
         core::cmp::Ordering::Equal
     );
-    let straddling = FloatSet::at_most(-0.0).union(&FloatSet::above(0.0));
+    let straddling = FloatSet::at_most(-0.0)
+        .union(&FloatSet::above(0.0))
+        .unwrap();
     assert_eq!(straddling.spans.len(), 1, "the two zeros are one point");
     assert!(straddling.holds(0.0) && straddling.holds(-0.0));
 }
@@ -205,16 +209,20 @@ fn an_open_end_excludes_exactly_its_own_point() {
     assert!(FloatSet::above(1.0).holds(1.5));
     // The two differ by the point alone.
     assert_eq!(
-        FloatSet::at_least(1.0).intersect(&FloatSet::above(1.0).complement()),
+        FloatSet::at_least(1.0)
+            .intersect(&FloatSet::above(1.0).complement())
+            .unwrap(),
         FloatSet::just(1.0)
     );
     // Meeting at a point that either side holds is one interval; meeting at
     // one that neither holds leaves a hole.
     assert_eq!(
-        FloatSet::at_most(1.0).union(&FloatSet::above(1.0)),
-        FloatSet::all().intersect(&FloatSet::nan().complement())
+        FloatSet::at_most(1.0).union(&FloatSet::above(1.0)).unwrap(),
+        FloatSet::all()
+            .intersect(&FloatSet::nan().complement())
+            .unwrap()
     );
-    let holed = FloatSet::below(1.0).union(&FloatSet::above(1.0));
+    let holed = FloatSet::below(1.0).union(&FloatSet::above(1.0)).unwrap();
     assert!(!holed.holds(1.0));
     assert!(holed.holds(0.5) && holed.holds(1.5));
 }
@@ -227,17 +235,24 @@ fn no_float_lies_between_a_float_and_the_next() {
     assert!(
         FloatSet::above(1.0)
             .intersect(&FloatSet::below(next))
+            .unwrap()
             .is_empty()
     );
     assert_eq!(FloatSet::above(1.0), FloatSet::at_least(next));
     assert_eq!(FloatSet::below(next), FloatSet::at_most(1.0));
     assert_eq!(
-        FloatSet::at_most(1.0).union(&FloatSet::at_least(next)),
-        FloatSet::all().intersect(&FloatSet::nan().complement())
+        FloatSet::at_most(1.0)
+            .union(&FloatSet::at_least(next))
+            .unwrap(),
+        FloatSet::all()
+            .intersect(&FloatSet::nan().complement())
+            .unwrap()
     );
     assert_eq!(
-        FloatSet::just(1.0).union(&FloatSet::just(next)),
-        FloatSet::at_least(1.0).intersect(&FloatSet::at_most(next))
+        FloatSet::just(1.0).union(&FloatSet::just(next)).unwrap(),
+        FloatSet::at_least(1.0)
+            .intersect(&FloatSet::at_most(next))
+            .unwrap()
     );
     // Across zero, where the neighbor of the least positive float is the
     // zero both signs spell.
@@ -252,7 +267,7 @@ fn no_float_lies_between_a_float_and_the_next() {
     assert_eq!(FloatSet::above(f64::MAX), FloatSet::just(f64::INFINITY));
     assert_eq!(
         FloatSet::just(f64::INFINITY).complement(),
-        FloatSet::at_most(f64::MAX).union(&FloatSet::nan())
+        FloatSet::at_most(f64::MAX).union(&FloatSet::nan()).unwrap()
     );
 }
 
@@ -274,7 +289,319 @@ fn the_infinities_are_values_of_the_set() {
     let line = FloatSet::at_least(f64::NEG_INFINITY);
     assert_eq!(
         line,
-        FloatSet::all().intersect(&FloatSet::nan().complement())
+        FloatSet::all()
+            .intersect(&FloatSet::nan().complement())
+            .unwrap()
     );
     assert_eq!(line.complement(), FloatSet::nan());
+}
+
+/// The floats a law over steps is read at: whole floats of every residue the
+/// drawn steps tell apart, on both sides of each edge where the spacing changes,
+/// and the floats no step holds.
+fn stepped_universe() -> Vec<f64> {
+    let edges = [
+        -f64::MAX,
+        -(2.0f64.powi(63)),
+        -(2.0f64.powi(53)),
+        -(2.0f64.powi(52)),
+        2.0f64.powi(52),
+        2.0f64.powi(53),
+        2.0f64.powi(63),
+        2.0f64.powi(1000),
+        f64::MAX,
+    ];
+    let mut floats: Vec<f64> = (-13..=13).map(f64::from).collect();
+    floats.extend([0.5, -0.5, 1.5, 5e-324, -5e-324, 1.0f64.next_up(), -0.0]);
+    for edge in edges {
+        let mut below = edge;
+        let mut above = edge;
+        floats.push(edge);
+        for _ in 0..6 {
+            below = below.next_down();
+            above = above.next_up();
+            floats.extend([below, above]);
+        }
+    }
+    floats.extend([f64::INFINITY, f64::NEG_INFINITY, f64::NAN]);
+    floats
+}
+
+/// The steps the laws draw, whose periods meet inside the bound.
+const STEPS: [i64; 6] = [1, 2, 3, 4, 6, -3];
+
+/// Whether `value % step == 0`, which is the remainder Python reads: exact, of a
+/// finite float, and `nan` for an infinity.
+fn a_multiple(value: f64, step: i64) -> bool {
+    #[expect(clippy::cast_precision_loss, reason = "the steps here are small")]
+    let step = step as f64;
+    value.is_finite() && value % step == 0.0
+}
+
+/// Whether two sets hold the same floats of [`stepped_universe`].
+fn same_over_steps(a: &FloatSet, b: &FloatSet) -> bool {
+    stepped_universe()
+        .into_iter()
+        .all(|f| a.holds(f) == b.holds(f))
+}
+
+/// The float sets' operations over steps.
+const STEPPED: Algebra<FloatSet> = Algebra {
+    join: FloatSet::union,
+    meet: FloatSet::intersect,
+    complement: FloatSet::complement,
+    same: same_over_steps,
+    holds_nothing: FloatSet::is_empty,
+    holds_everything: |a| same_over_steps(a, &FloatSet::all()),
+};
+
+/// Sets built from steps and from bounds at the universe's edges.
+fn stepped_set() -> impl Strategy<Value = FloatSet> {
+    let point = proptest::sample::select(vec![
+        -(2.0f64.powi(53)),
+        -3.0,
+        -0.5,
+        0.0,
+        0.5,
+        4.0,
+        2.0f64.powi(52),
+        2.0f64.powi(53),
+        2.0f64.powi(63),
+    ]);
+    let leaf = prop_oneof![
+        Just(FloatSet::all()),
+        Just(FloatSet::empty()),
+        Just(FloatSet::nan()),
+        proptest::sample::select(STEPS.to_vec())
+            .prop_map(|step| FloatSet::multiples_of(step).unwrap()),
+        point.clone().prop_map(FloatSet::just),
+        point.clone().prop_map(FloatSet::at_least),
+        point.clone().prop_map(FloatSet::above),
+        point.clone().prop_map(FloatSet::at_most),
+        point.prop_map(FloatSet::below),
+    ];
+    leaf.prop_recursive(4, 24, 2, |inner| {
+        prop_oneof![
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| a.union(&b).unwrap()),
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| a.intersect(&b).unwrap()),
+            inner.prop_map(|a| a.complement()),
+        ]
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// The laws of the algebra over sets a step has split.
+    #[test]
+    fn the_laws_hold_over_steps(a in stepped_set(), b in stepped_set(), c in stepped_set()) {
+        STEPPED.lattice_laws(&a, &b, &c)?;
+        STEPPED.complement_laws(&a, &b)?;
+    }
+
+    /// Equality reads the floats and not the spelling, so a form a law builds at
+    /// another period is the set it says it is.
+    #[test]
+    fn equality_reads_the_floats_over_steps(a in stepped_set(), b in stepped_set()) {
+        prop_assert_eq!(a == b, same_over_steps(&a, &b));
+        let lifted = a.intersect(&FloatSet::all()).unwrap();
+        prop_assert_eq!(&lifted, &a);
+        let spelled_at_a_period = a
+            .intersect(&FloatSet::multiples_of(4).unwrap())
+            .unwrap()
+            .union(&a.intersect(&FloatSet::multiples_of(4).unwrap().complement()).unwrap())
+            .unwrap();
+        prop_assert_eq!(&spelled_at_a_period, &a);
+    }
+
+    /// A set the universe finds a float of is not read empty.
+    #[test]
+    fn a_set_holding_a_drawn_float_is_not_empty(a in stepped_set()) {
+        let held = stepped_universe().into_iter().any(|f| a.holds(f));
+        prop_assert!(!held || !a.is_empty());
+    }
+}
+
+#[test]
+fn a_step_holds_what_the_remainder_holds() {
+    for step in [1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 100, 4096, -1, -3] {
+        let set = FloatSet::multiples_of(step).unwrap();
+        for value in stepped_universe() {
+            assert_eq!(
+                set.holds(value),
+                a_multiple(value, step),
+                "{value} against a step of {step}"
+            );
+        }
+    }
+}
+
+/// The floats of a narrow window, by walking them, against what the set reads:
+/// `is_empty` is exact, since a relation's refutation stands on it, so it is held
+/// against the floats themselves where the spacing changes.
+#[test]
+fn emptiness_over_a_window_is_the_floats_the_window_holds() {
+    let starts = [
+        -f64::MAX,
+        -(2.0f64.powi(1000)),
+        -(2.0f64.powi(63)),
+        -(2.0f64.powi(53)) - 8.0,
+        -(2.0f64.powi(52)) - 4.0,
+        -3.5,
+        0.0,
+        2.0f64.powi(52) - 4.0,
+        2.0f64.powi(53) - 8.0,
+        2.0f64.powi(63) - 4096.0,
+        2.0f64.powi(1000),
+        f64::MAX.next_down().next_down().next_down(),
+    ];
+    for start in starts {
+        let mut floats = vec![start];
+        for _ in 0..12 {
+            let last = *floats.last().unwrap();
+            if last.total_cmp(&f64::MAX).is_eq() {
+                break;
+            }
+            floats.push(last.next_up());
+        }
+        for step in [1, 2, 3, 5, 8, 7] {
+            let multiples = FloatSet::multiples_of(step).unwrap();
+            let others = multiples.complement();
+            for (first, lo) in floats.iter().enumerate() {
+                for hi in floats.iter().skip(first) {
+                    let window = FloatSet::at_least(*lo)
+                        .intersect(&FloatSet::at_most(*hi))
+                        .unwrap();
+                    let inside = |f: &&f64| **f >= *lo && **f <= *hi;
+                    let on = window.intersect(&multiples).unwrap();
+                    assert_eq!(
+                        on.is_empty(),
+                        !floats.iter().filter(inside).any(|f| a_multiple(*f, step)),
+                        "the multiples of {step} in [{lo}, {hi}]"
+                    );
+                    let off = window.intersect(&others).unwrap();
+                    assert_eq!(
+                        off.is_empty(),
+                        floats.iter().filter(inside).all(|f| a_multiple(*f, step)),
+                        "the floats that are no multiple of {step} in [{lo}, {hi}]"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// A class is found where it first has a float, however far above the bound: past
+/// `2^53` the whole floats are multiples of a power of two, which an odd residue
+/// of an even period never is.
+#[test]
+fn a_class_is_found_where_it_first_has_a_float() {
+    let at = |from, modulus, residue| whole_at_or_above(from, modulus, residue);
+    let top = 2.0f64.powi(53);
+    assert_eq!(at(0.5, 2, 1), Some(1.0));
+    assert_eq!(at(-0.5, 2, 0), Some(0.0));
+    assert_eq!(at(-1.5, 3, 2), Some(-1.0));
+    assert_eq!(at(top, 2, 1), None, "past 2^53 every float is even");
+    assert_eq!(at(top - 1.0, 2, 1), Some(top - 1.0));
+    // A multiple of three past a spacing of two: 2^53 + 1 is the first, and no float.
+    assert_eq!(at(top, 3, 0), Some(top + 4.0));
+    assert_eq!(at(f64::MAX, 2, 0), Some(f64::MAX));
+    assert_eq!(at(f64::MAX, 2, 1), None);
+    assert_eq!(at(f64::INFINITY, 1, 0), None);
+    assert_eq!(at(f64::NEG_INFINITY, 1, 0), Some(-f64::MAX));
+    // The odd residues run out below `-2^53` as above it.
+    assert_eq!(at(-top * 4.0, 2, 1), Some(-top + 1.0));
+    // An odd period has every residue in every stretch.
+    assert!(at(2.0f64.powi(1000), 3, 1).is_some());
+    assert!(at(2.0f64.powi(1000), 3, 2).is_some());
+}
+
+/// The widest period reads as the narrowest does, on the one stretch that tells
+/// them apart: `2^52` is the first multiple of 4096 there, and past `2^53` the
+/// spacing is a factor of the period.
+#[test]
+fn the_widest_period_finds_its_floats() {
+    let multiples = FloatSet::multiples_of(MAX_PERIOD).unwrap();
+    let top = 2.0f64.powi(52);
+    let at = |lo: f64, hi: f64| {
+        FloatSet::at_least(lo)
+            .intersect(&FloatSet::at_most(hi))
+            .unwrap()
+            .intersect(&multiples)
+            .unwrap()
+    };
+    assert!(!at(top, top).is_empty());
+    assert!(at(top + 1.0, top + 4095.0).is_empty());
+    assert!(!at(top + 1.0, top + 4096.0).is_empty());
+    assert!(!at(2.0f64.powi(900), 2.0f64.powi(900)).is_empty());
+}
+
+#[test]
+fn a_float_holding_no_step_is_found_past_the_whole_floats() {
+    let top = 2.0f64.powi(52);
+    assert_eq!(stepless_at_or_above(1.0), 1.0f64.next_up());
+    assert_eq!(stepless_at_or_above(0.5), 0.5);
+    assert_eq!(stepless_at_or_above(top), f64::INFINITY);
+    assert_eq!(stepless_at_or_above(top - 1.0), top - 0.5);
+    assert_eq!(stepless_at_or_above(-top), (-top).next_up());
+    assert_eq!(stepless_at_or_above(-top * 4.0), (-top).next_up());
+    assert_eq!(stepless_at_or_above(f64::NEG_INFINITY), f64::NEG_INFINITY);
+    assert_eq!(stepless_at_or_above(f64::INFINITY), f64::INFINITY);
+}
+
+#[test]
+fn a_set_a_step_split_lists_the_floats_it_holds() {
+    let between = FloatSet::at_least(0.0)
+        .intersect(&FloatSet::at_most(6.5))
+        .unwrap();
+    let even = between
+        .intersect(&FloatSet::multiples_of(2).unwrap())
+        .unwrap();
+    assert_eq!(even.values_up_to(10), Some(vec![0.0, 2.0, 4.0, 6.0]));
+    assert_eq!(even.values_up_to(3), None, "past the cap");
+    let wholes = between
+        .intersect(&FloatSet::multiples_of(1).unwrap())
+        .unwrap();
+    assert_eq!(wholes.values_up_to(7).map(|values| values.len()), Some(7));
+    assert_eq!(wholes.complement().values_up_to(4), None, "it holds `nan`");
+}
+
+#[test]
+fn a_step_past_the_period_bound_is_refused_by_the_floats() {
+    assert!(FloatSet::multiples_of(MAX_PERIOD).is_some());
+    assert!(FloatSet::multiples_of(MAX_PERIOD + 1).is_none());
+    assert!(FloatSet::multiples_of(i64::MIN).is_none());
+    assert!(
+        FloatSet::multiples_of(0).is_none(),
+        "no float is a multiple of zero"
+    );
+    let (a, b) = (
+        FloatSet::multiples_of(64).unwrap(),
+        FloatSet::multiples_of(81).unwrap(),
+    );
+    assert!(a.intersect(&b).is_none(), "they meet at 5184");
+    assert!(a.union(&b).is_none());
+    assert_ne!(a, b, "two periods past the bound read as two sets");
+}
+
+#[test]
+fn a_step_splits_the_line_and_every_other_set_reads_across_it() {
+    let whole = FloatSet::multiples_of(1).unwrap();
+    let rest = whole.complement();
+    assert!(rest.holds(0.5) && rest.holds(f64::INFINITY) && rest.holds(f64::NAN));
+    assert!(!rest.holds(1.0) && !rest.holds(-0.0));
+    assert_eq!(whole.union(&rest).unwrap(), FloatSet::all());
+    assert!(whole.intersect(&rest).unwrap().is_empty());
+    // Between two whole floats no whole float lies, though two fractional ones do.
+    let open = FloatSet::above(30.0)
+        .intersect(&FloatSet::below(31.0))
+        .unwrap();
+    assert!(whole.intersect(&open).unwrap().is_empty());
+    assert!(!rest.intersect(&open).unwrap().is_empty());
+    // And a literal against a step asks the one float.
+    assert!(!FloatSet::just(4.0).intersect(&whole).unwrap().is_empty());
+    assert!(FloatSet::just(4.5).intersect(&whole).unwrap().is_empty());
 }
