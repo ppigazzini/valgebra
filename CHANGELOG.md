@@ -998,7 +998,7 @@ free-threaded 3.14 and 3.15 a mapping counts 23% to 27% fewer and a list of reco
   stack its C-API calls may use by the recursion limit, and a walk that reached
   it before its own bounds ended the process: under
   `sys.setrecursionlimit(60)`, validating a list nested fifty deep did, on
-  every PyPy wheel, 0.0.14 through 0.0.22. The walk now asks PyPy's stack check
+  every PyPy wheel, 0.0.1 through 0.0.22. The walk now asks PyPy's stack check
   as it goes deeper, and refuses at `recursion_limit` where PyPy has no room,
   so the value is no member and `validate` raises an error the caller catches.
   Under the default limit the answers are unchanged, and CPython is untouched.
