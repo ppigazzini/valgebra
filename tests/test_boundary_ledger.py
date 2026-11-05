@@ -393,6 +393,18 @@ ROWS: dict[str, Row] = {
             "subset",
         ),
     ),
+    "A fractional step over floats.": Declines(
+        Annotated[float, at.MultipleOf(0.5), at.Gt(0), at.Lt(0.5)],
+        nothing,
+        "a float component reading a grid finer than the whole floats, which "
+        "`0.1` puts past any table: it is an odd number times 2**-55",
+        # The pair the page decides beside it: the meet over a whole step.
+        beside=(
+            Annotated[float, at.MultipleOf(1), at.Gt(0), at.Lt(1)],
+            nothing,
+            "subset",
+        ),
+    ),
     "A word boundary inside a pattern.": Declines(
         Annotated[str, Regex(r"a\bb")],
         nothing,

@@ -1147,6 +1147,26 @@ the shape. What is left below is what the descriptor cannot hold.
     part in -- a float bound beside the step, or a meet of two steps -- since the
     value has to satisfy them too and naming it takes the residues.
 
+- **A fractional step over floats.** The float component holds whole steps. A
+  fractional one reads a finer grid, and most name a grid no table holds: `0.1` is
+  an odd number times `2**-55`, so its period is past any bound. A fractional step
+  is read by the rules against another step and otherwise declines, so no multiple
+  of `0.5` lies strictly between 0 and `0.5`, and that meet is not proved empty,
+  where the meet over a whole step is.
+
+    ```python
+    from typing import Annotated
+
+    import annotated_types as at
+
+    from valgebra import Validator, nothing
+
+    halves = Annotated[float, at.MultipleOf(0.5), at.Gt(0), at.Lt(0.5)]
+    wholes = Annotated[float, at.MultipleOf(1), at.Gt(0), at.Lt(1)]
+    assert Validator(halves).relation_to(nothing) == "undecided"
+    assert Validator(wholes).relation_to(nothing) == "subset"
+    ```
+
 - **A word boundary inside a pattern.** A pattern matches the whole text, so a
   `\b` or `\B` at either end of it asks about the first or the last character
   alone, and is read as that: `\bab\b` is the set `ab` is. One between two

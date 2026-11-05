@@ -277,6 +277,19 @@ and is closed there.
 `test_a_value_outside_the_universe_is_outside_every_set_below_it` in
 `tests/test_universe.py` holds the reading.
 
+**A step in decimal places over a float, so `0.07` is a multiple of `0.01`.**
+Refused. `Annotated[float, MultipleOf(0.01)]` is Python's `%`, exact over the
+binary float nearest each number, so `0.07 % 0.01` is not zero; and
+`MultipleOf(Decimal("0.01"))` over a float is refused, since `%` refuses to mix
+the two. The set JSON Schema's `multipleOf: 0.01` means, the floats whose shortest
+decimal is a multiple of the step, is no remainder any value answers. A constraint
+for it would read a float through its printed form, which no annotation spells, so
+it is case 2 of the admission test with no domain behind it. A predicate reaches
+that set, exact on membership and opaque to relations, and a `Decimal` base is the
+spelling where the values are decimals.
+`test_a_decimal_step_divides_integers_and_no_float` in `tests/test_constraints.py`
+holds the mix the refusal stands on.
+
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labeling than the record model
 assumes.
