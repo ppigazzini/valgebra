@@ -179,6 +179,10 @@ enum Part {
 const ALL_WHOLE: f64 = 4_503_599_627_370_496.0;
 /// `2^53`, up to which every integer is a float.
 const EVERY_INTEGER: f64 = 9_007_199_254_740_992.0;
+/// More stretches of equally spaced whole floats than there are: 971 binades past
+/// `2^53` on each side of zero, and the integers between them. It says the search
+/// ends where the ceiling does, which it reaches first.
+const STRETCHES: usize = 2048;
 
 impl Part {
     /// The least float of this part at or above `from`.
@@ -196,7 +200,7 @@ impl Part {
             Part::Stepless => self,
             Part::Residue { modulus, residue } => Part::Residue {
                 modulus,
-                residue: (modulus - residue) % modulus,
+                residue: modulus - residue,
             },
         };
         mirror.at_or_above(-from).map(|found| normalize(-found))
@@ -215,7 +219,7 @@ fn stepless_at_or_above(from: f64) -> f64 {
     let next = from.next_up();
     if next.fract() != 0.0 {
         next
-    } else if from < 0.0 {
+    } else if from.is_sign_negative() {
         (-ALL_WHOLE).next_up()
     } else {
         f64::INFINITY
@@ -233,16 +237,14 @@ fn stepless_at_or_above(from: f64) -> f64 {
 ///
 /// A float `t * 2^j` shares that power of two with the modulus, so a residue
 /// holding fewer twos than the modulus has no float once the spacing passes them,
-/// and every whole float of its class lies inside the [`reach`] that follows.
+/// and every whole float of its class lies within the [`ceiling`] that follows.
 fn whole_at_or_above(from: f64, modulus: i64, residue: i64) -> Option<f64> {
-    let reach = reach(modulus, residue);
-    let mut at = if from == f64::NEG_INFINITY {
-        -f64::MAX
-    } else {
-        from.ceil()
-    }
-    .max(-reach);
-    while at.is_finite() && at < reach {
+    let ceiling = ceiling(modulus, residue);
+    let mut at = from.ceil().max(-ceiling);
+    for _ in 0..STRETCHES {
+        if at > ceiling {
+            return None;
+        }
         let above = at.next_up();
         let gap = if above.is_finite() {
             above - at
@@ -256,7 +258,7 @@ fn whole_at_or_above(from: f64, modulus: i64, residue: i64) -> Option<f64> {
         )]
         let last = if spacing == 1.0 {
             EVERY_INTEGER
-        } else if at > 0.0 {
+        } else if at.is_sign_positive() {
             spacing * (EVERY_INTEGER - 1.0)
         } else {
             -spacing * ALL_WHOLE
@@ -269,20 +271,20 @@ fn whole_at_or_above(from: f64, modulus: i64, residue: i64) -> Option<f64> {
     None
 }
 
-/// The magnitude every whole float of a class lies below: the first spacing past
-/// the twos the residue holds begins at `2^53` times them, and a class whose
-/// residue holds as many as the modulus is read to the largest float.
-fn reach(modulus: i64, residue: i64) -> f64 {
+/// The largest magnitude a whole float of a class can have: the spacing past the
+/// twos the residue holds begins at `2^53` times them, and a class whose residue
+/// holds as many as the modulus is read to the largest float.
+fn ceiling(modulus: i64, residue: i64) -> f64 {
     let twos = (modulus | residue).trailing_zeros();
     if twos == modulus.trailing_zeros() {
-        return f64::INFINITY;
+        return f64::MAX;
     }
     #[expect(
         clippy::cast_possible_wrap,
         reason = "a modulus at most `MAX_PERIOD` holds a dozen twos"
     )]
     let twos = twos as i32;
-    EVERY_INTEGER * 2.0f64.powi(twos)
+    (EVERY_INTEGER * 2.0f64.powi(twos)).next_down()
 }
 
 /// The least `t * spacing` from `first` to `last` congruent to `residue`.
@@ -306,7 +308,7 @@ fn in_stretch(first: f64, last: f64, spacing: f64, modulus: i64, residue: i64) -
         return None;
     }
     let period = modulus / shared;
-    let wanted = (residue / shared) * inverse(each / shared, period) % period;
+    let wanted = (residue / shared) * inverse(each / shared, period);
     let found = from + (wanted - from).rem_euclid(period);
     #[expect(
         clippy::cast_precision_loss,

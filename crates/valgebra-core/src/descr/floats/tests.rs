@@ -1,4 +1,7 @@
-use super::{FloatSet, MAX_PERIOD, stepless_at_or_above, whole_at_or_above};
+use super::{
+    FloatSet, MAX_PERIOD, Part, STRETCHES, ceiling, normalize, stepless_at_or_above,
+    whole_at_or_above,
+};
 use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
 
@@ -517,6 +520,125 @@ fn a_class_is_found_where_it_first_has_a_float() {
     // An odd period has every residue in every stretch.
     assert!(at(2.0f64.powi(1000), 3, 1).is_some());
     assert!(at(2.0f64.powi(1000), 3, 2).is_some());
+}
+
+/// The search for a class's next float agrees with walking the floats, from a few
+/// floats short of each place the spacing changes, on both sides of zero: a stretch
+/// read too long names a float that is not there, and one read too short misses one.
+#[test]
+fn a_class_search_is_the_floats_a_walk_finds() {
+    // 971 binades past `2^53` on each side of zero, and the integers between them.
+    let binades = usize::try_from(f64::MAX_EXP).unwrap() - 53;
+    assert!(
+        STRETCHES > 2 * binades + 1,
+        "the search ends at its ceiling"
+    );
+    let mut starts = vec![-3.5, -0.5, 0.25, 7.0];
+    for exponent in [52, 53, 54, 55, 63, 200, 1000] {
+        let edge = 2.0f64.powi(exponent);
+        let mut below = edge;
+        let mut above = -edge;
+        // From each float short of the edge, so a class whose next float lies just
+        // past it is asked from the stretch before it.
+        for _ in 0..6 {
+            below = below.next_down();
+            above = above.next_down();
+            starts.extend([below, above]);
+        }
+    }
+    let mut last = f64::MAX;
+    for _ in 0..6 {
+        last = last.next_down();
+    }
+    starts.extend([last, -f64::MAX]);
+    let wide = |value: i64| {
+        #[expect(clippy::cast_precision_loss, reason = "the moduli here are small")]
+        let value = value as f64;
+        value
+    };
+    for start in starts {
+        for modulus in [1, 2, 3, 4, 5, 6, 7, 8, 12] {
+            for residue in 0..modulus {
+                // A zero of either sign reads as whole, and as the residue zero.
+                let in_class = |float: f64| {
+                    float.fract().to_bits() << 1 == 0
+                        && (float.rem_euclid(wide(modulus)) + 0.0).to_bits()
+                            == wide(residue).to_bits()
+                };
+                let mut float = start;
+                let mut walked = None;
+                for _ in 0..24 {
+                    if float.is_infinite() {
+                        break;
+                    }
+                    if in_class(float) {
+                        walked = Some(float);
+                        break;
+                    }
+                    float = float.next_up();
+                }
+                let found = whole_at_or_above(start, modulus, residue);
+                match walked {
+                    Some(first) => assert_eq!(
+                        found.map(f64::to_bits),
+                        Some(normalize(first).to_bits()),
+                        "from {start}, residue {residue} of {modulus}"
+                    ),
+                    // The walk stopped short of the search: whatever the search
+                    // found lies past it and is a float of the class.
+                    None => assert!(
+                        found.is_none_or(|float| float >= start && in_class(float)),
+                        "from {start}, residue {residue} of {modulus}: {found:?}"
+                    ),
+                }
+            }
+        }
+    }
+}
+
+/// A residue holding fewer twos than the modulus has no float past the spacing its
+/// twos reach, and one holding as many is read to the largest float.
+#[test]
+fn a_class_reaches_as_far_as_its_twos() {
+    assert_eq!(ceiling(1, 0).to_bits(), f64::MAX.to_bits());
+    assert_eq!(ceiling(3, 1).to_bits(), f64::MAX.to_bits());
+    assert_eq!(ceiling(4, 0).to_bits(), f64::MAX.to_bits());
+    assert_eq!(ceiling(4, 8).to_bits(), f64::MAX.to_bits());
+    let top = 2.0f64.powi(53);
+    assert_eq!(ceiling(4, 1).to_bits(), top.next_down().to_bits());
+    assert_eq!(ceiling(4, 2).to_bits(), (top * 2.0).next_down().to_bits());
+    // The last float of a class under its ceiling, and the first past it.
+    assert_eq!(whole_at_or_above(top - 1.0, 4, 3), Some(top - 1.0));
+    assert_eq!(whole_at_or_above(top, 4, 3), None);
+    assert_eq!(
+        whole_at_or_above(top * 2.0 - 2.0, 4, 2),
+        Some(top * 2.0 - 2.0)
+    );
+    assert_eq!(whole_at_or_above(top * 2.0, 4, 2), None);
+    assert_eq!(whole_at_or_above(-top * 8.0, 4, 3), Some(-top + 3.0));
+}
+
+/// A mirror's residue is read modulo the period, so the two ends of a span read one
+/// class whichever side of zero the span lies on.
+#[test]
+fn the_upper_end_of_a_class_is_the_mirror_of_its_lower_end() {
+    let part = |residue| Part::Residue {
+        modulus: 5,
+        residue,
+    };
+    assert_eq!(part(0).at_or_below(7.0), Some(5.0));
+    assert_eq!(part(1).at_or_below(5.0), Some(1.0));
+    assert_eq!(part(3).at_or_below(-1.0), Some(-2.0));
+    assert_eq!(part(0).at_or_below(-1.0), Some(-5.0));
+    assert_eq!(
+        part(0).at_or_below(0.5).map(f64::to_bits),
+        Some(0.0f64.to_bits())
+    );
+    assert_eq!(Part::Stepless.at_or_below(1.0), Some(1.0f64.next_down()));
+    assert_eq!(
+        Part::Stepless.at_or_below(f64::NEG_INFINITY),
+        Some(f64::NEG_INFINITY)
+    );
 }
 
 /// The widest period reads as the narrowest does, on the one stretch that tells
