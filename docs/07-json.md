@@ -155,7 +155,7 @@ from valgebra import complement, intersection, recursive, union
 
 number = intersection(int | float, complement(bool))
 json_value = recursive(
-    lambda value: union(None, bool, number, str, list[value], dict[str, value])
+    lambda value: union(None, bool, number, str, [value], {str: value})
 )
 assert json_value.is_valid({"a": [1, 2.5, None]})
 assert not json_value.is_valid((1, 2))  # a tuple is no JSON value
@@ -225,8 +225,8 @@ toml_value = recursive(
         dt.datetime,
         dt.date,
         dt.time,
-        list[value],
-        dict[str, value],
+        [value],
+        {str: value},
     )
 )
 document = tomllib.loads("released = 2020-01-02\nversion = 1.0")
@@ -253,13 +253,13 @@ with `json.loads(text, parse_float=Decimal)` to see which number was written:
 ```python
 import json
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated
 
 import annotated_types as at
 
 from valgebra import Validator, union
 
-one = union(Literal[1], Literal[1.0])
+one = union(1, 1.0)
 assert one.is_valid(1)
 assert one.is_valid(1.0)
 assert not one.is_valid(True)
