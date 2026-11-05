@@ -301,6 +301,19 @@ reaches, exact on membership and opaque to relations.
 `test_one_element_is_a_complement_and_a_count_is_a_predicate` in
 `tests/test_universe.py` holds both halves.
 
+**A node for an array's elements, so `Annotated[NDArray[float64], Ge(0)]` reads every
+element.** Refused for now, on the demand it has not shown and the cost it has not
+paid. The set passes the admission test, since "every element belongs to `E`" is no
+attribute a record reaches and a predicate counts for nothing. Its form would be a
+quantifier as `Seq`'s tail is, over a kind holding dtype, shape and element as a
+product, and the kind is what the instruction gate read +2% to +7% on when a frozen
+mapping asked for one, above. A carrier per dtype, since `float32` elements are
+single-precision points; a refutation no decider can name a value for; and a buffer
+reader under `forbid(unsafe_code)` that copies a strided view: each is its own measured
+decision. It reopens with a measured demand and that gate reading. A predicate is the
+spelling meanwhile, and `test_an_array_element_bound_is_a_predicate` in
+`tests/test_numpy_generic.py` holds it.
+
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labeling than the record model
 assumes.
