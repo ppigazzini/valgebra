@@ -1331,6 +1331,7 @@ fn narrow_lattice() -> impl Strategy<Value = MapLattice<IntSet>> {
 }
 
 proptest! {
+    // A fixed count, since a case reads every dict of the universe a dozen times over.
     #![proptest_config(ProptestConfig {
         cases: 96,
         max_shrink_time: 2_000,

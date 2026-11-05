@@ -1765,6 +1765,9 @@ jobs:
           tests/test_projection_laws.py
           tests/test_refinements.py
           tests/test_unions.py
+          tests/test_constraints.py
+          tests/test_narrowed_keys.py
+          tests/test_universe.py
       - name: Keep the example database
         if: always()
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
