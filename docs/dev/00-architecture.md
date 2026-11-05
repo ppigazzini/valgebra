@@ -492,7 +492,9 @@ two members and the cargo configuration to no alias. Held by
 Python's is a set below the top ([10-theory.md](10-theory.md)), so it has no second
 instance of a component to share: `Schema`, the deciders and the walk read it as
 they stand, and a trait over the kinds would be designed from one implementor, as
-an uncertain change is. What such a crate would hold is already free of the value
+an uncertain change is. A trait over the terms has less to go on: such a universe
+writes the one node set, so one set of structural rules reads it and no second reader
+says which rules are generic. What such a crate would hold is already free of the value
 model, which the holder reads, and the move waits on a carrier that does not embed
 in Python's: a crate is two lines of a manifest then, and the zone table, the
 sweeps and the per-file floors read a third crate from that day. Held by
