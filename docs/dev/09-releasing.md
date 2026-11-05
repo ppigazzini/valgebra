@@ -290,6 +290,24 @@ commit, and its message names the edit. It does not read the wheels
 to the classifiers the calendar moves, with the gaps the platforms set named
 and a row that leaves its interpreters to the build image named too.
 
+## A companion reads the release
+
+`valgebra-vtjson` and `valgebra-jsonschema` are packages of their own over this one's public
+surface, and each holds answers this tree's gates do not. What that asks of a release:
+
+- **A `feat` to the deciders reads the companions' studies first**, against a wheel of the tree,
+  before step 2. `valgebra-vtjson`'s differential suite runs; `valgebra-jsonschema`'s suite, corpus
+  and containment studies run with `--check`, on a checkout whose `valgebra` is that wheel. A count
+  may move: more proven, fewer undecided. A proof against a containment label, or a new
+  disagreement with the `jsonschema` package, is a defect here, and it stops the bump.
+- **A companion re-pins on a minor.** A `0.0.x` minor is a breaking release to them, as their
+  `pyproject.toml` floors say, so each moves its floor with a release of its own.
+- **The floor and the matrix are theirs too.** A companion's `requires-python` follows
+  [Which interpreters a release supports](#which-interpreters-a-release-supports), and it builds no
+  wheel, so it reads this package's on each.
+
+Each bump costs a companion two commits and a session, so a release batches its `feat`s.
+
 ## What this does not cover
 
 - **The wheels a local count cannot run.** Step 1 reads each CPython release's
