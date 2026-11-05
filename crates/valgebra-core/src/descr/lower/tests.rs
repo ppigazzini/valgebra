@@ -396,6 +396,7 @@ fn a_step_the_floats_cannot_hold_refuses_the_lowering() {
         )
     };
     assert!(refined(Schema::Float, Operand::Float(0.5)).is_none());
+    assert!(refined(Schema::Float, Operand::Float(1.5)).is_none());
     assert!(refined(Schema::Float, Operand::Integer(4097)).is_none());
     assert!(refined(Schema::Float, Operand::Float(4097.0)).is_none());
     assert!(refined(Schema::Float, Operand::Float(f64::INFINITY)).is_none());
@@ -451,6 +452,22 @@ fn a_narrowed_key_lowers_to_the_language_it_spells() {
     assert!(parts_of(&Schema::meet([with_int, other])).contains(&Some(Kind::Int)));
     let or_everything = Schema::Union(vec![pattern("a"), Schema::ANYTHING].into());
     assert!(parts_of(&or_everything).contains(&Some(Kind::Float)));
+    // Each kind beside a narrowing holds its own part and no other.
+    for (kind, part) in [
+        (Schema::NoneType, Kind::NoneType),
+        (Schema::Bool, Kind::Bool),
+        (Schema::Float, Kind::Float),
+        (Schema::Bytes, Kind::Bytes),
+    ] {
+        let beside = Schema::Union(vec![pattern("a"), kind].into());
+        assert_eq!(parts_of(&beside), vec![Some(part)], "{part:?}");
+    }
+    // A meet holds what both members do, a part neither shares among what it drops.
+    let int_or = Schema::Union(vec![pattern("a"), Schema::Int].into());
+    let float_or = Schema::Union(vec![pattern("a"), Schema::Float].into());
+    let both_kinds = Schema::Intersection(vec![int_or, float_or].into());
+    assert_eq!(parts_of(&both_kinds), Vec::new());
+    assert!(reads(&both_kinds, b"a"));
 }
 
 /// A key holding no refinement is no language asked for: a meet of whole kinds stays

@@ -1481,6 +1481,32 @@ fn a_label_meets_a_constraint_only_where_its_language_holds_it() {
     assert_eq!(unmet.emptiness(), Verdict::Empty);
 }
 
+/// A key a constraint excludes does not meet it, whether or not the atom still names
+/// it: a label at the default's own field is absorbed, and the exclusion stays. So a
+/// region holding no key but those holds no key for the constraint, and it is read by
+/// counting them out rather than as having room.
+#[test]
+fn a_key_a_constraint_excludes_does_not_meet_it() {
+    let atom = |pattern: &str| {
+        let mut atom = MapAtom::<IntSet>::top();
+        atom.wanted.push(Wanted {
+            slot: key_slot(Some(Kind::Str)).expect("a key kind"),
+            ty: Values::Only(IntSet::just(2)),
+            besides: BTreeSet::from([Label::str("a"), Label::str("b")]),
+            keys: Some(words(pattern)),
+        });
+        atom
+    };
+    assert_eq!(atom("a|b").emptiness(), Verdict::Empty);
+    assert_eq!(atom("a").emptiness(), Verdict::Empty);
+    assert_eq!(
+        atom("a|b|c").emptiness(),
+        Verdict::Inhabited,
+        "`c` meets it"
+    );
+    assert_eq!(atom("[a-z]").emptiness(), Verdict::Inhabited);
+}
+
 /// A lone surrogate is a `str` key no pattern's language holds, so a clause over
 /// `.*` leaves it to the rest of the part, as the walk does.
 #[test]
