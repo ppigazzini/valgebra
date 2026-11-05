@@ -56,6 +56,7 @@ nav:
       - Soundness argument: 14-soundness.md
       - Decidability boundary: 15-decidability.md
       - What it cannot do: 17-boundaries.md
+      - Several value universes: 20-universes.md
   - Reference:
       - API reference: 16-api.md
 
@@ -141,6 +142,7 @@ plugins:
           - 14-soundness.md: Why membership checking is sound on its own terms.
           - 15-decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
           - 17-boundaries.md: What a runtime validator cannot do, and why each boundary is where it is.
+          - 20-universes.md: JSON's and TOML's values, and arrays, as sets below the top, in one algebra with no vocabulary of their own.
         Release notes:
           - 12-changelog.md: Every released version, what it changed, and what to do on upgrade.
         API reference:

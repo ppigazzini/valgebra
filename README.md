@@ -177,6 +177,27 @@ assert Validator(list[int]).load("[1, 2, 3]") == [1, 2, 3]  # and keep the value
 returns the parsed value, so an untrusted payload is parsed once instead of once
 by `json.loads` and again by the check.
 
+## One algebra, several value universes
+
+What a format holds is a set of Python values, so it is a set you can write, and
+asking about its values is a meet with it. JSON's values, TOML's, and arrays by their
+`shape` and `dtype` take no node, mode or keyword, and the relations hold inside them
+as they do outside ([Several value universes](docs/20-universes.md)):
+
+```python
+from valgebra import complement, intersection, recursive, union
+
+number = intersection(int | float, complement(bool))
+json_value = recursive(
+    lambda value: union(None, bool, number, str, [value], {str: value})
+)
+
+assert json_value.is_valid({"a": [1, 2.5, None]})
+assert not json_value.is_valid((1, 2))  # a tuple is no JSON value
+assert intersection(json_value, bytes).is_empty()
+assert intersection(json_value, list[int]).is_subtype_of(list[int | float])
+```
+
 ## Two ways to use it
 
 ### As a contract in your codebase

@@ -117,6 +117,7 @@ cover.
 | [14-soundness.md](14-soundness.md) | why an accept is never wrong, node by node |
 | [15-decidability.md](15-decidability.md) | what is decided exactly, and what stays conservative |
 | [17-boundaries.md](17-boundaries.md) | what a validator cannot do, and why each boundary is where it is |
+| [20-universes.md](20-universes.md) | JSON's and TOML's values, and arrays, as sets in one algebra |
 | [16-api.md](16-api.md) | everything callable |
 
 ## Where to start
@@ -132,6 +133,8 @@ cover.
 - Studying a codebase with no schemas of its own? [Inspecting a
   codebase](09-inspection.md) asks what its annotations imply, and what nothing
   enforces.
+- Holding another format's values? [Several value universes](20-universes.md) writes
+  JSON's and TOML's as sets, and reads arrays by what they expose.
 - Wondering what it decides? The [decidability boundary](15-decidability.md),
   and the [foundations](13-foundations.md) behind it.
 - Wondering whether it does something at all? [What it cannot

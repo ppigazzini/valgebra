@@ -21,6 +21,14 @@ answer of its own, or a repair to a change not yet released.
 
 -->
 
+A release of value universes, with five additions and no node. What a format holds is
+a set of Python values, so JSON's and TOML's are written in the algebra as it stands,
+on a page of their own. The representation reads what such a set is made of: a whole
+step over floats, a key narrowed by a pattern or a length, a `Fraction` or `Decimal`
+bound over a float, and a meet of 112 ranges where six ended `undecided`. numpy's
+generic builds as a class met with a record, and the same spelling reads JAX's and
+PyTorch's arrays.
+
 ### Added
 
 - **A `Fraction` or `Decimal` bound over a float is decided.** It is read at the float

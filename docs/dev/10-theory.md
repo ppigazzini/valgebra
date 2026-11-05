@@ -112,7 +112,7 @@ reads every term as its meet with `u`, and `s ≤ t` in the restricted model is
 `u ∧ s ∧ ¬t = ∅`, one question of the model this tree already decides. So a value
 model whose values embed in Python's takes a set for its top and a frontend for
 its keywords, and no parameter on the algebra: JSON's values are what `json.loads`
-returns ([docs/07-json.md](../07-json.md)), and a number spelled two ways is two
+returns ([docs/20-universes.md](../20-universes.md)), and a number spelled two ways is two
 Python values that every set the frontend builds admits together. TOML's are what
 `tomllib` returns, so one JSON Schema denotes two sets: `{"type": "integer"}` holds
 `1.0` over JSON's values and not over TOML's, where it is a float, and the two

@@ -268,7 +268,7 @@ takes out values a clause claims
 **A node, a kind or a parameter for another value universe.** Refused where its
 values embed in Python's. JSON's are what `json.loads` returns, so every JSON set
 is a set of Python values below the JSON values' own top
-([docs/07-json.md](../07-json.md)), reached by the nodes as they stand, and case 1
+([docs/20-universes.md](../20-universes.md)), reached by the nodes as they stand, and case 1
 of the admission test is what it fails: write it as a combination and add
 nothing. `1` and `1.0` being one JSON number is no node either: every set a JSON
 frontend builds admits both. A fact that decides less than it denotes, as the
