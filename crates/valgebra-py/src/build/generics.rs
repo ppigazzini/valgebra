@@ -257,9 +257,9 @@ fn dtype_record(argument: &Bound<'_, PyAny>, lits: &mut Pool) -> PyResult<Option
         return Ok(None);
     }
     let origin = argument.getattr_opt(intern!(py, "__origin__"))?;
-    let scalar = match (origin, argument.getattr_opt(intern!(py, "__args__"))?) {
-        (Some(origin), Some(args)) if is_numpy_class(&origin, intern!(py, "dtype"))? => {
-            args.cast_into::<PyTuple>()?.get_item(0)?
+    let (class, scalar) = match (origin, argument.getattr_opt(intern!(py, "__args__"))?) {
+        (Some(class), Some(args)) if is_numpy_class(&class, intern!(py, "dtype"))? => {
+            (class, args.cast_into::<PyTuple>()?.get_item(0)?)
         }
         _ => {
             return Err(not_implemented(format!(
@@ -272,7 +272,7 @@ fn dtype_record(argument: &Bound<'_, PyAny>, lits: &mut Pool) -> PyResult<Option
     if scalar.is(any) {
         return Ok(None);
     }
-    let dtype = numpy_dtype(py)?.call1((&scalar,)).ok().filter(|dtype| {
+    let dtype = class.call1((&scalar,)).ok().filter(|dtype| {
         dtype
             .getattr(intern!(py, "type"))
             .is_ok_and(|read| read.is(&scalar))
@@ -295,14 +295,6 @@ fn dtype_record(argument: &Bound<'_, PyAny>, lits: &mut Pool) -> PyResult<Option
         attributes.push(read(intern!(py, "itemsize"), lits)?);
     }
     Ok(Some(Schema::attr_record(attributes)))
-}
-
-/// `numpy.dtype`, which a form naming numpy's `ndarray` has already loaded.
-fn numpy_dtype(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    loaded_modules(py)?
-        .get_item(intern!(py, "numpy"))?
-        .ok_or_else(|| not_implemented("numpy is not loaded"))?
-        .getattr(intern!(py, "dtype"))
 }
 
 /// Refuse a `Literal` argument the typing spec does not allow, where reading it
