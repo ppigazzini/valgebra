@@ -10,7 +10,8 @@ inside it answer as the walk does.
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any
+from decimal import Decimal
+from typing import Annotated, Any, Literal
 
 import annotated_types as at
 from hypothesis import given
@@ -139,6 +140,69 @@ def test_kinds_a_document_cannot_hold_are_empty_inside_the_universe() -> None:
     assert not within(dict[int, int]).is_empty()
     assert within(dict[int, int]).is_valid({})
     assert not within(dict[int, int]).is_valid({1: 1})
+
+
+#: JSON Schema's integer: a number with no fractional part, however it is written.
+INTEGER = intersection(union(int, Annotated[float, at.MultipleOf(1)]), complement(bool))
+
+
+def _bounded(marker: at.BaseMetadata) -> Validator[Any]:
+    """Return the JSON numbers a bound or a step admits, in both spellings."""
+    return intersection(
+        union(
+            Annotated[int, marker],
+            Annotated[float, marker],
+        ),
+        complement(bool),
+    )
+
+
+#: The sets a JSON frontend writes over the numbers: each admits both spellings.
+_NUMBER_SETS = [
+    NUMBER,
+    INTEGER,
+    _bounded(at.Ge(3)),
+    _bounded(at.Lt(3)),
+    _bounded(at.MultipleOf(3)),
+    union(Literal[3], Literal[3.0]),  # ty: ignore[invalid-type-form]
+    intersection(NUMBER, complement(_bounded(at.MultipleOf(3)))),
+    intersection(INTEGER, complement(_bounded(at.Ge(3)))),
+]
+
+
+# THEORY: a-universe-is-a-set
+@given(st.integers(min_value=-(2**53), max_value=2**53), st.sampled_from(_NUMBER_SETS))
+def test_a_number_written_two_ways_is_admitted_alike(
+    number: int, written: Validator[Any]
+) -> None:
+    # `1` and `1.0` are two Python values and one JSON number, and no set a frontend
+    # builds tells them apart: that is what reading JSON's numbers in Python's asks.
+    assert written.is_valid(number) == written.is_valid(float(number))
+
+
+def test_a_boolean_is_no_spelling_of_a_number() -> None:
+    for written in (NUMBER, INTEGER, _bounded(at.Ge(0))):
+        assert not written.is_valid(True)
+        assert written.is_valid(1)
+    assert not union(Literal[1], Literal[1.0]).is_valid(True)  # ty: ignore[invalid-type-form]
+
+
+def test_a_bound_written_with_an_exponent_is_the_number_written() -> None:
+    written = json.loads('{"maximum": 1e23}', parse_float=Decimal)["maximum"]
+    exact = Validator(Annotated[int | float, at.Le(int(written))])
+    assert exact.is_valid(10**23)
+    assert not exact.is_valid(10**23 + 1)
+    assert exact.is_valid(1e23)
+    # The double `1e23` is below the integer, so reading it as one refuses it.
+    assert not Validator(Annotated[int | float, at.Le(1e23)]).is_valid(10**23)
+
+
+def test_a_lone_surrogate_is_a_value_no_document_spells() -> None:
+    # The object path holds what `json.loads` builds, and the parser holds to the
+    # grammar, so the universe's strings are read by the path that holds them.
+    text = r'"\ud800"'
+    assert JSON_VALUE.is_valid(json.loads(text))
+    assert not JSON_VALUE.is_valid_json(text)
 
 
 def test_one_element_is_a_complement_and_a_count_is_a_predicate() -> None:

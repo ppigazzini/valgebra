@@ -118,7 +118,7 @@ Python values that every set the frontend builds admits together.
 
 IMPLEMENTED-BY: ir.rs::Schema::meet_within, ir.rs::Schema::complement, decision/emptiness.rs::intersection_verdict
 
-HELD-BY: the_sets_below_a_universe_are_a_boolean_algebra, test_the_sets_below_a_universe_are_a_boolean_algebra, test_a_value_outside_the_universe_is_outside_every_set_below_it
+HELD-BY: the_sets_below_a_universe_are_a_boolean_algebra, test_the_sets_below_a_universe_are_a_boolean_algebra, test_a_value_outside_the_universe_is_outside_every_set_below_it, test_a_number_written_two_ways_is_admitted_alike
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING: stone-duality]** — the license for treating the scalar fragment

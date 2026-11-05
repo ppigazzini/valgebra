@@ -203,6 +203,35 @@ assert rest.relation_to(between(31, 1000)) == "subset"
 assert between(31, 1000).relation_to(rest) == "subset"
 ```
 
+A JSON number is one number however it is written, and Python holds `1` and `1.0`
+as two values. A set of JSON values admits both or neither, so a constant is a union
+of its spellings, and a `bool` is no spelling of a number. A bound written with an
+exponent is the integer it names where it names one: `1e23` parses to the double
+below `10**23`, and reading it as a double would refuse the integer. Read the schema
+with `json.loads(text, parse_float=Decimal)` to see which number was written:
+
+```python
+import json
+from decimal import Decimal
+from typing import Annotated, Literal
+
+import annotated_types as at
+
+from valgebra import Validator, union
+
+one = union(Literal[1], Literal[1.0])
+assert one.is_valid(1)
+assert one.is_valid(1.0)
+assert not one.is_valid(True)
+
+written = json.loads('{"maximum": 1e23}', parse_float=Decimal)["maximum"]
+assert written == 10**23
+exact = Validator(Annotated[int | float, at.Le(int(written))])
+assert exact.is_valid(10**23)
+assert not exact.is_valid(10**23 + 1)
+assert not Validator(Annotated[int | float, at.Le(1e23)]).is_valid(10**23)
+```
+
 ## Malformed JSON
 
 Unparseable input never reaches the validation walk. `validate_json` reports it
