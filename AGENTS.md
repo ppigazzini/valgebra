@@ -37,6 +37,7 @@ zone you are changing before changing it, and fix that page in the same commit.
 | what a value matches | [docs/dev/04-walk.md](docs/dev/04-walk.md) |
 | an error or a code | [docs/dev/05-errors.md](docs/dev/05-errors.md) |
 | a gate or a lane | [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md), [docs/dev/08-testing.md](docs/dev/08-testing.md) |
+| whether new work is a recipe, a frontend form, a decider, a node or a companion | [docs/dev/00-architecture.md](docs/dev/00-architecture.md#where-new-work-goes) |
 | whether the algebra may gain a node | [docs/dev/01-schema-ir.md](docs/dev/01-schema-ir.md) |
 | code that implements a paper's result | [docs/dev/12-writing.md](docs/dev/12-writing.md#citing-a-paper), [docs/dev/10-theory.md](docs/dev/10-theory.md) |
 | any prose at all | [docs/dev/12-writing.md](docs/dev/12-writing.md) |

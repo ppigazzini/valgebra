@@ -259,6 +259,43 @@ already holds, and no value is copied or converted on the accept path. No I/O:
 the JSON parse is the binding's, in `crates/valgebra-py/src/input.rs` over
 `jiter`, and `crates/valgebra-core/Cargo.toml` carries no parser.
 
+## Where new work goes
+
+Ask in this order and stop at the first row that answers. Each costs more than the one
+above it, and each is refused where an earlier row reaches the same thing.
+
+| What it is | Where it goes | What it costs | For example |
+|---|---|---|---|
+| a set the existing forms reach | a **recipe**: a section of a page, no code | a paragraph, and a block the doc lanes run | a conditional field, JSON's values, an `int` that is no `bool` |
+| a set typing syntax spells, which the frontend refuses and the nodes reach | the **frontend** (`build/`) | a form, what it denotes, and a refusal for what it does not name | `np.ndarray[S, np.dtype[T]]` |
+| a set the forms reach, which a decider declines | a **decider** (`descr/`, `decision*`), and no node | a reading, its laws, the release differential, a gate shape | a step over floats, a key narrowed by a pattern |
+| a set no combination reaches, in the domain | a **node**, by the [admission test](01-schema-ir.md#whether-to-add-a-variant) | every match over the IR, and the ledgers | |
+| another language's schemas | a **companion**, a package of its own | a repository, a gate, a re-pin per [release](09-releasing.md#a-companion-reads-the-release) | `valgebra-jsonschema`, `valgebra-vtjson` |
+
+**A recipe is the default.** The algebra expressing a pattern is the point of it, so a wrapper
+around one line is not shipped: it would be a second spelling to document, test and keep, and
+shorter is no reason. A recipe's block runs in the doc lanes, so it stays true, and a claimed law
+gets a property test as a node's would.
+
+**A recipe that answers `undecided` names a decider gap, and no wrapper.** The recipe stays as
+written and the decider learns the set, so a caller writing plain Python gains the answer too:
+JSON's integers are a recipe, the step over floats they read is in the decider, and nothing about
+JSON is in the core. A decider change shows who asks, since every gate after it holds what it costs.
+A dyadic step asks for a table and 3 of the 243 `multipleOf` in JSONSchemaBench write one, so it
+[stays out](02-decision.md); `0.01`, which no table holds, is 147 of them.
+
+**A value universe is a recipe.** What a format holds is a set of Python values, so it is a set to
+write and a meet to ask inside, with no crate, trait or package
+([20-universes.md](../20-universes.md)). So there is no `valgebra-json`: its universe is a recipe
+and its reader is `input.rs`. There is no `valgebra-numpy` either, since numpy's generic is a typing
+form and an array's other readings are a `Protocol`.
+
+**A schema language is a companion, on three tests.** It has no annotation form for an example to
+lead with. Its refusals are a dialect's rather than the algebra's. And its conformance suite would
+make each dialect's fix a release of this package. A companion reads the public surface alone, and
+what it finds comes back as one of the rows above: its studies are how a decider gap shows demand.
+Each costs a repository and a re-pin per release, so one opens only with content and a consumer.
+
 ## Every bound, and what holds it
 
 Nothing here is unbounded. A schema is built under limits, a walk descends under

@@ -963,8 +963,9 @@ algebra, and it is the only one here.
 syntax writes a union that way -- `int | str` is a union before this library
 sees it, and `__ror__` is what lets `None | validator` work -- so answering `|`
 is answering the language. `&` and `~` would be second spellings of
-`intersection` and `complement`, which the ship-versus-recipe rule refuses:
-shorter is not a reason. `in` is kept for the reason `|` is: it is Python's own
+`intersection` and `complement`, which
+[the ship-versus-recipe rule](00-architecture.md#where-new-work-goes) refuses: shorter is not a
+reason. `in` is kept for the reason `|` is: it is Python's own
 spelling of the one question the product answers, membership, as `|` is
 Python's spelling of a union, where `&` and `~` would spell combinators the
 language has no operator for. A validator does not pickle either, and the

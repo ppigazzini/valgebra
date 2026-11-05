@@ -11,6 +11,8 @@ that defines it -- so a rename dates the entry.
 | **denotation** | the set of Python values a schema admits. Every node in `crates/valgebra-core/src/ir.rs` has one written down, and validation is membership in the root node's set |
 | **membership** | the question the walk answers: is this value in that set. Never a conversion — the value is not copied or coerced. `member` in `crates/valgebra-py/src/check/walk.rs` answers it |
 | **check-only** | valgebra's semantics: it decides membership on the object the caller already holds. A validator that returns a *new* value is doing something else ([04-walk.md](04-walk.md)) |
+| **recipe** | a pattern written from the forms that exist: a section of a page, with no code of its own. What new work is by default ([00-architecture.md](00-architecture.md#where-new-work-goes)) |
+| **companion** | a package of its own over the public surface, for what reads another language's schemas: `valgebra-jsonschema`, `valgebra-vtjson` ([00-architecture.md](00-architecture.md#where-new-work-goes)) |
 | **the algebra** | union, intersection, complement, refinement and fixpoints over value sets, closed under all of them ([01-schema-ir.md](01-schema-ir.md)) |
 | **atom** | a `Schema` variant in `crates/valgebra-core/src/ir.rs` with no schema inside it: the scalars, `Literal`, `Instance`, the lattice bounds |
 | **the closure** | the sets reachable by combining the atoms with union, intersection and complement. A proposed node either denotes a set already in it — and is redundant — or extends the algebra; [01-schema-ir.md](01-schema-ir.md) owns the test |

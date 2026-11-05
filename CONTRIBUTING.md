@@ -27,7 +27,9 @@ define them. It is not published with the user guide — it describes what valge
 is made of rather than how to use it. Change a zone, fix its page in the same
 commit.
 
-A change to the schema language flows the same way each time: extend the IR or
+Whether a change is a recipe, a frontend form, a decider, a node or a companion is
+[where new work goes](docs/dev/00-architecture.md#where-new-work-goes). A change to the
+schema language flows the same way each time: extend the IR or
 the frontend, **write the node's denotation** (the set of Python values it
 accepts) in the same change, **cover its algebra laws** with property tests, then
 run the gate. A combinator described only as "like some other tool" does not
