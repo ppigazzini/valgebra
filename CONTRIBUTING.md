@@ -252,12 +252,13 @@ job is. `ci.yml` owns the job set, and
 the list is not restated here: a second copy drifts by one entry and reads
 exactly like one that has not. What is worth knowing about its shape is the
 Python matrix, which runs **every supported release on every push**, and the
-free-threaded build of each from 3.14. `ci.yml` owns the matrix too:
+free-threaded build of each from 3.14, and the `pypy` job, which runs each PyPy
+series a wheel is built for. `ci.yml` owns the matrix too:
 `tests/test_python_lifecycle.py` holds the releases it carries to the schedule
 each release follows, and which leg may fail without blocking to the release's
 stage; `tests/test_required_jobs.py` holds that the job runs on every event and
 has a free-threaded leg; and `tests/test_release_matrix.py` holds the
-free-threaded legs to what the release ships.
+free-threaded legs and the PyPy legs to what the release ships.
 [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md) says why each
 interpreter is a lane of its own.
 

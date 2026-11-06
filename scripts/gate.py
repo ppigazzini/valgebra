@@ -1010,6 +1010,7 @@ UNREACHED = {
         "unread is every release between the floor and the caller's, the "
         "newest release, and the free-threaded builds"
     ),
+    "pypy": "the first leg runs; each later PyPy series is left unread",
     "bench": "cachegrind and a base built beside the head",
     "bench-free-threaded": "the optimized wheel, and a second interpreter",
     "wheel": "the release build matrix",

@@ -79,12 +79,13 @@ assert Validator(int).is_valid(7)
 
 ## PyPy
 
-PyPy 3.11 is a target on Linux. Wheels are published for PyPy 7.3 and
-for PyPy 8.0 on manylinux x86_64 and aarch64 — two, because PyPy 8.0 changed
+PyPy 3.11 and 3.12 are targets on Linux. Wheels are published for PyPy 3.11 on
+7.3 and on 8.0 on manylinux x86_64 and aarch64 — two, because PyPy 8.0 changed
 the ABI tag and an installer matches it exactly, so a wheel for one does not
 install on the other — and on musllinux for what the musl build image carries,
-PyPy 3.11 on 7.3 and PyPy 3.12 on 8.0. Every push builds the extension against PyPy, imports it, and runs
-the product suite there, with the repository checks whose answer is the
+PyPy 3.11 on 7.3 and PyPy 3.12 on 8.0. PyPy 3.12 on glibc installs from the
+source distribution. Every push builds the extension against both, imports it,
+and runs the product suite there, with the repository checks whose answer is the
 interpreter's. Both halves
 are needed, because the C API PyPy offers is not CPython's: an extension there
 runs through `cpyext`, which carries the limited API and not every static type

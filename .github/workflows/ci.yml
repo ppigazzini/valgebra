@@ -782,7 +782,7 @@ jobs:
       - run: uv run --no-sync python scripts/check_doc_examples.py
 
   pypy:
-    name: pypy 3.11
+    name: ${{ matrix.python-version }}
     needs: nightly-dispatch
     if: >-
       !cancelled() && (github.event_name != 'schedule' ||
@@ -808,6 +808,17 @@ jobs:
     # The wheel is a **release** build. A debug one carries frames large enough
     # that the deep-nesting cases overflow PyPy's C stack, which is a property
     # of the profile rather than of the code, and a release wheel is what ships.
+    #
+    # One leg per PyPy series the release ships a wheel for, whichever row builds
+    # it: a musllinux row builds every PyPy its image carries, and no Alpine
+    # image loads one, so a leg here is all that runs a series shipped only
+    # there. `tests/test_release_matrix.py` holds the legs to the series both
+    # ways. The steps read the leg's interpreter as `UV_PYTHON`, which the uv
+    # setup step exports.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["pypy-3.11", "pypy-3.12"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -817,17 +828,17 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          key: pypy-3.11
+          key: ${{ matrix.python-version }}
       - uses: $/.github/actions/setup-uv
         with:
-          python-version: "pypy-3.11"
+          python-version: ${{ matrix.python-version }}
       - name: Build the extension for PyPy and import it
         run: |
-          uv venv --python pypy-3.11 .pypy
+          uv venv --python "$UV_PYTHON" .pypy
           # The maturin `uv.lock` resolves, as every build of the extension.
           VIRTUAL_ENV=.pypy uv pip install maturin==1.16.0
           VIRTUAL_ENV=.pypy .pypy/bin/maturin build --release --out dist-pypy \
-            -i "$(uv python find pypy-3.11)"
+            -i "$(uv python find "$UV_PYTHON")"
           VIRTUAL_ENV=.pypy uv pip install --no-index dist-pypy/*.whl
           .pypy/bin/python scripts/pypy_import_check.py
       # What the suite reads, the `test` group, and not the tools the dev group
@@ -1257,7 +1268,7 @@ jobs:
       # installed on the interpreter its ABI tag names and imported with every
       # warning an error, so a wheel that builds and does not load fails the
       # push rather than the release smoke. The PyPy wheel the image also builds
-      # is the `pypy 3.11` lane's, which builds and runs one of its own.
+      # is the `pypy` lane's, which builds and runs one of its own.
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.15"

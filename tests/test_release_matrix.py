@@ -16,7 +16,10 @@ its interpreters to the build image says so by name.
 
 And what ships has a lane. A wheel is a separate artifact a caller installs, and
 one no push runs is one nothing exercised until somebody reported it, so each
-free-threaded build the classifiers name is a blocking leg of the `python` job.
+free-threaded build the classifiers name is a blocking leg of the `python` job,
+and each PyPy series a wheel is built for is a leg of the `pypy` job, both ways.
+PyPy is read off the build rows and off the tags the musl smoke accepts unloaded,
+since a musllinux row builds whichever PyPy its image carries.
 
 LEDGER: every classified release has a wheel or a named gap, and what ships has a lane
 """
@@ -183,6 +186,25 @@ def test_every_row_names_its_interpreters_or_says_why() -> None:
     )
 
 
+#: A PyPy series as a build row's interpreter or a wheel's ABI tag spells it:
+#: `pypy3.11`, `/opt/python/pp311-pypy311_pp80/bin/python`, `pypy312_pp80`.
+_PYPY_SERIES = re.compile(r"pypy3\.?(\d+)")
+
+
+def _pypy_shipped() -> set[str]:
+    """Give the PyPy series a wheel is built for, as uv names them: `pypy-3.11`."""
+    smoke = read_workflow(WORKFLOWS / "release.yml")["jobs"]["smoke-musl"]
+    spelled = [str(row.get("interpreter", "")) for row in _rows()]
+    spelled += [
+        str(step["env"]["UNLOADABLE"])
+        for step in smoke["steps"]
+        if "UNLOADABLE" in (step.get("env") or {})
+    ]
+    return {
+        f"pypy-3.{series}" for text in spelled for series in _PYPY_SERIES.findall(text)
+    }
+
+
 def test_every_free_threaded_build_the_classifiers_name_is_a_blocking_leg() -> None:
     job = read_workflow()["jobs"]["python"]
     blocking = {
@@ -198,4 +220,16 @@ def test_every_free_threaded_build_the_classifiers_name_is_a_blocking_leg() -> N
         f"classifiers name {sorted(classified)}. A release's free-threaded build "
         "is a wheel of its own, supported from 3.14: give each one a leg in ci.yml "
         "that is not forgiven, and no other."
+    )
+
+
+def test_every_pypy_series_a_wheel_is_built_for_has_a_leg() -> None:
+    job = read_workflow()["jobs"]["pypy"]
+    running = {leg["matrix.python-version"] for leg in legs(job)}
+    shipped = _pypy_shipped()
+    assert shipped, "no PyPy wheel is built, so this reads nothing"
+    assert running == shipped, (
+        f"the pypy job runs {sorted(running)}; the release builds wheels for "
+        f"{sorted(shipped)}. A series shipped with no leg is one no push runs: add "
+        "the leg to ci.yml, or stop building the wheel."
     )

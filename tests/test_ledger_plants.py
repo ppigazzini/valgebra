@@ -3591,6 +3591,31 @@ PLANTS = (
         ),
     ),
     Plant(
+        # A PyPy series the musl image builds with no leg: the wheel ships and
+        # nothing runs it, in a container or on a push.
+        "tests/test_release_matrix.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '["pypy-3.11", "pypy-3.12"]',
+            '["pypy-3.11"]',
+        ),
+        trips=("test_every_pypy_series_a_wheel_is_built_for_has_a_leg",),
+    ),
+    Plant(
+        # A leg for a series no wheel is built for: minutes for nobody.
+        "tests/test_release_matrix.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '["pypy-3.11", "pypy-3.12"]',
+            '["pypy-3.11", "pypy-3.12", "pypy-3.10"]',
+        ),
+        trips=("test_every_pypy_series_a_wheel_is_built_for_has_a_leg",),
+    ),
+    Plant(
         # The push lane sweeping the whole list whichever file a change
         # touches: the wait scoping removes, with a green lane over it.
         "tests/test_required_jobs.py",

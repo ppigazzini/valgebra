@@ -164,7 +164,7 @@ pypy@<version>`, the 3.11 release that carries each ABI), because the PyPy
 wheels are different builds: plain rather than profile-guided, since a
 profiled extension crashes there at the walk's depth bound (`release.yml`
 says how), one per ABI tag since PyPy 8.0 changed it, and the push lane's PyPy
-leg runs the suite on a wheel it builds itself. The release smoke runs the
+legs run the suite on wheels they build themselves. The release smoke runs the
 product suite on every wheel set that ships, PyPy's and the musllinux ones
 included, and `tests/test_release_smoke.py` holds every wheel set the release
 builds to a smoke row that runs it, and every release a build row names to a
@@ -290,7 +290,7 @@ commit, and its message names the edit. It does not read the wheels
 `release.yml` builds: `tests/test_release_matrix.py` holds each platform's list
 to the classifiers the calendar moves, with the gaps the platforms set named
 and a row that leaves its interpreters to the build image named too, and each
-free-threaded build to a leg.
+free-threaded build and each PyPy series a wheel is built for to a leg.
 
 ## A companion reads the release
 

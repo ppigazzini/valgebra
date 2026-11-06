@@ -1171,7 +1171,7 @@ skipped step is a green one.
 builds the manylinux wheels from the image a release builds them in, then
 installs each CPython wheel on the interpreter its ABI tag names and imports it
 with every warning an error; the PyPy wheel the image also builds is the
-`pypy 3.11` lane's, which builds and runs one of its own. The lanes test the extension `maturin develop` builds, so a
+`pypy` lane's, which builds and runs one of its own. The lanes test the extension `maturin develop` builds, so a
 wheel that builds and does not load would otherwise wait for the release smoke.
 
 **PyPy builds, links, and runs the suite.** The release matrix publishes PyPy
@@ -1184,9 +1184,12 @@ CPython exports, so an extension naming one links on CPython and fails at
 it ships, the manylinux PyPy ones included and the musllinux sets in Alpine
 containers, except the musllinux PyPy and free-threaded wheels, which no Alpine
 image can load ([09-releasing.md](09-releasing.md)) -- but a release is where a
-break is dearest to find, so the push runs one first. The `pypy 3.11`
-job builds a release wheel against PyPy and runs `scripts/pypy_import_check.py`
-first, which imports it and builds the annotation forms whose compilation
+break is dearest to find, so the push runs one first, a leg for each PyPy series
+a wheel is built for, and `tests/test_release_matrix.py` holds the legs to the
+series both ways. PyPy 3.12 ships on musllinux alone, so its leg, a glibc build
+of the same source, is what runs that series at all. Each leg of the `pypy`
+job builds a release wheel against its PyPy and runs
+`scripts/pypy_import_check.py` first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the
 form rather than in a stack of test output.
 
