@@ -221,9 +221,9 @@ ships), per-call median on a passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
-| Record, 50 int fields | 1.36 us | 5.93 us | ~4.4x |
-| List of 200 small mappings | 21.3 us | 31.1 us | ~1.5x |
-| `list[int]`, 10,000 elements | 75 us | 454 us | ~6.0x |
+| Record, 50 int fields | 1.40 us | 5.96 us | ~4.3x |
+| List of 200 small mappings | 21.8 us | 32.0 us | ~1.5x |
+| `list[int]`, 10,000 elements | 78 us | 471 us | ~6.1x |
 
 `benches/bench_json.py` times both columns, and a strict
 `TypeAdapter.validate_json` over the same three shapes beside them; that third
@@ -247,14 +247,14 @@ way. Measure your own documents rather than reading a rule off these three.
 Where the middle shape's time goes is measured, because it is the shape where
 valgebra is closest to pydantic-core. On the competitive gate's document -- two
 hundred records of five fields, one of them a list and one a mapping, 17 KB --
-`is_valid_json` reads about 64 us on the machine above in the PGO wheel, and
+`is_valid_json` reads about 66 us on the machine above in the PGO wheel, and
 the parts are:
 
 | part | per call | how it was measured |
 | --- | --- | --- |
 | the parse into the tree the walk reads, and the call | 51 us | `Validator(anything).is_valid_json`, which parses and admits without a walk |
-| the walk over that tree | 13 us | `is_valid_json` less the row above |
-| `jiter::JsonValue::parse` alone | 64 us | in Rust, release, no profile |
+| the walk over that tree | 15 us | `is_valid_json` less the row above |
+| `jiter::JsonValue::parse` alone | 65 us | in Rust, release, no profile |
 | jiter's pull parser over the same bytes, building nothing | 17 us | in Rust, release, no profile |
 
 The first two rows are one process. The parse moves with the heap a process
