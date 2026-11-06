@@ -9,6 +9,16 @@ use core::mem::size_of;
 use proptest::prelude::*;
 use std::sync::{Arc, LazyLock};
 
+/// A guard holding no value is empty and one holding a value is not.
+///
+/// A product of two automata drops an edge on this answer, and a walk skips one,
+/// where the edge would only cost a step, so no language shows it.
+#[test]
+fn a_guard_is_empty_exactly_where_it_holds_no_value() {
+    assert!(Guard::is_empty(&Arc::new(Descr::nothing())));
+    assert!(!Guard::is_empty(&Arc::new(Descr::anything())));
+}
+
 /// Every value leaves nothing, and a set missing any part of the universe leaves
 /// a value there, whichever part it is: a kind or the values of no kind.
 #[test]

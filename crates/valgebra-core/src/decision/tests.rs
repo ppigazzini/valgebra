@@ -8418,6 +8418,32 @@ fn a_member_the_product_rule_sets_aside_withholds_its_refutation() {
     );
 }
 
+/// The rule refutes a product outside its branches, read by the rules alone.
+///
+/// The set representation refutes the corner held back as well, and answers for
+/// a rule that declines, so only the rules can show this answer. Every member is
+/// a fixed sequence of the subject's kind, so none the rule sets aside holds a
+/// value of its arity, and a tuple of another arity changes nothing.
+#[test]
+fn the_product_rule_alone_refutes_a_product_missing_a_corner() {
+    let rules = |product: &Schema, members: Vec<Schema>| {
+        product.subtype_relation(
+            &Schema::Union(members.into()),
+            &NoLeafRelations,
+            &[],
+            &Budget::new(DECISION_BUDGET),
+        )
+    };
+    let (product, corners) = product_and_corners(5, 1);
+    assert_eq!(rules(&product, corners), Relation::Fails);
+    let (product, mut corners) = product_and_corners(5, 1);
+    corners.push(Schema::Seq {
+        container: SeqKind::Tuple,
+        shape: SeqShape::fixed(vec![Schema::NoneType]),
+    });
+    assert_eq!(rules(&product, corners), Relation::Fails);
+}
+
 /// The rules decide a product against its corners in steps polynomial in the width.
 ///
 /// Read off the budget the structural rules spend, without the second decider:
