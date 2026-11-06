@@ -80,8 +80,9 @@ PyTorch's arrays.
 - **PyPy wheels are for PyPy 8.0, on 3.11 and 3.12, on manylinux.** A wheel is published
   for each series on x86_64 and aarch64, and each runs the product suite on every push and
   in the release. PyPy 7.3 and PyPy on musl install from the source distribution, which
-  needs a Rust toolchain: no push ran 7.3, and no Alpine image can load a PyPy wheel.
-  Free-threaded 3.14 runs on every push as well.
+  needs a Rust toolchain: no push ran 7.3, and nothing here holds a musl PyPy to load a
+  wheel. Free-threaded 3.14 runs on every push as well, and the release runs the product
+  suite on the free-threaded musllinux wheels, which it built and never loaded.
 
 ### Fixed
 

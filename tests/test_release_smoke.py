@@ -16,9 +16,11 @@ ends, an import, one check and the bounds file on the releases between, which
 holds each profile-guided wheel's deepest walk to a 1 MiB thread. A set whose
 build row names no interpreter, the musllinux image building every one it
 carries, is read off its artifact by the smoke itself, which fails on a wheel no
-container loaded unless `UNLOADABLE` names its tag, and the upload leaves its
-PyPy wheels out, since no container can load one. Each wheel is a build of its
-own, profiled on its own interpreter, so a wheel no smoke row loads is a wheel
+container loaded, and the upload leaves its PyPy wheels out, since nothing here
+holds a musl PyPy to load one. A musllinux set's free-threaded wheels run in
+plain Alpine on uv's musl build of each release, since the Docker library
+publishes no such image. Each wheel is a build of its own, profiled on its own
+interpreter, so a wheel no smoke row loads is a wheel
 nothing ran. A smoke is the product suite rather than an import, for the wheels
 and for the build from source, and the import it starts with fails on a warning.
 And the PyPy wheels are built in a row of their own, without the profile: the
@@ -58,15 +60,6 @@ SMOKES: list[dict[str, object]] = [
 #: The wheel sets no smoke row downloads, with the reason. None: the musllinux
 #: sets, the last ones here, are loaded in Alpine containers.
 NOT_SMOKED: dict[str, str] = {}
-
-#: The ABI tags a musllinux set holds and no container loads, with the reason.
-#: The set's build row names no interpreter -- its image builds every one it
-#: carries -- so the smoke reads the set off its artifact, and a wheel whose tag
-#: is neither loaded nor here fails it.
-UNLOADABLE = {
-    "cp314t": "no Alpine image carries a free-threaded CPython",
-    "cp315t": "no Alpine image carries a free-threaded CPython",
-}
 
 
 def _artifact(build: dict[str, object]) -> str:
@@ -252,7 +245,7 @@ def test_every_release_between_runs_the_bounds_file(job: str) -> None:
 
 
 #: The step a set built from what its image carries is read off its artifact by.
-_ARTIFACT_STEP = "Every wheel the set holds is loaded or named unloadable"
+_ARTIFACT_STEP = "Every wheel the set holds is loaded"
 
 
 def _artifact_step(job: str) -> dict:
@@ -266,9 +259,7 @@ def test_a_set_its_image_chooses_is_read_off_its_artifact() -> None:
 
     The image builds every interpreter it carries, so the set is whatever the
     image carries on the day, and an image that gains a release ships a wheel
-    no container loads unless the smoke reads the set off the artifact. The step
-    names the tags it accepts unloaded, and they are the ones `UNLOADABLE`
-    gives reasons for.
+    no container loads unless the smoke reads the set off the artifact.
     """
     chosen = [
         _artifact(build)
@@ -284,11 +275,32 @@ def test_a_set_its_image_chooses_is_read_off_its_artifact() -> None:
         if row["artifact"] in chosen
     }
     assert jobs == {"smoke-musl"}, jobs
-    named = str(_artifact_step("smoke-musl")["env"]["UNLOADABLE"]).split()
-    assert sorted(named) == sorted(UNLOADABLE), (
-        f"the musl smoke accepts {sorted(named)} unloaded; the reasons here cover "
-        f"{sorted(UNLOADABLE)}"
-    )
+    _artifact_step("smoke-musl")
+
+
+def test_a_musllinux_set_runs_every_free_threaded_release_the_release_builds() -> None:
+    """A musl row's suite reads the free-threaded builds a glibc row names.
+
+    The musllinux image builds them unasked, so a release gaining one ships it on
+    musl with the glibc row's next edit. The Docker library publishes no image for
+    one, so each row reads it on uv's musl build, which the step before holds.
+    """
+    glibc = next(row for row in BUILDS if row.get("pgo") and row["target"] == "x86_64")
+    threaded = {
+        release
+        for release in _releases(str(glibc["interpreter"]))
+        if release[-1] == "t"
+    }
+    assert threaded, "no build row names a free-threaded release"
+    for row in WORKFLOW["jobs"]["smoke-musl"]["strategy"]["matrix"]["wheel"]:
+        missing = threaded - _releases(str(row["pythons"]))
+        assert not missing, f"{row['name']} runs no suite on {sorted(missing)}"
+    installs = [
+        str(step["run"])
+        for step in _steps("smoke-musl")
+        if "freethreaded-linux-$(uname -m)-musl" in str(step.get("run", ""))
+    ]
+    assert installs, "the musl smoke installs no free-threaded musl interpreter"
 
 
 def test_a_musllinux_artifact_leaves_its_pypy_wheels_out() -> None:
@@ -327,6 +339,7 @@ def _wheel(tag: str) -> str:
             ],
             0,
         ),
+        (["cp311", "cp312", "cp315", "cp316t"], 1),
         (["cp311", "cp315", "cp316"], 1),
         (["cp311", "cp315", "pypy312_pp80"], 1),
         (["cp310", "cp311", "cp315"], 1),
@@ -334,6 +347,7 @@ def _wheel(tag: str) -> str:
     ],
     ids=[
         "the set the release builds",
+        "a free-threaded release no row loads",
         "a release the image gained",
         "a PyPy wheel the upload let through",
         "a release below the floor",
@@ -352,7 +366,6 @@ def test_the_artifact_step_refuses_a_wheel_no_container_loads(
     environment = {
         **os.environ,
         "LOADED": f"{row['pythons']} {row['imports']}",
-        "UNLOADABLE": str(step["env"]["UNLOADABLE"]),
     }
     ended = subprocess.run(  # noqa: S603 -- the workflow's own script, test-only
         ["bash", "-e", "-c", step["run"]],  # noqa: S607 -- the shell GitHub runs

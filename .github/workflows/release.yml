@@ -243,10 +243,10 @@ jobs:
         with:
           name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-${{ matrix.platform.variant || matrix.platform.manylinux || 'native' }}
           # A musllinux row builds every interpreter its image carries, PyPy among
-          # them, and no Alpine image carries a PyPy to load the wheel. A wheel
-          # nothing loads does not ship, so the upload leaves those out, and the
-          # musl smoke refuses one that reaches its set. An exclusion leaves the
-          # artifact's root at `dist`.
+          # them, and neither Docker's images nor uv's download list holds a musl
+          # PyPy to load the wheel. A wheel nothing loads does not ship, so the
+          # upload leaves those out, and the musl smoke refuses one that reaches
+          # its set. An exclusion leaves the artifact's root at `dist`.
           path: |
             dist
             !dist/*-pp3*-*musllinux*.whl
@@ -389,20 +389,20 @@ jobs:
     needs: [wheels]
     # The musllinux wheels, each on the musl CPython of its release in the
     # Alpine image the Docker library publishes as `python:<release>-alpine`:
-    # the product suite on the floor and the newest release, an import, the one
-    # check and the bounds file on the releases between, as the glibc rows do.
-    # The aarch64 set, cross-built on an x86_64 runner, runs on an arm64 one. No
-    # Alpine image carries a free-threaded CPython, so the cp314t and cp315t
-    # musllinux wheels are built and not loaded. The build row names no
-    # interpreter -- the image builds every one it carries -- so the set is read
-    # off the artifact, and a wheel no container loaded and no reason names fails
-    # the smoke; `tests/test_release_smoke.py` holds the reasons.
+    # the product suite on the floor, the newest release and the free-threaded
+    # builds, an import, the one check and the bounds file on the releases
+    # between, as the glibc rows do. The Docker library publishes no free-threaded
+    # image, so a free-threaded wheel runs in plain Alpine on uv's musl build of
+    # its release, mounted into the container. The aarch64 set, cross-built on an
+    # x86_64 runner, runs on an arm64 one. The build row names no interpreter --
+    # the image builds every one it carries -- so the set is read off the
+    # artifact, and a wheel no container loaded fails the smoke.
     strategy:
       fail-fast: false
       matrix:
         wheel:
-          - { name: linux-x86_64-musl, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-musllinux_1_2, pythons: "3.11 3.15", imports: "3.12 3.13 3.14" }
-          - { name: linux-aarch64-musl, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-aarch64-musllinux_1_2, pythons: "3.11 3.15", imports: "3.12 3.13 3.14" }
+          - { name: linux-x86_64-musl, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-musllinux_1_2, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
+          - { name: linux-aarch64-musl, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-aarch64-musllinux_1_2, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 45
     steps:
@@ -422,33 +422,60 @@ jobs:
         with:
           python-version: "3.15"
           enable-cache: false
+      # A free-threaded release has no Docker image, and uv's musl build of it
+      # runs in plain Alpine. `image.sh` names what a release's container runs
+      # from, for the two steps below: the release's image, or Alpine with that
+      # build mounted and first on the path. uv marks its builds externally
+      # managed, and the container is thrown away with what it installs, so pip
+      # is told to install anyway. Its launcher asks `realpath --`, which
+      # BusyBox refuses, so both steps run `python -m pip`.
+      - name: Install the free-threaded musl interpreters
+        shell: bash
+        env:
+          PYTHONS: ${{ matrix.wheel.pythons }}
+        run: |
+          for py in $PYTHONS; do
+            case "$py" in *t) ;; *) continue ;; esac
+            uv python install --no-bin --install-dir "$PWD/musl-$py" \
+              "cpython-${py%t}+freethreaded-linux-$(uname -m)-musl"
+          done
+          cat > image.sh <<'SH'
+          image_of() {
+            case "$1" in
+              *t)
+                home=$(readlink -f "musl-$1/cpython-${1%t}+freethreaded-linux-$(uname -m)-musl")
+                image=(-v "$home:/python" -e PATH=/python/bin:/usr/sbin:/usr/bin:/sbin:/bin -e PIP_BREAK_SYSTEM_PACKAGES=1 alpine:3.24)
+                ;;
+              *) image=("python:$1-alpine") ;;
+            esac
+          }
+          SH
       # The same install and check as the glibc rows, in a script each
-      # container runs: the image's own pip, the matching wheel from the
+      # container runs: the container's own pip, the matching wheel from the
       # downloaded set with no index, and an import with every warning an
-      # error.
+      # error, required on a free-threaded interpreter to leave the GIL off.
       - name: Install the musl wheel in its container and import it
         shell: bash
         env:
           PYTHONS: ${{ matrix.wheel.pythons }} ${{ matrix.wheel.imports }}
         run: |
+          . ./image.sh
           cat > import.sh <<'SH'
-          pip install -q --disable-pip-version-check --root-user-action=ignore --no-index --find-links /dist valgebra
-          python -W error -c "import sys, valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); print('smoke ok', sys.version.split()[0], v.__version__)"
+          python -m pip install -q --disable-pip-version-check --root-user-action=ignore --no-index --find-links /dist valgebra
+          python -W error -c "import sys, sysconfig, valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); assert not (sysconfig.get_config_var('Py_GIL_DISABLED') and sys._is_gil_enabled()); print('smoke ok', sys.version.split()[0], v.__version__)"
           SH
           for py in $PYTHONS; do
+            image_of "$py"
             docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/import.sh:/import.sh:ro" \
-              "python:$py-alpine" sh -e /import.sh
+              "${image[@]}" sh -e /import.sh
           done
-      # Each wheel's ABI tag is a release a container above loaded, or one no
-      # Alpine image can load. A wheel the image starts building -- a new
-      # release, a new build of one -- fails here until a row loads it or a
-      # reason names it.
-      - name: Every wheel the set holds is loaded or named unloadable
+      # Each wheel's ABI tag is a release a container above loaded. A wheel the
+      # image starts building -- a new release, a new build of one -- fails here
+      # until a row loads it.
+      - name: Every wheel the set holds is loaded
         shell: bash
         env:
           LOADED: ${{ matrix.wheel.pythons }} ${{ matrix.wheel.imports }}
-          # No Alpine image carries a free-threaded CPython.
-          UNLOADABLE: cp314t cp315t
         run: |
           status=0
           for wheel in dist/*.whl; do
@@ -456,9 +483,6 @@ jobs:
             accounted=no
             for release in $LOADED; do
               if [ "$abi" = "cp${release/./}" ]; then accounted=yes; fi
-            done
-            for tag in $UNLOADABLE; do
-              if [ "$abi" = "$tag" ]; then accounted=yes; fi
             done
             if [ "$accounted" = no ]; then
               echo "::error::$(basename "$wheel") is built and loaded by no container"
@@ -476,18 +500,20 @@ jobs:
           # installs it, exported here and read by each container's pip.
           uv export --project tree --locked --only-group test --no-emit-project \
             -o suite.txt
+          . ./image.sh
           cat > suite.sh <<'SH'
-          pip install -q --disable-pip-version-check --root-user-action=ignore --no-index --find-links /dist valgebra
-          pip install -q --disable-pip-version-check --root-user-action=ignore -r /suite.txt
+          python -m pip install -q --disable-pip-version-check --root-user-action=ignore --no-index --find-links /dist valgebra
+          python -m pip install -q --disable-pip-version-check --root-user-action=ignore -r /suite.txt
           python -m pytest -q -p no:cacheprovider -m "not repository" "$SUITE"
           SH
           # The suite on the ends, and the bounds file on the releases between,
           # for the reason the glibc smoke gives.
           for py in $PYTHONS; do
+            image_of "$py"
             docker run --rm -e HYPOTHESIS_PROFILE=ci -e SUITE=/tree/tests -w /tmp \
               -v "$PWD/dist:/dist:ro" -v "$PWD/tree:/tree:ro" -v "$PWD/suite.sh:/suite.sh:ro" \
               -v "$PWD/suite.txt:/suite.txt:ro" \
-              "python:$py-alpine" sh -e /suite.sh
+              "${image[@]}" sh -e /suite.sh
           done
           for py in $IMPORTS; do
             docker run --rm -e HYPOTHESIS_PROFILE=ci -e SUITE=/tree/tests/test_adversarial_bounds.py -w /tmp \

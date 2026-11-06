@@ -250,6 +250,12 @@ behavior at build time, and `crates/valgebra-py/Cargo.toml` leaves the feature
 unset, so `cargo test` and the workloads link an interpreter as any other
 library does.
 
+**Every musllinux wheel runs in a container.** The Docker library's
+`python:<release>-alpine` images run the CPython wheels. It publishes no
+free-threaded image, so a free-threaded wheel runs in plain Alpine on uv's musl build
+of its release, mounted into the container. `tests/test_release_smoke.py` holds each
+musl row to the free-threaded releases a glibc row builds.
+
 **PyPy wheels carry one ABI, PyPy 8.0's.** Each series 8.0 implements, 3.11 and
 3.12, gets a `pp80` wheel on manylinux x86_64 and aarch64, built from the
 manylinux_2_28 image, since 8.0's binaries need glibc 2.27. That is a decision,
@@ -258,7 +264,8 @@ those two series on every push, on the PyPy 8.0 the pinned uv resolves, so a whe
 for PyPy 7.3 is one no push runs. An installer matches the ABI tag exactly, so a
 7.3 interpreter installs from the source distribution, and nothing here tests that
 install. The musllinux image builds PyPy wheels too, and the upload leaves them
-out, because no Alpine image carries a PyPy to load them.
+out, because neither the Docker library's images nor uv's download list holds a
+musl PyPy to load them.
 `tests/test_release_matrix.py` holds the rows to that ABI and the series to the
 job's legs, and `tests/test_release_smoke.py` holds the upload and each series'
 smoke. A PyPy series or ABI moves in all three places together.
@@ -328,9 +335,6 @@ Each bump costs a companion two commits and a session, so a release batches its 
   Linux x86_64 build. Every other wheel is a build of its own, for another
   platform, architecture or implementation, and no count reads it against the
   release before.
-- **The wheels no smoke can load.** The musllinux cp314t and cp315t wheels are
-  built and not imported: no Alpine image carries a free-threaded CPython, so the
-  first install of either is a user's.
 - **A source install off Linux.** `uv pip install` takes the wheel; the sdist
   path is compiled and tested once by the workflow, on Linux, and
   `--no-binary valgebra` locally is the only way to reach it on another

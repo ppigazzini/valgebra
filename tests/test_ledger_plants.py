@@ -4861,22 +4861,24 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
-            "      - name: Every wheel the set holds is loaded or named unloadable\n",
+            "      - name: Every wheel the set holds is loaded\n",
             "      - name: Every wheel the set holds\n",
         ),
         trips=("test_a_set_its_image_chooses_is_read_off_its_artifact",),
     ),
     Plant(
-        # A tag accepted unloaded with no reason given for it.
+        # A free-threaded musl wheel shipped with no suite run on it.
         "tests/test_release_smoke.py",
         (".github/workflows/release.yml",),
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
-            "UNLOADABLE: cp314t cp315t",
-            "UNLOADABLE: cp314t cp315 cp315t",
+            'x86_64-musllinux_1_2, pythons: "3.11 3.15 3.14t 3.15t"',
+            'x86_64-musllinux_1_2, pythons: "3.11 3.15"',
         ),
-        trips=("test_a_set_its_image_chooses_is_read_off_its_artifact",),
+        trips=(
+            "test_a_musllinux_set_runs_every_free_threaded_release_the_release_builds",
+        ),
     ),
     Plant(
         # The nightly's core sweep running every test past the first failure.

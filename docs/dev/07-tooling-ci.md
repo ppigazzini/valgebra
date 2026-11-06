@@ -1193,8 +1193,7 @@ a push that does not link against PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object
 CPython exports, so an extension naming one links on CPython and fails at
 `import` on PyPy. The release smoke runs the product suite on every wheel set
-it ships, the PyPy ones included and the musllinux sets in Alpine containers,
-except the musllinux free-threaded wheels, which no Alpine image can load
+it ships, the PyPy ones included and the musllinux sets in Alpine containers
 ([09-releasing.md](09-releasing.md)) -- but a release is where a break is dearest
 to find, so the push runs one first, a leg for each PyPy series a wheel is built
 for, and `tests/test_release_matrix.py` holds the legs to the series both ways.
