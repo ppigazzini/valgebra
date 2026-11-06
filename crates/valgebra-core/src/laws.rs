@@ -5027,6 +5027,36 @@ fn a_length_bound_on_bytes_is_separated_one_past_it() {
     );
 }
 
+/// A length bound over a union is met by a member of the union grown to it.
+///
+/// The pair: a list of two, a list of at least three floats under a union of one
+/// and a reference, against `None`. It is refuted by `[[1.0, 1.0, 1.0], 1]`, and
+/// the universe holds that value only where the three floats are read off the
+/// union's member: the union itself names no element to grow.
+#[test]
+fn a_length_bound_over_a_union_is_met_by_a_member_of_the_union_grown_to_it() {
+    let defs = fixpoint_defs();
+    let bounded = Schema::Refine {
+        base: Arc::new(union_of(vec![Schema::list(SeqShape::homogeneous(
+            Schema::Float,
+        ))])),
+        constraints: vec![Constraint::MinLen(3)].into(),
+    };
+    let a = Schema::list(SeqShape::fixed([bounded, Schema::Ref(DefIx::new(1))]));
+    let b = Schema::NoneType;
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        a_value_parts(&subject, &other),
+        "no value of three floats and an integer is built"
+    );
+}
+
 /// A map with a catch-all is separated from a closed record by a key neither
 /// declares.
 ///
@@ -5140,7 +5170,14 @@ fn length_wanted(constraint: &Constraint) -> Option<usize> {
 /// A set holds its members once, so its `len` members are *distinct*: padding
 /// one with a repeat would claim a value the interpreter reads as shorter. Where
 /// the element cannot supply that many, there is no such set and none is built.
+/// A union names no element of its own, so each of its members is grown.
 fn sized_like(schema: &Schema, len: usize, fuel: usize) -> Vec<Obj> {
+    if let Schema::Union(members) = schema {
+        return members
+            .iter()
+            .flat_map(|member| sized_like(member, len, fuel))
+            .collect();
+    }
     let element = match schema {
         Schema::Seq { shape, .. } => shape.elements().next().unwrap_or(&Schema::ANYTHING),
         Schema::Coll { element, .. } => element,
