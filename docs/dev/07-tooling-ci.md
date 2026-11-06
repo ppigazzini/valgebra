@@ -914,12 +914,23 @@ python scripts/code_changes.py origin/github_ci \
   --listing listed.json --examined examined.txt
 cargo mutants --package valgebra-core --file <each core file it names> \
   --re <each pattern of examined.txt> \
-  -j 4 --timeout-multiplier 20 --output sweep \
-  -- -- --skip deep_subtype_into_bottom_terminates \
+  -j 4 --timeout-multiplier 20 --output sweep --test-tool nextest \
+  -- --max-fail 1:immediate -- --skip deep_subtype_into_bottom_terminates \
   --skip subtyping_terminates_on_a_distributed_tower \
   --skip a_chain_of_a_hundred_thousand_states_minimizes
 python scripts/mutation_gate.py --baseline core --new-only --out sweep/mutants.out
 ```
+
+**A core mutant stops at the first test that catches it.** `cargo test` runs every
+test in a binary to its end whatever fails, and the core suite's time sits in a
+few property laws, so a caught mutant would pay all of it, and the core sweep is
+most of what a night costs. `cargo nextest` with `--max-fail 1:immediate` ends the
+run at the first failure. A verdict is whether any test fails, so stopping moves
+none, and a mutant no test catches pays the whole suite as before. What this does
+not cover: nextest runs no doctest, so a behavior only a doctest catches would read
+as missed, and `tests/test_mutation_scope.py` holds that the core has none and that
+both core sweeps carry the two flags. The walk and suite sweeps stay on `cargo
+test`: they embed an interpreter and hold a small part of the night.
 
 The target is never zero. Equivalent mutants exist and are undecidable in
 general, so an accepted survivor carries the argument for why no test can kill

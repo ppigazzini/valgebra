@@ -4879,6 +4879,31 @@ PLANTS = (
         trips=("test_a_set_its_image_chooses_is_read_off_its_artifact",),
     ),
     Plant(
+        # The nightly's core sweep running every test past the first failure.
+        "tests/test_mutation_scope.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "            --test-tool nextest \\\n"
+            "            -- --max-fail 1:immediate -- --skip",
+            "            -- -- --skip",
+        ),
+        trips=("test_a_core_sweep_stops_a_mutant_at_the_first_test_that_catches_it",),
+    ),
+    Plant(
+        # A doctest a nextest sweep would not run.
+        "tests/test_mutation_scope.py",
+        ("crates/valgebra-core/src/kind.rs",),
+        lambda tree: _write(
+            tree,
+            "crates/valgebra-core/src/kind.rs",
+            (tree / "crates/valgebra-core/src/kind.rs").read_text(encoding="utf-8")
+            + "\n/// ```\n/// assert!(true);\n/// ```\nfn _planted() {}\n",
+        ),
+        trips=("test_the_core_holds_no_doctest_a_nextest_sweep_cannot_run",),
+    ),
+    Plant(
         # A musllinux set shipping the PyPy wheels its image builds: wheels no
         # container can load.
         "tests/test_release_smoke.py",

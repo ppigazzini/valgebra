@@ -436,3 +436,49 @@ def test_every_variable_a_sweep_lane_sets_is_one_the_recipe_sets() -> None:
         "A reader runs the page's recipe, so it carries what the lane carries "
         "-- or the verdict it returns is about the rig."
     )
+
+
+#: The two core sweeps, each stopped at its first failing test.
+CORE_SWEEPS = ("mutants-diff-core", "nightly-mutants")
+
+#: A fenced block in a Rust doc comment, with what its opening line says.
+_DOC_FENCE = re.compile(r"^\s*//[/!] ```(.*)$", re.MULTILINE)
+
+#: The fence words rustdoc does not run: each block they open is no doctest.
+_NOT_RUN = {"text", "ignore", "bash", "toml", "python", "console", "json"}
+
+
+@pytest.mark.parametrize("job", CORE_SWEEPS)
+def test_a_core_sweep_stops_a_mutant_at_the_first_test_that_catches_it(
+    job: str,
+) -> None:
+    """A caught mutant under `cargo test` pays the whole suite, whatever failed."""
+    sweeps = [
+        str(step["run"])
+        for step in read_workflow()["jobs"][job]["steps"]
+        if "cargo mutants --package valgebra-core" in str(step.get("run", ""))
+        and "--shard" in str(step["run"])
+    ]
+    assert sweeps, f"{job} runs no sweep of the core"
+    for run in sweeps:
+        assert "--test-tool nextest" in run, f"{job} sweeps under `cargo test`"
+        assert "--max-fail 1:immediate" in run, f"{job} lets the other tests finish"
+
+
+def test_the_core_holds_no_doctest_a_nextest_sweep_cannot_run() -> None:
+    """A doctest runs under no nextest sweep: what only one catches reads as missed."""
+    sources = sorted((ROOT / "crates" / "valgebra-core" / "src").rglob("*.rs"))
+    assert sources, "the scan read no source"
+    run = []
+    for path in sources:
+        found = _DOC_FENCE.findall(path.read_text(encoding="utf-8"))
+        # Fences alternate: an opening line, then the closing one, which is bare.
+        run += [
+            f"{path.name}: {word!r}"
+            for word in found[::2]
+            if word.strip() not in _NOT_RUN
+        ]
+    assert not run, (
+        f"doc blocks rustdoc would run: {run}. Mark each `text` or `ignore`, or run "
+        "the sweep's doctests beside nextest."
+    )

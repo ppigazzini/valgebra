@@ -1404,7 +1404,7 @@ jobs:
       # against a committed baseline.
       - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
-          tool: cargo-mutants@27.1.0
+          tool: cargo-mutants@27.1.0,cargo-nextest@0.9.145
       - name: List the Rust files the diff touches
         id: diff
         # Both values reach the script through the environment rather than
@@ -1466,8 +1466,8 @@ jobs:
           cargo mutants --package valgebra-core "${files[@]}" "${examined[@]}" -j 2 \
             --timeout-multiplier 20 --shard "${{ matrix.shard }}/24" \
             --sharding round-robin \
-            --output core-diff-mutants \
-            -- -- --skip deep_subtype_into_bottom_terminates \
+            --output core-diff-mutants --test-tool nextest \
+            -- --max-fail 1:immediate -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower \
             --skip a_chain_of_a_hundred_thousand_states_minimizes
           status=$?
@@ -2116,8 +2116,8 @@ jobs:
     # broken baseline or a usage error still fails, because those are real breakage
     # unrelated to test coverage.
     #
-    # Sharded, as the diff sweep beside it is. The whole core's mutants, at
-    # fifteen to twenty seconds each, are more than one job's two-hour timeout
+    # Sharded, as the diff sweep beside it is. The whole core's mutants are
+    # more than one job's two-hour timeout
     # holds -- and a job that times out is canceled, so the ratchet after it
     # never runs and the sweep reports nowhere. Each shard reports its own
     # slice and uploads it; the job after merges them and ratchets once.
@@ -2131,14 +2131,12 @@ jobs:
     # so the ceiling has to clear the slowest shard rather than sit near it,
     # and what clears it is the shard COUNT rather than the ceiling. The sweep
     # is one fixed pile of work cut into pieces: the pile is the core's mutants
-    # times the core's suite, neither of which a budget can talk down, and the
-    # only free variable is how many ways it is cut.
+    # times what each runs before a test catches it, and the only free variable
+    # a budget leaves is how many ways it is cut.
     #
     # The cut is read off the slowest shard on the slowest runner, and the
     # ceiling is twice that reading, the rule `docs/dev/07-tooling-ci.md`
-    # states. The matrix below cuts the pile to about 64 minutes a shard
-    # there, which clears twice under 150 with room for the suite to grow by
-    # a sixth; a suite that grows past that room takes more cuts. A cut costs
+    # states. A suite that grows past that room takes more cuts. A cut costs
     # one more baseline build and no more total work. The alternative --
     # drawing the laws at fewer cases so the sweep fits -- is refused: the
     # sweep follows the suite, never the other way round.
@@ -2195,7 +2193,7 @@ jobs:
       # set that moves with the tool moves the baseline under the ratchet.
       - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         with:
-          tool: cargo-mutants@27.1.0
+          tool: cargo-mutants@27.1.0,cargo-nextest@0.9.145
       - name: Mutation report over the core
         run: |
           # cargo-mutants exit codes: 0 clean, 2 missed mutants, 3 timeouts,
@@ -2212,9 +2210,16 @@ jobs:
           # puts one expensive file in one shard, which leaves a critical path
           # near twice the mean shard. Mutant `i` on shard `i` modulo the count
           # spreads every file across every shard.
+          # A mutant stops at the first test that catches it. `cargo test` runs a
+          # binary's every test to its end whatever fails, and the suite's time
+          # sits in a few property laws, so a caught mutant would pay all of it.
+          # A verdict is whether a test fails, so stopping moves none, and
+          # `tests/test_mutation_scope.py` holds the one thing nextest does not
+          # run: a doctest, of which the core has none.
           cargo mutants --package valgebra-core -j 4 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/48" --sharding round-robin \
-            -- -- --skip deep_subtype_into_bottom_terminates \
+            --test-tool nextest \
+            -- --max-fail 1:immediate -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower \
             --skip a_chain_of_a_hundred_thousand_states_minimizes
           status=$?
