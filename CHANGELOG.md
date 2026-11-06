@@ -13,15 +13,9 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- feat: a step over floats is decided as a set of whole floats
-- feat: a map key is narrowed by a pattern or a length of a str
-- feat: numpy's generic reads as the class met with a record
-- feat: a relation reads a schema of up to 1024 nodes through the sets
-- feat: a rational bound over a float is read at the float on its side
-- feat: a relation builds no complement it does not read
-- fix: importing the package loads no module for its error hooks
-
 -->
+
+## [0.0.24] - 2026-11-06
 
 A release of value universes, with five additions and no node. What a format holds is
 a set of Python values, so JSON's and TOML's are written in the algebra as it stands,
@@ -29,7 +23,18 @@ on a page of their own. The representation reads what such a set is made of: a w
 step over floats, a key narrowed by a pattern or a length, a `Fraction` or `Decimal`
 bound over a float, and a meet of 112 ranges where six ended `undecided`. numpy's
 generic builds as a class met with a record, and the same spelling reads JAX's and
-PyTorch's arrays.
+PyTorch's arrays. PyPy wheels are built for PyPy 8.0 alone, on 3.11 and 3.12.
+
+Against 0.0.23 built here from its tag, on CPython 3.15, the relations asked of the sets
+count 30.26% fewer instructions and the length bounds asked of them 66.52% fewer. The
+core workload, the other decision workloads and every binding shape count within 0.03%,
+and the profiled wheel counts what 0.0.23 counts, to the instruction. On the profiled
+wheels of CPython 3.11 through 3.15 the walk counts what 0.0.23 counts but where an
+allocator moves a shape that allocates, and the largest move that repeats at two sizes
+of the environment is 0.38%, a JSON document nested deep on 3.11, which reads 0.5% fewer
+cycles. On the free-threaded 3.14 and 3.15 a count of a shape of a few thousand
+instructions does not repeat, and the shapes that read higher twice read level in cycles,
+to 2.0% on a wide record, about the spread of one build read against itself.
 
 ### Added
 
@@ -42,8 +47,10 @@ PyTorch's arrays.
 - **A relation reads a wider schema.** The set representation takes a schema of up to
   1024 nodes, where it took 64: a range of JSON integers with 112 others taken out of
   it is decided, in 2.5 ms, where six made it `undecided`. A product is stopped by the
-  work it spends, as it was, and a union's members are joined in rounds, so the shapes
-  that reach those bounds decline in about the time they did.
+  work it spends, as it was, and a union's members are joined in rounds. A union of
+  patterns reads their automata, so one of 300 proves its meet with a complement in
+  about 100 ms where it declined in 13, and one of 512, past the bound, declines in
+  about 110 ms where it took 14.
 
 - **numpy's own generic builds.** `np.ndarray[S, np.dtype[T]]` and `npt.NDArray[T]`
   denote the instances of `np.ndarray` whose `shape` is in `S` and whose elements are
@@ -74,7 +81,7 @@ PyTorch's arrays.
 - **A relation builds less to answer, and declines a little less.** A set's complement is
   built only where it is read: what a list's element leaves, and what one set leaves of
   another, are read a kind at a time, so a kind a set misses costs nothing. The relations
-  of the JSON Schema containment suite read 37% fewer instructions, and what a relation
+  of the JSON Schema containment suite read 38% fewer instructions, and what a relation
   keeps of its allowance decides a few it left `undecided`. No answer it gave moves.
 
 - **PyPy wheels are for PyPy 8.0, on 3.11 and 3.12, on manylinux.** A wheel is published
@@ -4374,7 +4381,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.23...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.24...HEAD
+[0.0.24]: https://github.com/ppigazzini/valgebra/compare/v0.0.23...v0.0.24
 [0.0.23]: https://github.com/ppigazzini/valgebra/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/ppigazzini/valgebra/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/ppigazzini/valgebra/compare/v0.0.20...v0.0.21
