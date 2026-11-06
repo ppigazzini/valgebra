@@ -809,12 +809,11 @@ jobs:
     # that the deep-nesting cases overflow PyPy's C stack, which is a property
     # of the profile rather than of the code, and a release wheel is what ships.
     #
-    # One leg per PyPy series the release ships a wheel for, whichever row builds
-    # it: a musllinux row builds every PyPy its image carries, and no Alpine
-    # image loads one, so a leg here is all that runs a series shipped only
-    # there. `tests/test_release_matrix.py` holds the legs to the series both
-    # ways. The steps read the leg's interpreter as `UV_PYTHON`, which the uv
-    # setup step exports.
+    # One leg per PyPy series the release ships a wheel for, on the PyPy 8.0 the
+    # pinned uv resolves each to, the ABI those wheels carry.
+    # `tests/test_release_matrix.py` holds the legs to the series both ways. The
+    # steps read the leg's interpreter as `UV_PYTHON`, which the uv setup step
+    # exports.
     strategy:
       fail-fast: false
       matrix:
@@ -1252,10 +1251,12 @@ jobs:
           # build requirement against a manifest it fetches on the day, and the
           # wheel is built by whichever maturin is newest.
           maturin-version: "1.16.0"
-          # --find-interpreter builds for every CPython in the manylinux image
-          # that satisfies requires-python; without it maturin looks only for a
-          # `python3` on PATH, which the manylinux container does not provide.
-          args: --release --out dist --find-interpreter
+          # The interpreters the release's row for this image names, which
+          # `tests/test_release_matrix.py` holds equal. With no name maturin looks
+          # only for a `python3` on PATH, which the manylinux container does not
+          # provide, and `--find-interpreter` also builds the PyPy 7.3 this image
+          # carries, a wheel no release ships.
+          args: --release --out dist --interpreter python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t
           manylinux: auto
           # The manylinux container is opaque to Swatinem/rust-cache, so this
           # release build is otherwise uncached. sccache caches compilation via
@@ -1267,8 +1268,8 @@ jobs:
       # extension `maturin develop` builds instead. Each CPython wheel is
       # installed on the interpreter its ABI tag names and imported with every
       # warning an error, so a wheel that builds and does not load fails the
-      # push rather than the release smoke. The PyPy wheel the image also builds
-      # is the `pypy` lane's, which builds and runs one of its own.
+      # push rather than the release smoke. PyPy's wheel is the `pypy` lane's,
+      # which builds and runs one of its own.
       - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.15"

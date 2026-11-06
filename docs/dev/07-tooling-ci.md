@@ -1168,26 +1168,26 @@ release one step names would leave that step skipped on every leg, and a
 skipped step is a green one.
 
 **The manylinux wheel is installed on every push.** The `wheel (linux)` job
-builds the manylinux wheels from the image a release builds them in, then
-installs each CPython wheel on the interpreter its ABI tag names and imports it
-with every warning an error; the PyPy wheel the image also builds is the
-`pypy` lane's, which builds and runs one of its own. The lanes test the extension `maturin develop` builds, so a
+builds the manylinux CPython wheels from the image a release builds them in, by the
+names the release's row gives (`tests/test_release_matrix.py` holds the two equal),
+then installs each wheel on the interpreter its ABI tag names and imports it
+with every warning an error. A PyPy wheel is the `pypy` lane's, which builds and
+runs one of its own. The lanes test the extension `maturin develop` builds, so a
 wheel that builds and does not load would otherwise wait for the release smoke.
 
-**PyPy builds, links, and runs the suite.** The release matrix publishes PyPy
-3.11 wheels for each ABI on manylinux, and on musllinux a wheel for each PyPy
-the image carries (`release.yml` owns the rows), and a push that does not link against
-PyPy cannot see what
+**PyPy builds, links, and runs the suite.** The release matrix publishes a wheel
+for each series PyPy 8.0 implements, on manylinux (`release.yml` owns the rows, and
+[09-releasing.md](09-releasing.md#the-wheels-a-release-builds) says why those), and
+a push that does not link against PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object
 CPython exports, so an extension naming one links on CPython and fails at
 `import` on PyPy. The release smoke runs the product suite on every wheel set
-it ships, the manylinux PyPy ones included and the musllinux sets in Alpine
-containers, except the musllinux PyPy and free-threaded wheels, which no Alpine
-image can load ([09-releasing.md](09-releasing.md)) -- but a release is where a
-break is dearest to find, so the push runs one first, a leg for each PyPy series
-a wheel is built for, and `tests/test_release_matrix.py` holds the legs to the
-series both ways. PyPy 3.12 ships on musllinux alone, so its leg, a glibc build
-of the same source, is what runs that series at all. Each leg of the `pypy`
+it ships, the PyPy ones included and the musllinux sets in Alpine containers,
+except the musllinux free-threaded wheels, which no Alpine image can load
+([09-releasing.md](09-releasing.md)) -- but a release is where a break is dearest
+to find, so the push runs one first, a leg for each PyPy series a wheel is built
+for, and `tests/test_release_matrix.py` holds the legs to the series both ways.
+Each leg of the `pypy`
 job builds a release wheel against its PyPy and runs
 `scripts/pypy_import_check.py` first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the

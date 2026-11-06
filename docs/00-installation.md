@@ -45,8 +45,8 @@ pip install annotated-types typing-extensions pytest fastapi pydantic numpy
 Wheels are published for Linux (manylinux, x86_64 and aarch64), macOS (Intel and
 Apple silicon) and Windows x64 for every supported CPython, 3.11 through 3.15,
 Windows arm64 from 3.12, free-threaded CPython 3.14 and 3.15 on Linux, macOS
-and Windows x64, and [PyPy 3.11](#pypy) on Linux. musllinux (x86_64 and
-aarch64) gets a wheel for each interpreter its build image carries, the set
+and Windows x64, and [PyPy 3.11 and 3.12](#pypy) on manylinux. musllinux (x86_64
+and aarch64) gets a wheel for each CPython its build image carries, the set
 `UNNAMED` in `tests/test_release_matrix.py` records for each musllinux row; an
 Alpine CPython the image does not carry installs from the source distribution.
 Free-threaded support
@@ -79,14 +79,13 @@ assert Validator(int).is_valid(7)
 
 ## PyPy
 
-PyPy 3.11 and 3.12 are targets on Linux. Wheels are published for PyPy 3.11 on
-7.3 and on 8.0 on manylinux x86_64 and aarch64 — two, because PyPy 8.0 changed
-the ABI tag and an installer matches it exactly, so a wheel for one does not
-install on the other — and on musllinux for what the musl build image carries,
-PyPy 3.11 on 7.3 and PyPy 3.12 on 8.0. PyPy 3.12 on glibc installs from the
-source distribution. Every push builds the extension against both, imports it,
-and runs the product suite there, with the repository checks whose answer is the
-interpreter's. Both halves
+PyPy 8.0 is the target, on Python 3.11 and 3.12 and on Linux. A wheel is published
+for each on manylinux x86_64 and aarch64, tagged `pp80`, and an installer matches
+that tag exactly. So PyPy 7.3, and PyPy on musl, macOS or Windows, install from the
+source distribution, which needs a Rust toolchain, and no lane here runs them. Every
+push builds the extension against both series, imports it, and runs the product
+suite there, with the repository checks whose answer is the interpreter's. Both
+halves
 are needed, because the C API PyPy offers is not CPython's: an extension there
 runs through `cpyext`, which carries the limited API and not every static type
 object CPython exports, so naming one of those links fine and fails at `import`
@@ -99,12 +98,10 @@ process dies where the plain build reports the bound. The release runs the
 product suite on every wheel set it ships, on each set's floor, newest and
 free-threaded interpreters, and imports and checks the releases between -- the
 `smoke` and `smoke-musl` matrices in `.github/workflows/release.yml` name them --
-and each PyPy wheel on the PyPy it is built for, not only on the one the push
-lane builds. The musllinux sets run in Alpine containers, which carry no
-free-threaded CPython and no PyPy, so those musllinux wheels are built and not
-loaded (`docs/dev/09-releasing.md` in the repository). There is
-no PyPy wheel for macOS or Windows, where the source distribution is the
-install.
+and each PyPy wheel on its own series, not only on the one the push lane builds.
+The musllinux sets run in Alpine containers, which carry no free-threaded CPython,
+so those musllinux wheels are built and not loaded (`docs/dev/09-releasing.md` in
+the repository).
 
 One promise [What it cannot do](17-boundaries.md#it-holds-what-its-schema-names-and-lets-go-of-it)
 makes holds differently there. A validator releases the

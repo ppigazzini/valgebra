@@ -159,12 +159,11 @@ A test that needs a dependency the environment lacks skips rather than fails, so
 read the skip list: a suite whose oracles are absent has checked less than the
 same suite in a full development environment.
 
-Run it on each PyPy the release builds for as well (`uv venv --python
-pypy@<version>`, the 3.11 release that carries each ABI), because the PyPy
-wheels are different builds: plain rather than profile-guided, since a
-profiled extension crashes there at the walk's depth bound (`release.yml`
-says how), one per ABI tag since PyPy 8.0 changed it, and the push lane's PyPy
-legs run the suite on wheels they build themselves. The release smoke runs the
+Run it on each PyPy series the release builds for as well (`uv venv --python
+pypy@3.11`, `pypy@3.12`), because the PyPy wheels are different builds: plain
+rather than profile-guided, since a profiled extension crashes there at the
+walk's depth bound (`release.yml` says how), and the push lane's PyPy legs run the
+suite on wheels they build themselves. The release smoke runs the
 product suite on every wheel set that ships, PyPy's and the musllinux ones
 included, and `tests/test_release_smoke.py` holds every wheel set the release
 builds to a smoke row that runs it, and every release a build row names to a
@@ -251,6 +250,19 @@ behavior at build time, and `crates/valgebra-py/Cargo.toml` leaves the feature
 unset, so `cargo test` and the workloads link an interpreter as any other
 library does.
 
+**PyPy wheels carry one ABI, PyPy 8.0's.** Each series 8.0 implements, 3.11 and
+3.12, gets a `pp80` wheel on manylinux x86_64 and aarch64, built from the
+manylinux_2_28 image, since 8.0's binaries need glibc 2.27. That is a decision,
+and what stands behind it is a rule: what ships has a lane. The `pypy` job runs
+those two series on every push, on the PyPy 8.0 the pinned uv resolves, so a wheel
+for PyPy 7.3 is one no push runs. An installer matches the ABI tag exactly, so a
+7.3 interpreter installs from the source distribution, and nothing here tests that
+install. The musllinux image builds PyPy wheels too, and the upload leaves them
+out, because no Alpine image carries a PyPy to load them.
+`tests/test_release_matrix.py` holds the rows to that ABI and the series to the
+job's legs, and `tests/test_release_smoke.py` holds the upload and each series'
+smoke. A PyPy series or ABI moves in all three places together.
+
 A dispatch whose publish target is left at none builds the whole matrix as a
 dry run, which is how the matrix is checked before a release.
 
@@ -316,9 +328,9 @@ Each bump costs a companion two commits and a session, so a release batches its 
   Linux x86_64 build. Every other wheel is a build of its own, for another
   platform, architecture or implementation, and no count reads it against the
   release before.
-- **The wheels no smoke can load.** The musllinux cp314t, cp315t, pp311 and pp312
-  wheels are built and not imported: no Alpine image carries a free-threaded
-  CPython or a PyPy, so the first install of any of them is a user's.
+- **The wheels no smoke can load.** The musllinux cp314t and cp315t wheels are
+  built and not imported: no Alpine image carries a free-threaded CPython, so the
+  first install of either is a user's.
 - **A source install off Linux.** `uv pip install` takes the wheel; the sdist
   path is compiled and tested once by the workflow, on Linux, and
   `--no-binary valgebra` locally is the only way to reach it on another

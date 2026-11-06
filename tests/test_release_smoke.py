@@ -16,13 +16,14 @@ ends, an import, one check and the bounds file on the releases between, which
 holds each profile-guided wheel's deepest walk to a 1 MiB thread. A set whose
 build row names no interpreter, the musllinux image building every one it
 carries, is read off its artifact by the smoke itself, which fails on a wheel no
-container loaded unless `UNLOADABLE` names its tag. Each wheel is a build of
-its own, profiled on its own interpreter, so a wheel no smoke row loads is a
-wheel nothing ran. A smoke is the product suite rather than an import, for the
-wheels and for the build from source, and the import it starts with fails on a
-warning. And the PyPy wheel is built in a row of its own, without the profile:
-the rows that carry the profile name their interpreters, and none of them names
-PyPy.
+container loaded unless `UNLOADABLE` names its tag, and the upload leaves its
+PyPy wheels out, since no container can load one. Each wheel is a build of its
+own, profiled on its own interpreter, so a wheel no smoke row loads is a wheel
+nothing ran. A smoke is the product suite rather than an import, for the wheels
+and for the build from source, and the import it starts with fails on a warning.
+And the PyPy wheels are built in a row of their own, without the profile: the
+rows that carry the profile name their interpreters, and none of them names
+PyPy. A PyPy set's smoke row runs the suite on each series its build row names.
 
 LEDGER: every wheel the release builds is loaded, its ends tested; PyPy's is plain
 """
@@ -65,8 +66,6 @@ NOT_SMOKED: dict[str, str] = {}
 UNLOADABLE = {
     "cp314t": "no Alpine image carries a free-threaded CPython",
     "cp315t": "no Alpine image carries a free-threaded CPython",
-    "pypy311_pp73": "no Alpine image carries a PyPy",
-    "pypy312_pp80": "no Alpine image carries a PyPy",
 }
 
 
@@ -131,10 +130,10 @@ def _releases(spelled: str) -> set[str]:
 def test_every_release_a_build_row_names_is_loaded() -> None:
     """A set's smoke row loads every release the set's build row names.
 
-    Read for the CPython rows that name their interpreters. A PyPy set holds
-    one wheel, which the set's own row loads; a row that builds what its image
-    carries names none, and its smoke reads the set off the artifact instead,
-    which the next two tests hold.
+    Read for the CPython rows that name their interpreters. A PyPy set is read
+    by the test after this one; a row that builds what its image carries names
+    none, and its smoke reads the set off the artifact instead, which the tests
+    below hold.
     """
     unloaded: dict[str, list[str]] = {}
     for build in BUILDS:
@@ -156,6 +155,30 @@ def test_every_release_a_build_row_names_is_loaded() -> None:
         f"releases built and never loaded: {unloaded}. Name each in its smoke "
         "row's `imports`, or in `pythons` for the suite."
     )
+
+
+#: A PyPy series as a build row's path spells it and as a smoke row names it.
+_PYPY_BUILT = re.compile(r"pypy3(\d+)_pp\d+")
+_PYPY_LOADED = re.compile(r"pypy@3\.(\d+)")
+
+
+def test_every_pypy_series_a_row_builds_is_loaded() -> None:
+    """A PyPy set's smoke row runs the suite on each series its build row names."""
+    rows = [b for b in BUILDS if str(b.get("variant", "")).startswith("pypy")]
+    assert rows, "no build row builds PyPy"
+    for build in rows:
+        built = set(_PYPY_BUILT.findall(str(build["interpreter"])))
+        loaded = {
+            series
+            for row in SMOKES
+            if row["artifact"] == _artifact(build)
+            for series in _PYPY_LOADED.findall(str(row["pythons"]))
+        }
+        assert built, f"{_artifact(build)} names no PyPy series: {build}"
+        assert loaded == built, (
+            f"{_artifact(build)} builds PyPy 3.{sorted(built)} and its smoke row "
+            f"loads PyPy 3.{sorted(loaded)}"
+        )
 
 
 def _steps(job: str) -> list[dict[str, str]]:
@@ -268,6 +291,18 @@ def test_a_set_its_image_chooses_is_read_off_its_artifact() -> None:
     )
 
 
+def test_a_musllinux_artifact_leaves_its_pypy_wheels_out() -> None:
+    """The image builds PyPy wheels, and the upload keeps them from shipping."""
+    uploads: list[dict] = [
+        step
+        for step in _steps("wheels")
+        if str(step.get("uses", "")).startswith("actions/upload-artifact@")
+    ]
+    assert len(uploads) == 1, uploads
+    paths = str(uploads[0]["with"]["path"]).split()
+    assert paths == ["dist", "!dist/*-pp3*-*musllinux*.whl"], paths
+
+
 def _wheel(tag: str) -> str:
     python = (
         tag.removesuffix("t")
@@ -289,18 +324,18 @@ def _wheel(tag: str) -> str:
                 "cp314t",
                 "cp315",
                 "cp315t",
-                "pypy311_pp73",
-                "pypy312_pp80",
             ],
             0,
         ),
         (["cp311", "cp315", "cp316"], 1),
+        (["cp311", "cp315", "pypy312_pp80"], 1),
         (["cp310", "cp311", "cp315"], 1),
         ([], 1),
     ],
     ids=[
         "the set the release builds",
         "a release the image gained",
+        "a PyPy wheel the upload let through",
         "a release below the floor",
         "an empty artifact",
     ],

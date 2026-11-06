@@ -1451,7 +1451,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
-            "artifact: wheels-ubuntu-26.04-x86_64-pypy73,",
+            "artifact: wheels-ubuntu-26.04-x86_64-pypy80,",
             "artifact: wheels-ubuntu-26.04-x86_64-native,",
         ),
         trips=(
@@ -4067,8 +4067,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            '          maturin-version: "1.16.0"\n          # --find-interpreter',
-            "          # --find-interpreter",
+            '          maturin-version: "1.16.0"\n          # The interpreters the',
+            "          # The interpreters the",
         ),
         trips=("test_every_maturin_fetched_past_the_lock_is_the_locks",),
     ),
@@ -4873,10 +4873,59 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
-            "UNLOADABLE: cp314t cp315t pypy311_pp73 pypy312_pp80",
-            "UNLOADABLE: cp314t cp315 cp315t pypy311_pp73 pypy312_pp80",
+            "UNLOADABLE: cp314t cp315t",
+            "UNLOADABLE: cp314t cp315 cp315t",
         ),
         trips=("test_a_set_its_image_chooses_is_read_off_its_artifact",),
+    ),
+    Plant(
+        # A musllinux set shipping the PyPy wheels its image builds: wheels no
+        # container can load.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "            !dist/*-pp3*-*musllinux*.whl\n",
+            "",
+        ),
+        trips=("test_a_musllinux_artifact_leaves_its_pypy_wheels_out",),
+    ),
+    Plant(
+        # A PyPy series built and smoked nowhere.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            'x86_64-pypy80, pythons: "pypy@3.11 pypy@3.12"',
+            'x86_64-pypy80, pythons: "pypy@3.11"',
+        ),
+        trips=("test_every_pypy_series_a_row_builds_is_loaded",),
+    ),
+    Plant(
+        # A wheel for a PyPy the push lane does not run.
+        "tests/test_release_matrix.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "x86_64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/",
+            "x86_64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp73/",
+        ),
+        trips=("test_every_pypy_wheel_carries_the_abi_of_the_pypy_a_push_runs",),
+    ),
+    Plant(
+        # The push lane's list left behind a release the row builds.
+        "tests/test_release_matrix.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "--interpreter python3.11 python3.12 python3.13",
+            "--interpreter python3.12 python3.13",
+        ),
+        trips=("test_the_push_lane_builds_what_the_release_row_for_its_image_builds",),
     ),
     Plant(
         # The step that reads the set and refuses nothing.

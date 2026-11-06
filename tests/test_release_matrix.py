@@ -18,8 +18,10 @@ And what ships has a lane. A wheel is a separate artifact a caller installs, and
 one no push runs is one nothing exercised until somebody reported it, so each
 free-threaded build the classifiers name is a blocking leg of the `python` job,
 and each PyPy series a wheel is built for is a leg of the `pypy` job, both ways.
-PyPy is read off the build rows and off the tags the musl smoke accepts unloaded,
-since a musllinux row builds whichever PyPy its image carries.
+Those wheels carry one ABI, PyPy 8.0's, so a wheel for an interpreter no push runs
+cannot return unnoticed. The push lane that installs the manylinux wheels builds
+what the release's row for that image builds, by name, so a release reaches it
+when the row does.
 
 LEDGER: every classified release has a wheel or a named gap, and what ships has a lane
 """
@@ -186,22 +188,18 @@ def test_every_row_names_its_interpreters_or_says_why() -> None:
     )
 
 
-#: A PyPy series as a build row's interpreter or a wheel's ABI tag spells it:
-#: `pypy3.11`, `/opt/python/pp311-pypy311_pp80/bin/python`, `pypy312_pp80`.
-_PYPY_SERIES = re.compile(r"pypy3\.?(\d+)")
+#: The ABI every PyPy wheel carries, and the series and ABI a build row's
+#: interpreter spells: `/opt/python/pp311-pypy311_pp80/bin/python`.
+PYPY_ABI = "pp80"
+_PYPY_WHEEL = re.compile(r"pypy3(\d+)_(pp\d+)")
 
 
 def _pypy_shipped() -> set[str]:
     """Give the PyPy series a wheel is built for, as uv names them: `pypy-3.11`."""
-    smoke = read_workflow(WORKFLOWS / "release.yml")["jobs"]["smoke-musl"]
-    spelled = [str(row.get("interpreter", "")) for row in _rows()]
-    spelled += [
-        str(step["env"]["UNLOADABLE"])
-        for step in smoke["steps"]
-        if "UNLOADABLE" in (step.get("env") or {})
-    ]
     return {
-        f"pypy-3.{series}" for text in spelled for series in _PYPY_SERIES.findall(text)
+        f"pypy-3.{series}"
+        for row in _rows()
+        for series, _ in _PYPY_WHEEL.findall(str(row.get("interpreter", "")))
     }
 
 
@@ -232,4 +230,50 @@ def test_every_pypy_series_a_wheel_is_built_for_has_a_leg() -> None:
         f"the pypy job runs {sorted(running)}; the release builds wheels for "
         f"{sorted(shipped)}. A series shipped with no leg is one no push runs: add "
         "the leg to ci.yml, or stop building the wheel."
+    )
+
+
+def test_every_pypy_wheel_carries_the_abi_of_the_pypy_a_push_runs() -> None:
+    """A row builds PyPy by the path naming its ABI, and only that ABI.
+
+    An installer matches the ABI tag exactly, so a wheel for another PyPy is an
+    artifact the `pypy` job, on the PyPy 8.0 the pinned uv resolves, never runs. A
+    row naming a bare `pypy3.11` takes whichever PyPy its image answers to.
+    """
+    rows = [row for row in _rows() if "pypy" in str(row.get("interpreter", "")).lower()]
+    assert rows, "no build row names PyPy"
+    for row in rows:
+        spelled = str(row["interpreter"])
+        abis = {abi for _, abi in _PYPY_WHEEL.findall(spelled)}
+        assert abis == {PYPY_ABI}, (
+            f"{_platform(row)} builds PyPy for {sorted(abis) or spelled}: PyPy wheels "
+            f"carry `{PYPY_ABI}` alone. Name the interpreter by its path under "
+            "`/opt/python`, or move the push lane and this ABI together."
+        )
+        assert len(spelled.split()) == len(_PYPY_WHEEL.findall(spelled)), spelled
+
+
+def test_the_push_lane_builds_what_the_release_row_for_its_image_builds() -> None:
+    """`wheel (linux)` names the interpreters the release's profiled row names.
+
+    It installs every wheel it builds, so a release left out of its list is a
+    wheel a push does not load, and `--find-interpreter` would build the PyPy 7.3
+    the image carries as well.
+    """
+    release = next(
+        row
+        for row in _rows()
+        if row["runner"] == "ubuntu-26.04"
+        and row["target"] == "x86_64"
+        and row.get("pgo")
+    )
+    build = next(
+        step
+        for step in read_workflow()["jobs"]["wheel"]["steps"]
+        if str(step.get("uses", "")).startswith("PyO3/maturin-action@")
+    )
+    args = str(build["with"]["args"])
+    assert args.endswith(f"--interpreter {release['interpreter']}"), (
+        f"the wheel lane builds with `{args}`; the release's row names "
+        f"`{release['interpreter']}`"
     )

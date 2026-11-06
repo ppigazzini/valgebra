@@ -77,6 +77,12 @@ PyTorch's arrays.
   of the JSON Schema containment suite read 37% fewer instructions, and what a relation
   keeps of its allowance decides a few it left `undecided`. No answer it gave moves.
 
+- **PyPy wheels are for PyPy 8.0, on 3.11 and 3.12, on manylinux.** A wheel is published
+  for each series on x86_64 and aarch64, and each runs the product suite on every push and
+  in the release. PyPy 7.3 and PyPy on musl install from the source distribution, which
+  needs a Rust toolchain: no push ran 7.3, and no Alpine image can load a PyPy wheel.
+  Free-threaded 3.14 runs on every push as well.
+
 ### Fixed
 
 - **Importing the package loads less.** It registers no `valgebra._error_hooks` module,

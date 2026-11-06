@@ -107,7 +107,7 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   wheel; the musllinux, Windows arm64 and PyPy wheels are plain builds,
   without the profile's inlining. The release smoke runs the deepest walks on
   a 1 MiB thread on every wheel it loads, which is every wheel it ships but the
-  free-threaded and PyPy musllinux ones, which no Alpine image carries. A
+  free-threaded musllinux ones, which no Alpine image carries. A
   thread given less can run out before the bound does, and the process ends
   with it; a thread an embedding host starts at the 512 KiB pthread default on
   macOS is one. Give a thread that validates deep values 1 MiB or more. This
