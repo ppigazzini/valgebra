@@ -40,10 +40,10 @@ jobs:
     runs-on: ${{ matrix.platform.runner }}
     # Twice the slowest row's reading, rounded up, as a sweep shard's ceiling
     # is twice its slowest shard's: the macOS x86_64 row builds seven
-    # interpreters with a profile each, and read 38 to 50 minutes over four
-    # release runs on macos-26-intel, a four-core Intel VM. A row that reaches the ceiling is canceled with
-    # the release waiting on it.
-    timeout-minutes: 105
+    # interpreters with a profile each, and read 38 to 54 minutes over five
+    # release runs on macos-26-intel, a four-core Intel VM. A row that reaches
+    # the ceiling is canceled with the release waiting on it.
+    timeout-minutes: 110
     strategy:
       fail-fast: false
       matrix:
