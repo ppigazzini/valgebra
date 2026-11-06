@@ -51,6 +51,36 @@ def test_a_dead_internal_link_fails(tmp_path: Path) -> None:
     assert not lint.check_links(page, page.read_text())
 
 
+def test_the_page_an_index_serves_links_by_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    (tmp_path / "docs" / "dev").mkdir(parents=True)
+    (tmp_path / "docs" / "07-json.md").write_text("# JSON\n\n## It holds\n")
+    (tmp_path / "docs" / "dev" / "07-ci.md").write_text("# CI\n")
+    (tmp_path / "SECURITY.md").write_text("here\n")
+    site, tree = lint.SITE_URL, lint.TREE_URL
+
+    for relative in ("docs/07-json.md", "SECURITY.md", "docs/07-json.md#it-holds"):
+        assert lint.check_index_page_links(f"[it]({relative})\n"), relative
+    for held in (
+        f"{site}07-json/",
+        f"{site}07-json/#it-holds",
+        f"{site}llms.txt",
+        f"{tree}SECURITY.md",
+        "https://llmstxt.org",
+        "#a-heading-of-this-page",
+    ):
+        assert not lint.check_index_page_links(f"[it]({held})\n"), held
+    for dead in (
+        f"{site}07-gone/",
+        f"{site}07-json/#gone",
+        f"{site}dev/07-ci/",
+        f"{tree}GONE.md",
+    ):
+        assert lint.check_index_page_links(f"[it]({dead})\n"), dead
+
+
 def test_a_url_is_not_a_link_to_resolve(tmp_path: Path) -> None:
     # The rule is about paths in this tree. An external URL and a mailto are
     # outside it, and treating them as paths would make the check fire on every

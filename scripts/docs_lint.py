@@ -16,6 +16,10 @@ claims:
   ``docs/dev/``, so a published page linking there resolves in the tree and
   answers 404 on the site, where ``mkdocs build --strict`` reports it only at
   INFO. A published page names such a page by its path instead.
+* **A relative path on the page an index serves.** PyPI renders ``README.md`` at
+  the project's own URL, where ``docs/07-json.md`` resolves to nothing, so that
+  page names a page of the site or a file of the tree by its URL. Each such URL
+  is resolved here as a relative link is, to its page, heading or file.
 * **A named path that does not exist.** A ``crates/...``, ``scripts/...``,
   ``tests/...`` or ``.github/...`` path written in prose is a claim about this
   tree. A path holding a placeholder (``*``, ``<``, ``>``, ``...``) is skipped,
@@ -284,6 +288,42 @@ def check_links(path: Path, text: str) -> list[str]:
         if missing:
             problems.append(
                 f"dead anchor {target!r} under {' and '.join(missing)} slugs"
+            )
+    return problems
+
+
+#: The page an index serves as the project's description, at a URL of its own.
+INDEX_PAGE = "README.md"
+#: Where that page finds a page of the site and a file of the tree.
+SITE_URL = "https://ppigazzini.github.io/valgebra/"
+TREE_URL = "https://github.com/ppigazzini/valgebra/blob/main/"
+#: What the site's build writes, which no page in the tree stands for.
+SITE_GENERATED = frozenset({"llms.txt", "llms-full.txt"})
+
+
+def check_index_page_links(text: str) -> list[str]:
+    """Hold the index page's links to URLs, each resolved in this tree."""
+    problems = []
+    for raw in LINK.findall(text):
+        target = raw.split(" ")[0].strip()
+        url, _, anchor = target.partition("#")
+        if url.startswith(TREE_URL):
+            if not (ROOT / url.removeprefix(TREE_URL)).is_file():
+                problems.append(f"dead link {target!r}")
+        elif url.startswith(SITE_URL):
+            name = url.removeprefix(SITE_URL).rstrip("/")
+            page = ROOT / "docs" / f"{name}.md"
+            if name in SITE_GENERATED:
+                continue
+            if not page.is_file() or not _on_the_site(page):
+                problems.append(f"dead link {target!r}")
+            elif anchor and anchor not in _anchors(page, "site"):
+                problems.append(f"dead anchor {target!r} under site slugs")
+        elif url and not url.startswith(("http://", "https://", "mailto:")):
+            problems.append(
+                f"relative link {target!r}: an index serves this page at a URL of "
+                f"its own, where a path resolves to nothing; link {SITE_URL} or "
+                f"{TREE_URL}"
             )
     return problems
 
@@ -1324,6 +1364,7 @@ def main(argv: list[str]) -> int:
         failures += [
             f"{rel}: {problem}"
             for problem in check_links(path, text)
+            + (check_index_page_links(text) if rel.as_posix() == INDEX_PAGE else [])
             + check_named_paths(text, ignored)
             + check_internal_reference(text)
             + check_fences(text)
