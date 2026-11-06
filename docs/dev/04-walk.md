@@ -398,7 +398,8 @@ found against the entries the value holds -- a value holding exactly its
 declared keys has no undeclared key for any clause to govern. **By a scan**
 (`keyed_map_scan`): every entry of the value, each key resolved as the dict
 resolves it -- an exact `str` by its text, any other key as the declared name
-its hash and `==` reach (`declared_position`) -- and each undeclared key read
+its hash and `==` reach (`declared_position`), where the dict answers that name
+with this entry (`the_entry_a_name_finds`) -- and each undeclared key read
 against the clause that covers it. **Explaining**
 (`keyed_map_explain`): the scan that reports every violation rather than the
 first. Which of the first two a record takes is `Undeclared::of` reading the
@@ -516,6 +517,14 @@ every case, and asks the type nothing. `scan_dict` reads its entries from a copy
 on PyPy for a reason of the same kind: a key swapped for another while the scan
 runs Python makes `cpyext`'s `PyDict_Next` fail fatally rather than report it,
 and the copy is a dict nothing else can reach.
+
+**On PyPy a value read from a dict is what a lookup of its key answers.** `PyDict_Next`
+reads each value through a lookup there, so where two keys reach one name and the lookup
+answers one of them, both are read with that key's value and the other's is never seen.
+A field is then paid for by the first read and the second is a key the record does not
+declare, which refuses a member CPython admits: a refusal, on that shape alone, and no
+wrong acceptance. `test_a_field_is_the_entry_the_lookup_finds_and_not_the_first_read`
+holds it on CPython.
 
 **Every container the walk reads answers this way, and for one reason.** A
 schema over a container denotes what the value *holds*, so the reading of it

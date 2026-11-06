@@ -1,5 +1,7 @@
+import itertools
 import sys
 import typing
+from collections.abc import Iterator
 from typing import Annotated, Any, Literal, TypedDict
 
 import pytest
@@ -399,6 +401,147 @@ def test_every_reading_of_a_record_finds_the_key_the_dict_finds() -> None:
             True,
         ]
     assert Validator({"a": int}).is_subtype_of({"a": int, str: int})
+
+
+class _Folded(str):
+    """A `str` that hashes and compares by its folded case, as a header name does."""
+
+    __slots__ = ()
+
+    def __hash__(self) -> int:
+        return hash(self.lower())
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and self.lower() == other.lower()
+
+
+def test_two_keys_reaching_one_name_pay_for_one_field() -> None:
+    """`b` is required, and no key of the dict is `b`.
+
+    `_PlainName("a") == _Folded("A")` is `str`'s answer and `False`, so a dict holds
+    both, and each reaches `"a"`. A count of the keys reaching a required field
+    would take the second for a field no key holds, and a set proved empty would
+    admit the value.
+    """
+    value = {_PlainName("a"): 1, _Folded("A"): 2}
+    assert len(value) == 2
+    assert "b" not in value
+    for record in (
+        {"a": int, "b": int},
+        {"a": int, "b": int, str: int},
+        {"a": int, "b": str, bytes: int},
+    ):
+        assert not Validator(record).is_valid(value), record
+    never = Validator({"a": int, "b": nothing, bytes: int})
+    assert never.is_empty()
+    assert not never.is_valid(value)
+
+
+def test_a_field_is_the_entry_the_lookup_finds_and_not_the_first_read() -> None:
+    """A slot a deleted key left puts a later key first along the probes."""
+
+    class Collides(str):
+        __slots__ = ()
+
+        def __hash__(self) -> int:
+            return hash("a")
+
+        def __eq__(self, other: object) -> bool:
+            return self is other
+
+    value: dict[str, object] = {Collides("x"): 0, _PlainName("a"): "s"}
+    del value[next(iter(value))]
+    value[_Folded("A")] = 1
+    if not isinstance(value["a"], int):
+        pytest.skip("this interpreter's lookup answers with the entry read first")
+    if sys.implementation.name == "pypy":
+        pytest.skip(
+            "`PyDict_Next` reads each value through a lookup: `s` is never read"
+        )
+    assert list(value.values()) == ["s", 1]
+    assert Validator({"a": int, str: str}).is_valid(value)
+    assert Validator({"a": int, str: object}).is_valid(value)
+    assert not Validator({"a": str, str: int}).is_valid(value)
+
+
+def _dicts_over_odd_keys() -> Iterator[dict[Any, object]]:
+    """Every dict of up to three keys reaching `"a"` and `"b"` every way a key can."""
+    keys = [
+        "a",
+        "b",
+        _PlainName("a"),
+        _Folded("A"),
+        _Folded("B"),
+        _NeverEqual("a"),
+        _OtherHash("a"),
+        _EqualToA(),
+        7,
+    ]
+    for size in range(4):
+        for chosen in itertools.combinations(keys, size):
+            for held in itertools.product([1, "s"], repeat=size):
+                yield dict(zip(chosen, held, strict=True))
+
+
+def _read_by_names(
+    fields: dict[str, bool],
+    clause: tuple[type, type] | None,
+    value: dict[Any, object],
+) -> bool:
+    """Each name as the dict answers it, an `int`; every other entry by the clause."""
+    entries = list(value.items())
+    for name, required in fields.items():
+        if name not in value:
+            if required:
+                return False
+            continue
+        found = value[name]
+        if not isinstance(found, int):
+            return False
+        del entries[
+            next(
+                at
+                for at, (key, held) in enumerate(entries)
+                if held is found and hash(key) == hash(name) and key == name
+            )
+        ]
+    if clause is None:
+        return not entries
+    return all(
+        isinstance(k, clause[0]) and isinstance(v, clause[1]) for k, v in entries
+    )
+
+
+def test_every_reading_reads_a_name_as_the_dict_answers_it() -> None:
+    """A field is what the dict answers for its name; any other entry is undeclared.
+
+    The three readings of a record part on nothing here: a record asked for its
+    keys, one scanned, and the explaining walk, which names a real key and never
+    a mutation of a value nothing moved.
+    """
+    readings = (
+        {"a": True},
+        {"a": False},
+        {"a": True, "b": True},
+        {"a": True, "b": False},
+    )
+    clauses = (None, (str, object), (str, int), (str, str), (bytes, int), (int, object))
+    for fields, clause in itertools.product(readings, clauses):
+        spelled: dict[object, object] = {
+            name if required else f"{name}?": int for name, required in fields.items()
+        }
+        if clause is not None:
+            spelled[clause[0]] = clause[1]
+        record = Validator(spelled)
+        for value in _dicts_over_odd_keys():
+            expected = _read_by_names(fields, clause, value)
+            assert record.is_valid(value) == expected, (spelled, value)
+            if expected:
+                record.validate(value)
+                continue
+            with pytest.raises(ValidationError) as info:
+                record.validate(value)
+            assert info.value.code != "mutated_during_validation", (spelled, value)
 
 
 @pytest.mark.xfail(

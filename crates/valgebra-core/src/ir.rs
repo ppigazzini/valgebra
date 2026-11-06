@@ -944,7 +944,10 @@ pub enum Schema {
     /// satisfy. Named fields take precedence over the defaults. That is a
     /// dict's membership in a record type [Cas23, (21)], each clause the
     /// default of the keys it claims, and two clauses claiming one key read as
-    /// a disjunction (`defaults`).
+    /// a disjunction (`defaults`). A field's value is what the dict answers for
+    /// its name, so where two keys of a dict reach one name, which `str`'s `==`
+    /// beside a subclass's own allows, the one the lookup does not find is a key
+    /// no field declares.
     ///
     /// One node subsumes the record, the homogeneous mapping, the heterogeneous
     /// mapping, and their combination: a closed record has no default clause, an

@@ -236,7 +236,9 @@ The soundness is relative to a small, explicit trust base:
 - **A key equal to a declared name is a string.** The walk reads a record's
   keys the way the dict resolves them, in every one of its readings: an object
   of another type that hashes and compares as `"a"` is field `a` wherever
-  `d["a"]` finds it. The relations read a field's key as a `str`, as the
+  `d["a"]` finds it. Two keys of a dict can reach one name, since `str`'s `==`
+  and a subclass's own need not agree: the field is the entry the lookup finds,
+  and the other is a key the record does not declare. The relations read a field's key as a `str`, as the
   typing spec writes a `TypedDict`'s keys, which is what puts a record below a
   mapping keyed by `str`: `{"a": int}` is decided below `dict[str, int]`, and a
   dict whose one key is such an object is in the first and not the second.

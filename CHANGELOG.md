@@ -14,10 +14,21 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a class's kind reads a builtin its order names
+- fix: a required field is paid for by the entry its name finds
 
 -->
 
 ### Security
+
+- **A required field is paid for by the entry its name finds.** A dict can hold two
+  keys that reach one name, since `str`'s `==` and a subclass's own need not agree: with
+  `Plain` a `str` subclass and `Folded` one comparing by its folded case, `{Plain("a"): 1,
+  Folded("A"): 2}` has no key `b`, and `{"a": int, "b": int, str: int}` admitted it, as
+  `{"a": int, "b": nothing, bytes: int}` did while proved empty. The answer was wrong on every
+  release read, 0.0.20 through 0.0.24. Every reading of a record reads a name as the dict
+  answers it, and the other entry as a key no field declares, so `{"a": int, str: str}` admits
+  `{Plain("a"): 1, Folded("A"): "s"}`, and `{"a": object}` refuses a dict holding both keys by
+  naming the extra key, where it named a mutation of a value nothing moved.
 
 - **`np.float64` is a `float` to the relations, as it is to the walk.**
   `intersection(np.float64, float).is_empty()` was `True`, with `np.float64(1.0)` in both;

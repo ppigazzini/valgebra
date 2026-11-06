@@ -4354,6 +4354,109 @@ fn a_tuple_subclass_that_overrides_nothing_is_read_where_it_lies() {
     });
 }
 
+/// A field is what the dict answers for its name, and a second key reaching the
+/// name is a key the record does not declare.
+///
+/// `Plain("a") == Folded("A")` is `str`'s answer and `False`, so a dict holds both,
+/// and each reaches `"a"`. Counted per key, the second pays for a required field no
+/// key holds, and a record with a field of no value admits the dict.
+#[test]
+fn two_keys_reaching_one_name_read_one_field() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Plain(str):\n\
+              \x20   __slots__ = ()\n\
+              class Folded(str):\n\
+              \x20   __slots__ = ()\n\
+              \x20   def __hash__(self):\n\
+              \x20       return hash(self.lower())\n\
+              \x20   def __eq__(self, other):\n\
+              \x20       return isinstance(other, str) and self.lower() == other.lower()\n\
+              class Collides(str):\n\
+              \x20   __slots__ = ()\n\
+              \x20   def __hash__(self):\n\
+              \x20       return hash(\"a\")\n\
+              \x20   def __eq__(self, other):\n\
+              \x20       return self is other\n\
+              def found_second(first, second):\n\
+              \x20   held = {Collides(\"x\"): 0, Plain(\"a\"): first}\n\
+              \x20   del held[next(iter(held))]\n\
+              \x20   held[Folded(\"A\")] = second\n\
+              \x20   return held\n",
+            c"two_keys.py",
+            c"two_keys",
+        )
+        .expect("the module compiles");
+        let two_keys = |first: Bound<'_, PyAny>, second: Bound<'_, PyAny>| {
+            let value = PyDict::new(py);
+            let key = |class: &str, text: &str| {
+                module
+                    .getattr(class)
+                    .expect("the class")
+                    .call1((text,))
+                    .expect("the subclass builds")
+            };
+            value
+                .set_item(key("Plain", "a"), first)
+                .expect("a fresh dict takes a key");
+            value
+                .set_item(key("Folded", "A"), second)
+                .expect("the keys are unequal");
+            assert_eq!(value.len(), 2, "both keys are held");
+            value.into_any()
+        };
+        let one = || PyInt::new(py, 1i64).into_any();
+        let field = |name: &str, schema: Schema| Field {
+            name: name.into(),
+            schema,
+            required: true,
+        };
+        let clause = |key: Schema, value: Schema| MapClause { key, value };
+
+        // No key is `b`, however many reach `a`.
+        let needs_b = Schema::keyed_map(
+            vec![field("a", Schema::Int), field("b", Schema::Int)],
+            vec![clause(Schema::Str, Schema::Int)],
+        );
+        case(py, &needs_b, &two_keys(one(), one()), false);
+
+        // The second entry is read by the clause and not by the field, so a value
+        // the field refuses and the clause takes is admitted.
+        let of_strings = Schema::keyed_map(
+            vec![field("a", Schema::Int)],
+            vec![clause(Schema::Str, Schema::Str)],
+        );
+        let text = PyString::new(py, "s").into_any();
+        case(py, &of_strings, &two_keys(one(), text.clone()), true);
+        case(py, &of_strings, &two_keys(text, one()), false);
+
+        // One object under the two keys: the field reads one of them, and the
+        // other is left to a clause that takes no `str`.
+        let of_bytes = Schema::keyed_map(
+            vec![field("a", Schema::Int)],
+            vec![clause(Schema::Bytes, Schema::Int)],
+        );
+        let shared = one();
+        case(py, &of_bytes, &two_keys(shared.clone(), shared), false);
+
+        // A slot left by a deleted key puts the later key first along the probes,
+        // so the lookup answers with the entry the scan reads second.
+        let found_second = module
+            .getattr("found_second")
+            .expect("the function")
+            .call1(("s", 1i64))
+            .expect("the dict builds");
+        let answered = found_second
+            .get_item("a")
+            .expect("a key reaches the name")
+            .is_instance_of::<PyInt>();
+        if answered {
+            case(py, &of_strings, &found_second, true);
+        }
+    });
+}
+
 /// A record resolves a key the way the dict it reads does.
 ///
 /// The declared names are interned and an exact `str` is compared by text. A

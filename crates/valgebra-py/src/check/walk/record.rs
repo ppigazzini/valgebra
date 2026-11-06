@@ -7,6 +7,7 @@
 //! why these live together and beside rather than inside the dispatcher.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::sync::Arc;
@@ -445,6 +446,16 @@ fn covered(
 struct Names<'a, F> {
     by_text: F,
     interned: Option<&'a [Py<PyString>]>,
+    /// The fields an entry has been read as through a key that is not an exact
+    /// `str`, which no other key writes ([`the_entry_a_name_finds`]).
+    read: RefCell<Vec<usize>>,
+}
+
+/// The entry of `dict` a scan is reading, for [`the_entry_a_name_finds`].
+#[derive(Clone, Copy)]
+struct Entry<'a, 'py> {
+    dict: &'a Bound<'py, PyDict>,
+    value: &'a Bound<'py, PyAny>,
 }
 
 /// The declared field a key resolves to, read the way the dict resolves one.
@@ -458,7 +469,8 @@ struct Names<'a, F> {
 /// the field they reach. Read any other way, the scan and the reading by keys
 /// answer differently for one value -- which of them runs is decided by
 /// whether a clause reads the undeclared keys -- and the explaining walk, which
-/// asks the dict, finds nothing to report and names a mutation.
+/// asks the dict, finds nothing to report and names a mutation. A second key
+/// reaching a name is no field of it ([`the_entry_a_name_finds`]).
 ///
 /// The relations read a field's key as a `str`, so a key of another type that
 /// reaches a name is outside them, which `docs/14-soundness.md` states.
@@ -467,11 +479,12 @@ struct Names<'a, F> {
 /// carry their hashes, and are built from the field otherwise. The questions
 /// run the key's own code: an error reads as not that field, and a fatal
 /// signal is recorded.
-fn declared_position(
-    key: &Bound<'_, PyAny>,
+fn declared_position<'py>(
+    key: &Bound<'py, PyAny>,
     fields: &[Field],
     names: &Names<'_, impl Fn(&str) -> Option<usize>>,
     ctx: Ctx<'_>,
+    entry: Entry<'_, 'py>,
 ) -> Option<usize> {
     let py = key.py();
     if let Ok(text) = key.cast::<PyString>()
@@ -485,7 +498,45 @@ fn declared_position(
             }
         };
     }
-    reached_by(key, fields, names.interned, ctx)
+    let position = reached_by(key, fields, names.interned, ctx)?;
+    the_entry_a_name_finds(position, fields, &names.read, ctx, entry)
+}
+
+/// `position`, where the entry a key reaching it belongs to is the one the dict
+/// answers that field's name with, and `None` where it is another.
+///
+/// Two keys can reach one name: `Plain("a") == Folded("A")` is `str`'s answer,
+/// and `Folded("A") == "a"` the subclass's own, so a dict holds both and both
+/// are equal to `"a"`. A lookup answers with one of them. A field is what the
+/// dict answers for its name, as the reading by keys and the explaining walk
+/// read it, and any other entry is a key the record does not declare, so a
+/// required field is paid for once and by a key the dict finds. A value is the
+/// only thing a lookup hands back, so two entries of one object are told apart
+/// by which was read first. Exact `str` keys never come here: one dict holds two
+/// of them only under two texts.
+#[cold]
+#[inline(never)]
+fn the_entry_a_name_finds(
+    position: usize,
+    fields: &[Field],
+    read: &RefCell<Vec<usize>>,
+    ctx: Ctx<'_>,
+    entry: Entry<'_, '_>,
+) -> Option<usize> {
+    let field = fields.get(position)?;
+    let found = match entry.dict.get_item(&*field.name) {
+        Ok(found) => found?,
+        Err(err) => {
+            record_if_fatal(err, entry.dict.py(), ctx);
+            return None;
+        }
+    };
+    let mut read = read.borrow_mut();
+    if !found.is(entry.value) || read.contains(&position) {
+        return None;
+    }
+    read.push(position);
+    Some(position)
 }
 
 /// [`declared_position`] for a key that is not an exact `str`: the declared
@@ -749,10 +800,15 @@ fn other_keys_reach_names(
     ctx: &Ctx<'_>,
 ) -> bool {
     let ctx = *ctx;
-    let keys = scan_dict(dict, ctx.state, |key, _| {
-        if key.is_instance_of::<PyString>()
-            || reached_by(key, fields, Some(&plan.keys), ctx).is_some()
-        {
+    let names = Names {
+        by_text: |name: &str| plan.by_name.get(name).copied(),
+        interned: Some(&plan.keys),
+        read: RefCell::default(),
+    };
+    let keys = scan_dict(dict, ctx.state, |key, value| {
+        let reaches = !key.is_exact_instance_of::<PyString>()
+            && declared_position(key, fields, &names, ctx, Entry { dict, value }).is_some();
+        if reaches || key.is_instance_of::<PyString>() {
             ControlFlow::Continue(())
         } else {
             ControlFlow::Break(())
@@ -808,6 +864,7 @@ fn keyed_map_matches_py(
             &Names {
                 by_text: |name: &str| plan.by_name.get(name).copied(),
                 interned: Some(&plan.keys),
+                read: RefCell::default(),
             },
         )
     } else {
@@ -827,6 +884,7 @@ fn keyed_map_matches_py(
             &Names {
                 by_text: |name: &str| declared.get(name).copied(),
                 interned: None,
+                read: RefCell::default(),
             },
         )
     }
@@ -1016,7 +1074,7 @@ fn keyed_map_scan(
         let index = if fields.is_empty() {
             None
         } else {
-            declared_position(key, fields, names, ctx)
+            declared_position(key, fields, names, ctx, Entry { dict, value: val })
         };
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
@@ -1481,13 +1539,14 @@ fn undeclared_explained(
             .records
             .get(&(fields.as_ptr() as usize))
             .map(|plan| &plan.keys[..]),
+        read: RefCell::default(),
     };
     // Whether a clause covers a key is asked in a fast walk, whose frame is
     // held for the scan rather than built per key.
     let mut unwritten = Unwritten::default();
     let mut deciding = unwritten.frame(ctx);
     let scan = scan_dict(dict, ctx.state, |key, val| {
-        if declared_position(key, fields, &names, ctx).is_some() {
+        if declared_position(key, fields, &names, ctx, Entry { dict, value: val }).is_some() {
             return ControlFlow::Continue(());
         }
         if covered(defaults, &Value::Py(key), &Value::Py(val), &mut deciding) {
