@@ -42,15 +42,12 @@ Install them to run the examples as printed:
 pip install annotated-types typing-extensions pytest fastapi pydantic numpy
 ```
 
-Wheels are published for Linux (manylinux, x86_64 and aarch64), macOS (Intel and
-Apple silicon) and Windows x64 for every supported CPython, 3.11 through 3.15,
-Windows arm64 from 3.12, free-threaded CPython 3.14 and 3.15 on Linux, macOS
-and Windows x64, and [PyPy 3.11 and 3.12](#pypy) on manylinux. musllinux (x86_64
-and aarch64) gets a wheel for each CPython its build image carries, the set
-`UNNAMED` in `tests/test_release_matrix.py` records for each musllinux row; an
-Alpine CPython the image does not carry installs from the source distribution.
-Free-threaded support
-starts at 3.14t; the earlier 3.13 free-threaded build is not a target.
+Wheels are published for every supported CPython, 3.11 through 3.15, on Linux
+(manylinux and musllinux, x86_64 and aarch64), macOS (Intel and Apple silicon)
+and Windows x64, and from 3.12 on Windows arm64. Free-threaded CPython 3.14 and
+3.15 have wheels on manylinux, musllinux, macOS and Windows x64, and
+[PyPy 3.11 and 3.12](#pypy) on manylinux. Free-threaded support starts at 3.14t;
+the earlier 3.13 free-threaded build is not a target.
 
 ## From source
 
