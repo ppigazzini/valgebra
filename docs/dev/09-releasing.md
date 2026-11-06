@@ -213,7 +213,7 @@ there in the release's place, so the macOS builds find each interpreter in the
 tool cache `setup-python` records it in, under the runner's architecture, and
 ask it which build it is -- a framework path holds only some releases. The
 wheel job's ceiling (`timeout-minutes` in `release.yml`) is twice its slowest
-row's reading, rounded up, which is the macOS x86_64 build: eight interpreters,
+row's reading, rounded up, which is the macOS x86_64 build: seven interpreters,
 each built twice for its profile, on the slowest runner the matrix uses. A row
 that reaches the ceiling is canceled, and the release waits on every row. The
 Windows arm64 smoke runs
