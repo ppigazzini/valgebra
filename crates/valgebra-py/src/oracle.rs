@@ -884,6 +884,22 @@ fn layout_of<'py>(ty: &Bound<'py, PyType>) -> PyResult<(Option<Bound<'py, PyType
         }
         at = base_of(&class)?;
     }
+    // A type defined in C can derive from a builtin it does not lay out on:
+    // numpy's `float64` has `floating` for its `__base__`, `float` on its order,
+    // and a `float`'s storage in its instance. A builtin on the order is one the
+    // instance holds, since `type` refuses an `mro()` naming a base whose layout
+    // the class does not extend. So the two chains part in one direction each: an
+    // order can hide a builtin, which is why the walk above is the first reading,
+    // and cannot add one.
+    if kind.is_none() {
+        for class in mro_of(ty.as_any())?.try_iter()? {
+            let class = class?;
+            if let Some((_, of)) = builtins.iter().find(|(builtin, _)| class.is(builtin)) {
+                kind = Some(*of);
+                break;
+            }
+        }
+    }
     Ok((solid, kind))
 }
 

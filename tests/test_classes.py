@@ -1878,6 +1878,18 @@ class _LaidOutOnInt(int, metaclass=_LeaveIntOut):
     pass
 
 
+@pytest.mark.skipif(not _CPYTHON, reason="PyPy reads no layout off an `mro()`")
+def test_an_order_cannot_add_a_builtin_the_layout_does_not_hold() -> None:
+    """What lets a builtin on a class's order stand for the storage it holds."""
+
+    class AddsInt(type):
+        def mro(cls) -> list[type]:
+            return [cls, int, object]
+
+    with pytest.raises(TypeError, match="unsuitable layout"):
+        AddsInt("Claimed", (), {})
+
+
 class _ReplacedSlot:
     __slots__ = ("x",)
 

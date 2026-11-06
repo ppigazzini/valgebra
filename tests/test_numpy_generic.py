@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 import annotated_types as at
 import pytest
 
-from valgebra import Validator, instance_of, intersection
+from valgebra import Validator, complement, instance_of, intersection
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -276,3 +276,31 @@ def test_the_form_reads_numpys_own_arrays() -> None:
     assert intersection(doubles, typing.NDArray[np.float32]).is_empty()
     with pytest.raises(NotImplementedError, match="names no one scalar type"):
         Validator(typing.NDArray[np.floating])
+
+
+def test_a_float64_is_a_float_to_the_relations_as_to_the_walk() -> None:
+    """Its `__base__` is `floating`, its order names `float`, and it holds a float."""
+    np = pytest.importorskip("numpy")
+
+    class Money(np.float64):
+        pass
+
+    class Rate(float):
+        pass
+
+    class Both(np.float64, Rate):
+        pass
+
+    assert isinstance(np.float64(1.0), float)
+    assert Validator(np.float64).relation_to(float) == "subset"
+    assert Validator(np.float64).relation_to(complement(float)) == "not_subset"
+    assert Validator(list[np.float64]).relation_to(list[float]) == "subset"
+    assert Validator(Money).relation_to(float) == "subset"
+    assert intersection(np.float64, float).is_valid(np.float64(1.0))
+    assert not intersection(np.float64, float).is_empty()
+    assert intersection(Rate, np.float64).is_valid(Both(1.0))
+    assert not intersection(Rate, np.float64).is_empty()
+    # No more than that: every other kind stays apart, and a `float` is no `float64`.
+    assert intersection(np.float64, int).is_empty()
+    assert Validator(float).relation_to(np.float64) == "not_subset"
+    assert Validator(np.float32).relation_to(float) == "not_subset"

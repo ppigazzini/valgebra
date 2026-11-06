@@ -13,7 +13,19 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a class's kind reads a builtin its order names
+
 -->
+
+### Security
+
+- **`np.float64` is a `float` to the relations, as it is to the walk.**
+  `intersection(np.float64, float).is_empty()` was `True`, with `np.float64(1.0)` in both;
+  `np.float64` was `subset` of `complement(float)` and `not_subset` of `float`, and a
+  subclass of `float` was proved disjoint from it beside a class deriving from both.
+  The answers were wrong in 0.0.23 and 0.0.24. Its `__base__` is `floating`, so a reading
+  along the chain found no builtin. A class with none there takes its kind from a builtin
+  its order names, which CPython refuses an `mro()` to add.
 
 ## [0.0.24] - 2026-11-06
 

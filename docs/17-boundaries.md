@@ -220,8 +220,8 @@ program by discipline.
 
 A numpy array is an instance of a class, so `numpy.ndarray` builds as that class and
 reads no element. A scalar belongs where its class derives: `np.float64` subclasses
-`float` and is a `float`, and `np.float32`, `np.int64` and `np.bool_` subclass no
-builtin and are none of `float`, `int` and `bool`:
+`float` and is a `float`, to the relations as to the walk, and `np.float32`, `np.int64`
+and `np.bool_` subclass no builtin and are none of `float`, `int` and `bool`:
 
 ```python
 import numpy as np
@@ -232,6 +232,7 @@ assert Validator(np.ndarray).is_valid(np.zeros(3))
 assert not Validator(list[float]).is_valid(np.zeros(3))
 
 assert Validator(float).is_valid(np.float64(1.0))
+assert Validator(np.float64).is_subtype_of(float)
 assert not Validator(float).is_valid(np.float32(1.0))
 assert not Validator(int).is_valid(np.int64(1))
 assert not Validator(bool).is_valid(np.bool_(True))

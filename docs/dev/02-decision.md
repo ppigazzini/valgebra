@@ -767,7 +767,13 @@ kind, and `Exception` lays none, its instance being `BaseException`'s, so
 `ValueError` and `TypeError` meet in the class deriving from both. A heap type
 defined in C -- `collections.deque`, and `decimal.Decimal` from 3.13 -- is read
 by its own `__slots__`, as a class defined in Python is; PyPy names no size, so
-there a type defined in C is read by its slots alone. All of it is read off what
+there a type defined in C is read by its slots alone. A type defined in C can
+derive from a builtin off that chain: `numpy.float64` has `floating` for its
+`__base__`, `float` on its order and a `float`'s storage. So a class with no builtin
+on the chain takes its kind from a builtin its order names. The two readings are
+not alike: a metaclass's `mro()` can leave a builtin out, and
+CPython's `mro_check` refuses one that adds a base whose layout the class does not
+extend, so what an order names the instance holds. All of it is read off what
 Python built rather than off attributes code assigns: `__base__`, the flags and
 the sizes through `type`'s own descriptors, the chain Python lays an instance
 out along and the one a metaclass's `mro()` does not rewrite, and a slot off the
