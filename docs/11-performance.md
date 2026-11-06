@@ -1113,6 +1113,14 @@ as a list against a length-bounded list of the same element.
   JSON Schema containment suite read 37% fewer instructions on a release build,
   `--decision-sets` 29.82% fewer and `--decision-lengths` 66.37%, and what a
   relation keeps of its allowance decides a few a dearer reading declines.
+- **A language is empty where no state accepts.** Every table a set holds is minimal
+  or the complement of one, so a word reaches every state, and whether the language
+  holds a word is a scan of the accepting flags (`RegularSet::is_empty` in
+  `descr/regular.rs`), where a walk asks a queue of each table a kind holds. A float
+  set read at its own period is read as it stands (`split_at` in `descr/floats.rs`),
+  since a set built at a period holds its classes fitted, and fitting them again
+  finds what it holds. `--decision-steps` reads 23.51% fewer instructions and
+  `--decision-keys` 8.53%, and the containment relations 1.9% fewer.
 
 **A pair's constants are read once per validator, not once per question.**
 Relating two validators pools one's constants into the other's, and the key a

@@ -1688,7 +1688,11 @@ impl RegularSet {
     /// Whether this set holds no word.
     #[must_use]
     pub(crate) fn is_empty(&self) -> bool {
-        self.dfa.is_empty()
+        // Every table here is minimal or the complement of one, so a word reaches
+        // every state, and a language holds a word exactly where a state accepts.
+        let empty = !self.dfa.accepting.contains(&true);
+        debug_assert_eq!(empty, self.dfa.is_empty(), "a state no word reaches");
+        empty
     }
 
     /// Whether this set holds `word`.

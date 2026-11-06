@@ -36,6 +36,8 @@
 //!
 //! [`IntSet`]: super::integers::IntSet
 
+use std::borrow::Cow;
+
 use super::integers::MAX_PERIOD;
 
 /// The floats from `lo` to `hi`, both held.
@@ -639,10 +641,15 @@ impl FloatSet {
 
     /// This set's stepless spans and its spans per residue, read at `modulus`,
     /// a multiple of its own period: the table the pointwise operations take.
-    fn split_at(&self, modulus: i64) -> (Vec<Span>, Vec<Vec<Span>>) {
+    fn split_at(&self, modulus: i64) -> (Cow<'_, [Span]>, Cow<'_, [Vec<Span>]>) {
+        if let Some(stepped) = &self.stepped
+            && stepped.modulus == modulus
+        {
+            return (Cow::Borrowed(&self.spans), Cow::Borrowed(&stepped.classes));
+        }
         let spans = match &self.stepped {
-            Some(_) => self.spans.clone(),
-            None => fitted(Part::Stepless, self.spans.clone()),
+            Some(_) => Cow::Borrowed(self.spans.as_slice()),
+            None => Cow::Owned(fitted(Part::Stepless, self.spans.clone())),
         };
         let classes = (0..modulus)
             .map(|residue| {
@@ -659,7 +666,7 @@ impl FloatSet {
                 fitted(Part::Residue { modulus, residue }, of_class.to_vec())
             })
             .collect();
-        (spans, classes)
+        (spans, Cow::Owned(classes))
     }
 
     /// `op` applied part by part, at the period the two sets share, or `None`
@@ -675,7 +682,7 @@ impl FloatSet {
         let (their_spans, their_classes) = other.split_at(modulus);
         let classes = my_classes
             .iter()
-            .zip(&their_classes)
+            .zip(their_classes.iter())
             .zip(0..)
             .map(|((mine, theirs), residue)| {
                 fitted(Part::Residue { modulus, residue }, op(mine, theirs))

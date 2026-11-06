@@ -266,6 +266,15 @@ impl<G: Guard> Narrowed<G> {
         Some(())
     }
 
+    /// A side's cells and the keys they leave: no cells and every key, for a side
+    /// with no split.
+    fn read(split: Option<&Narrowed<G>>) -> (&[Cell<G>], RegularSet) {
+        match split {
+            Some(split) => (&split.cells, split.rest.clone()),
+            None => (&[], RegularSet::all(Alphabet::Text)),
+        }
+    }
+
     /// The two splits at their common refinement, each cell's field met with what
     /// the other reads there: the rewrite that keeps overlapping patterns disjoint
     /// [HSHP20, §4.1]. An atom holding no split reads its default on every word.
@@ -275,15 +284,11 @@ impl<G: Guard> Narrowed<G> {
         theirs: Option<&Narrowed<G>>,
         their_default: &Field<G>,
     ) -> Option<Box<Narrowed<G>>> {
-        let read = |split: Option<&'_ Narrowed<G>>| match split {
-            Some(split) => (split.cells.clone(), split.rest.clone()),
-            None => (Vec::new(), RegularSet::all(Alphabet::Text)),
-        };
-        let (my_cells, my_rest) = read(mine);
-        let (their_cells, their_rest) = read(theirs);
+        let (my_cells, my_rest) = Self::read(mine);
+        let (their_cells, their_rest) = Self::read(theirs);
         let mut cells = Vec::new();
-        for a in &my_cells {
-            for b in &their_cells {
+        for a in my_cells {
+            for b in their_cells {
                 Self::add(
                     &mut cells,
                     a.keys.intersect(&b.keys)?,
@@ -296,7 +301,7 @@ impl<G: Guard> Narrowed<G> {
                 a.field.meet(their_default)?,
             )?;
         }
-        for b in &their_cells {
+        for b in their_cells {
             Self::add(
                 &mut cells,
                 b.keys.intersect(&my_rest)?,

@@ -1,6 +1,6 @@
 use super::{
-    FloatSet, MAX_PERIOD, Part, STRETCHES, ceiling, gcd, inverse, normalize, stepless_at_or_above,
-    whole_at_or_above,
+    FloatSet, MAX_PERIOD, Part, STRETCHES, ceiling, fitted, gcd, inverse, normalize,
+    stepless_at_or_above, whole_at_or_above,
 };
 use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
@@ -90,6 +90,23 @@ proptest! {
         max_shrink_time: 2_000,
         ..ProptestConfig::default()
     })]
+
+    /// A set stepped at a period holds its classes as fitting them gives them,
+    /// which is what lets it be read at that period as it stands.
+    #[test]
+    fn a_set_at_its_own_period_is_what_fitting_it_gives(a in stepped_set()) {
+        let Some(stepped) = &a.stepped else {
+            return Ok(());
+        };
+        let modulus = stepped.modulus;
+        for (class, residue) in stepped.classes.iter().zip(0..) {
+            prop_assert_eq!(
+                &fitted(Part::Residue { modulus, residue }, class.clone()),
+                class,
+            );
+        }
+        prop_assert_eq!(&fitted(Part::Stepless, a.spans.clone()), &a.spans);
+    }
 
     /// The order is total and agrees with equality, which is all a sort of
     /// guards asks of it. Written by hand here because an endpoint is a
