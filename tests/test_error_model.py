@@ -449,3 +449,37 @@ def test_a_failure_raised_while_handling_another_chains_it() -> None:
     with pytest.raises(ValidationError) as info:
         validator.validate({"a": "x"})
     assert info.value.__context__ is None
+
+
+def test_importing_valgebra_registers_no_module_for_its_error_hooks() -> None:
+    """The hooks are code run in a namespace, and no module stands behind them.
+
+    Built as a module, they would go through `PyImport_ExecCodeModuleEx`, which
+    on PyPy loads `importlib` and `warnings` for every import of the package, and
+    leave a name in `sys.modules` that no file answers to.
+    """
+    listing = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys, valgebra; print('valgebra._error_hooks' in sys.modules)",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert listing.stdout.strip() == "False"
+
+
+def test_a_traceback_through_an_error_hook_names_it() -> None:
+    with pytest.raises(ValidationError) as raised:
+        Validator(int).validate("x")
+    name = "not_an_attribute"
+    with pytest.raises(AttributeError) as missing:
+        getattr(raised.value, name)
+    frames = [
+        (frame.filename, frame.name)
+        for frame in traceback.extract_tb(missing.value.__traceback__)
+    ]
+    assert ("<valgebra error hooks>", "__getattr__") in frames
+    assert vars(ValidationError)["__getattr__"].__module__ == "valgebra._error_hooks"

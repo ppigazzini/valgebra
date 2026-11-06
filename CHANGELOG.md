@@ -19,6 +19,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a relation reads a schema of up to 1024 nodes through the sets
 - feat: a rational bound over a float is read at the float on its side
 - feat: a relation builds no complement it does not read
+- fix: importing the package loads no module for its error hooks
 
 -->
 
@@ -75,6 +76,11 @@ PyTorch's arrays.
   another, are read a kind at a time, so a kind a set misses costs nothing. The relations
   of the JSON Schema containment suite read 37% fewer instructions, and what a relation
   keeps of its allowance decides a few it left `undecided`. No answer it gave moves.
+
+### Fixed
+
+- **Importing the package loads less.** It registers no `valgebra._error_hooks` module,
+  and on PyPy an import loads neither `importlib` nor `warnings`.
 
 ## [0.0.23] - 2026-11-04
 

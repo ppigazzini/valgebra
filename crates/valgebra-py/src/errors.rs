@@ -5,7 +5,9 @@ use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
+use pyo3::types::{
+    PyCode, PyCodeInput, PyCodeMethods, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple,
+};
 use valgebra_core::{PathSegment, Violation};
 
 use crate::codes::{JSON_INVALID, VALIDATION_ERROR};
@@ -314,7 +316,14 @@ fn empty_attribute<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAn
 /// `self` and the hook is called one argument short. The lines below are the
 /// smallest thing that binds; the work stays in Rust.
 pub(crate) fn install_lazy_attributes(py: Python<'_>) -> PyResult<()> {
-    let shim = PyModule::from_code(
+    // A namespace rather than a module. `PyModule::from_code` goes through
+    // `PyImport_ExecCodeModuleEx`, which on PyPy loads `importlib` and `warnings`
+    // for every `import valgebra`, and leaves a module in `sys.modules` that no
+    // file stands behind and no import could find again. `__name__` is what the
+    // two hooks report as their `__module__`.
+    let namespace = PyDict::new(py);
+    namespace.set_item(intern!(py, "__name__"), "valgebra._error_hooks")?;
+    PyCode::compile(
         py,
         c"def make(read, reduce):
     def __getattr__(self, name):
@@ -325,17 +334,17 @@ pub(crate) fn install_lazy_attributes(py: Python<'_>) -> PyResult<()> {
 
     return __getattr__, __reduce__
 ",
-        // The name a traceback through one of these hooks prints, and a name
-        // that says what it is: there is no such file, and a reader who goes
-        // looking for `valgebra/_error_hooks.py` finds nothing. Angle brackets
+        // The name a traceback through one of these hooks prints. Angle brackets
         // are Python's own convention for a code object with no file behind it
         // -- `<string>`, `<stdin>` -- so a frame from here reads as compiled
         // rather than as a module somebody deleted.
         c"<valgebra error hooks>",
-        c"valgebra._error_hooks",
-    )?;
-    let hooks = shim
-        .getattr("make")?
+        PyCodeInput::File,
+    )?
+    .run(Some(&namespace), None)?;
+    let hooks = namespace
+        .as_any()
+        .get_item("make")?
         .call1((
             wrap_pyfunction!(validation_error_getattr, py)?,
             wrap_pyfunction!(validation_error_reduce, py)?,
