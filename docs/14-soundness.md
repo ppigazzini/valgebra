@@ -246,6 +246,19 @@ The soundness is relative to a small, explicit trust base:
   matched, and a dict lookup hands back only the value, so every record would
   be scanned rather than asked for its keys. The case is pinned as a
   known-unsound test.
+- **A `str` key's hash and `==` are those of its text.** A field reads a key by
+  its hash and `==`, as the dict does, and a pattern or a length reads it by its
+  text, and the relations read the two as one: a finite language's words as the
+  keys it holds, and a field's name as a word of a language. A `str` subclass
+  with a `__hash__` or `__eq__` of its own parts them. `{Apart("a"): 1}`, whose
+  `==` is identity, is in `dict[Annotated[str, Regex("a")], int]` and outside
+  `{"a?": int}`, and `{Folded("A"): 1}`, equal to `"a"` by its folded case, is in
+  `{"a": int}` and outside that mapping. Each is read exactly by the walk, and
+  each relation is proved over the keys the assumption holds of, which are every
+  key JSON gives and the `str` subclasses that keep `str`'s hash and `==`. Reading
+  a key's text and what it reaches apart gives up every proof between a record and
+  a mapping narrowed by a language, which is what `properties` beside
+  `patternProperties` asks. The cases are pinned as known-unsound tests.
 - **An enumeration's instances are made through it.** `Color` is decided to be
   the union of its members because the class makes no other instance.
   `object.__new__(Color)` makes one past it: the walk admits it to `Color`,

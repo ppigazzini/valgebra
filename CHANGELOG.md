@@ -20,6 +20,14 @@ answer of its own, or a repair to a change not yet released.
 
 ### Security
 
+- **A proof between a record and a mapping narrowed by a language names what it assumes.**
+  `dict[Annotated[str, Regex("a")], int]` is `subset` of `{"a?": int}`, and `{"a": int}` of
+  that mapping, on 0.0.24 as here. A `str` subclass with a `__hash__` or `__eq__` of its own
+  stands against each: a key of the text `a` no lookup of the name finds, and a key equal to
+  the name holding another text. The answers stay, since refusing them gives up every proof
+  between `properties` and `patternProperties`, over keys JSON gives none of these for; the
+  soundness page states the assumption, and known-unsound tests pin both cases.
+
 - **A required field is paid for by the entry its name finds.** A dict can hold two
   keys that reach one name, since `str`'s `==` and a subclass's own need not agree: with
   `Plain` a `str` subclass and `Folded` one comparing by its folded case, `{Plain("a"): 1,

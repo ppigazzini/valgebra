@@ -288,3 +288,80 @@ def test_a_relation_over_narrowed_keys_answers_as_the_walk_does(
         assert answer != "subset", (a, b)
     if a.is_empty():
         assert not held, a
+
+
+class _Apart(str):
+    """A key of the text `a` that no lookup of the name finds."""
+
+    __slots__ = ()
+
+    __hash__ = object.__hash__
+
+    def __eq__(self, other: object) -> bool:
+        return self is other
+
+
+class _Folded(str):
+    """A key equal to the name `a` whose text is `A`, as a header name is."""
+
+    __slots__ = ()
+
+    def __hash__(self) -> int:
+        return hash(self.lower())
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and self.lower() == other.lower()
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "a language's words are read as the keys it holds, and a key whose hash "
+        "is not its text's is one no lookup of the word finds"
+    ),
+)
+# TRUST: A `str` key's hash and `==` are those of its text.
+def test_a_language_of_one_word_holds_a_key_the_word_does_not_reach() -> None:
+    """The known-unsound case of reading a word as one key."""
+    narrowed, record = (
+        Validator(dict[Annotated[str, Regex("a")], int]),
+        Validator({"a?": int}),
+    )
+    value = {_Apart("a"): 1}
+
+    assert narrowed.is_valid(value), "the pattern reads the text"
+    assert not record.is_valid(value), "and the name reads the hash and the `==`"
+    assert narrowed.relation_to(record) != "subset"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "a field's name is read as a word of a language, and a key equal to the "
+        "name can hold another text"
+    ),
+)
+def test_a_field_holds_a_key_whose_text_is_outside_the_language() -> None:
+    """The known-unsound case of reading a name as its word."""
+    record, narrowed = (
+        Validator({"a": int}),
+        Validator(dict[Annotated[str, Regex("a")], int]),
+    )
+    value = {_Folded("A"): 1}
+
+    assert record.is_valid(value), "the name reads the hash and the `==`"
+    assert not narrowed.is_valid(value), "and the pattern reads the text"
+    assert record.relation_to(narrowed) != "subset"
+
+
+def test_a_key_keeping_the_hash_of_its_text_stands_against_no_proof() -> None:
+    """What the assumption holds of: a subclass with nothing of its own."""
+
+    class Plain(str):
+        __slots__ = ()
+
+    narrowed = Validator(dict[Annotated[str, Regex("a")], int])
+    record = Validator({"a?": int})
+    assert narrowed.relation_to(record) == "subset"
+    assert narrowed.is_valid({Plain("a"): 1})
+    assert record.is_valid({Plain("a"): 1})

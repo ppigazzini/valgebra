@@ -878,7 +878,9 @@ the shape. What is left below is what the descriptor cannot hold.
   by it: two clauses overlap and the map reads the join of their values on the
   refinement of their keys, so `dict[Annotated[str, Regex("x-.*")], str]` is
   decided against `dict[str, str]`, a record naming `x-a` and another clause's
-  keys, as a key narrowed by no pattern is. A key holding any other *part* of a
+  keys, as a key narrowed by no pattern is. A word is one key to these, which
+  [the soundness page assumes](14-soundness.md#what-this-argument-assumes) of a
+  `str` key whose hash and `==` are its text's. A key holding any other *part* of a
   kind has no part to land in
   -- a tuple or a frozenset of narrower elements; a class; the complement of
   `Literal["a"]`, which holds a `str` subclass's key equal to `"a"` and not the

@@ -53,7 +53,9 @@
 //! splits at their common refinement. A cell holding few keys is not read as
 //! having a fresh one: the hypothesis [Cas23, §4.4] states for [Cas23, Lem. 4.7],
 //! that a key type is infinite, is met by a cell's holding more keys than the atom
-//! can use, and its keys are pinned otherwise, as a finite part's are.
+//! can use, and its keys are pinned otherwise, as a finite part's are. A word is
+//! one key to this, and a label a word of a language: true of a key whose hash and
+//! `==` are its text's, and named in `docs/14-soundness.md` for one whose are not.
 
 use std::collections::{BTreeMap, BTreeSet};
 
