@@ -1008,7 +1008,7 @@ UNREACHED = {
     "python": (
         "the floor is built and the product suite runs on it; what is left "
         "unread is every release between the floor and the caller's, the "
-        "newest release, and the free-threaded build"
+        "newest release, and the free-threaded builds"
     ),
     "bench": "cachegrind and a base built beside the head",
     "bench-free-threaded": "the optimized wheel, and a second interpreter",

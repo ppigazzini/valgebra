@@ -435,16 +435,17 @@ jobs:
     # 3.15 is the newest supported release. 3.16 is the release in development:
     # a leg from its first alpha, forgiven by the `continue-on-error` below
     # until its first release candidate freezes the ABI, so a break shows a year
-    # early and blocks no merge. 3.15t (free-threaded) is a supported lane: the
-    # extension declares `gil_used = false`, imports without re-enabling the
-    # GIL -- `test_a_free_threaded_build_keeps_the_gil_off_after_import`
-    # fails the lane if it does, where the parallel tests would only skip -- and
-    # the concurrency test exercises true parallel validation there.
+    # early and blocks no merge. 3.14t and 3.15t (free-threaded) are supported
+    # lanes: the extension declares `gil_used = false`, imports without
+    # re-enabling the GIL --
+    # `test_a_free_threaded_build_keeps_the_gil_off_after_import` fails the lane
+    # if it does, where the parallel tests would only skip -- and the
+    # concurrency test exercises true parallel validation there.
     #
-    # Every release the package supports runs on every event, and its
-    # free-threaded build at the newest release, 3.15. The cp314t build's wheel
-    # is run by the release's smoke, and no leg here runs the suite on it or
-    # times it. The release ships a wheel built per
+    # Every release the package supports runs on every event, and so does its
+    # free-threaded build from 3.14, the first PEP 779 supports:
+    # `tests/test_release_matrix.py` holds each one the classifiers name to a
+    # blocking leg. The release ships a wheel built per
     # version against a version-specific ABI, so each one is a separate
     # artifact a caller installs, and a lane that does not run is a wheel
     # nothing exercised until somebody reported it. Sampling the ends
@@ -456,7 +457,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-26.04]
-        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15", "3.15t", "3.16"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.14t", "3.15", "3.15t", "3.16"]
         # One representative interpreter on macOS and Windows, the newest
         # supported release, so the binding, the membership walk, the JSON path,
         # and the error model are exercised on every OS the release ships wheels
@@ -501,8 +502,8 @@ jobs:
           # incompatible module (not a stable-ABI wheel), the compiled extension
           # is ABI-specific per interpreter. Sharing one `target/` lets a leg
           # restore a `pyo3-ffi` build made for a different ABI — Cargo sees the
-          # sources unchanged and skips the rebuild — so the free-threaded (3.15t)
-          # leg can link against with-GIL FFI layout and fail at import with
+          # sources unchanged and skips the rebuild — so a free-threaded leg
+          # can link against with-GIL FFI layout and fail at import with
           # "init function of _valgebra returned uninitialized object". Key the
           # cache on the interpreter (and OS) so each ABI keeps its own build,
           # and on whose build it is: uv's rather than the image's 3.12.

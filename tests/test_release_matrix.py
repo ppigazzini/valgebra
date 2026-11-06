@@ -14,7 +14,11 @@ free-threaded build from the first release that supports one, or the gap is
 named with its reason; every gap is one the matrix has; and a row that leaves
 its interpreters to the build image says so by name.
 
-LEDGER: every classified release has a wheel on every platform, or a named gap
+And what ships has a lane. A wheel is a separate artifact a caller installs, and
+one no push runs is one nothing exercised until somebody reported it, so each
+free-threaded build the classifiers name is a blocking leg of the `python` job.
+
+LEDGER: every classified release has a wheel or a named gap, and what ships has a lane
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ import re
 
 import pytest
 
+from _expressions import forgives, legs
 from _toml import load
 from _tree import ROOT, WORKFLOWS, read_workflow
 
@@ -175,4 +180,22 @@ def test_every_row_names_its_interpreters_or_says_why() -> None:
     assert unnamed == set(UNNAMED), (
         f"rows leaving their interpreters to the image: {sorted(unnamed)}; "
         f"excused: {sorted(UNNAMED)}"
+    )
+
+
+def test_every_free_threaded_build_the_classifiers_name_is_a_blocking_leg() -> None:
+    job = read_workflow()["jobs"]["python"]
+    blocking = {
+        leg["matrix.python-version"]
+        for leg in legs(job)
+        if leg["matrix.python-version"].endswith("t")
+        and not forgives(job.get("continue-on-error"), leg)
+    }
+    classified = {release for release in _classified() if release.endswith("t")}
+    assert classified, "no free-threaded build is classified to hold"
+    assert blocking == classified, (
+        f"the python job blocks on the free-threaded builds {sorted(blocking)}; the "
+        f"classifiers name {sorted(classified)}. A release's free-threaded build "
+        "is a wheel of its own, supported from 3.14: give each one a leg in ci.yml "
+        "that is not forgiven, and no other."
     )

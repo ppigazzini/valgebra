@@ -188,7 +188,7 @@ for and misses the other. The ledgers:
 | `tests/test_constraint_matrix.py` | every constraint is driven against every kind, narrowing it or refused |
 | `tests/test_python_lifecycle.py` | every supported interpreter is one CPython's calendar supports today |
 | `tests/test_release_smoke.py` | every wheel the release builds is loaded, its ends tested; PyPy's is plain |
-| `tests/test_release_matrix.py` | every classified release has a wheel on every platform, or a named gap |
+| `tests/test_release_matrix.py` | every classified release has a wheel or a named gap, and what ships has a lane |
 | `tests/test_sdist.py` | the source distribution carries every build input and nothing else |
 | `tests/test_oracle_ledger.py` | every question the core asks the oracle is on the decision page, and every reading that refutes |
 | `tests/test_module_direction.py` | the definition, the term and the membership walk import nothing from the structural procedure |
@@ -785,7 +785,7 @@ skip for that reason -- five items, since the one about a container written
 underneath a walk is parametrized over the shapes that can move -- the arms they
 would drive sit in the sequence and record walks,
 and the binding's coverage lane runs on a single-threaded release. So those
-arms are executed on the free-threaded leg of the python matrix and *measured*
+arms are executed on the free-threaded legs of the python matrix and *measured*
 nowhere: the figure the lane prints is a figure about the interpreter it ran on.
 Naming that here is the honest reading, because the alternative -- a second
 instrumented build per push -- buys a number for arms the matrix already drives.

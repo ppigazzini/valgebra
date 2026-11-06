@@ -1222,8 +1222,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            '"3.12", "3.13", "3.14", "3.15"',
-            '"3.12", "3.14", "3.15"',
+            '"3.12", "3.13", "3.14", ',
+            '"3.12", "3.14", ',
         ),
         trips=("test_the_matrix_blocks_on_every_supported_release_and_no_other",),
     ),
@@ -3544,10 +3544,51 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            '"3.15", "3.15t", ',
-            '"3.15", ',
+            '"3.14", "3.14t", "3.15", "3.15t", ',
+            '"3.14", "3.15", ',
         ),
         trips=("test_every_supported_interpreter_runs_on_every_event",),
+    ),
+    Plant(
+        # One release's free-threaded build dropped, with another left to answer
+        # the classifiers: a wheel that ships and no push runs.
+        "tests/test_release_matrix.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(tree, ".github/workflows/ci.yml", '"3.14t", ', ""),
+        trips=(
+            "test_every_free_threaded_build_the_classifiers_name_is_a_blocking_leg",
+        ),
+    ),
+    Plant(
+        # A free-threaded build forgiven, so its red blocks nothing.
+        "tests/test_release_matrix.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "    continue-on-error: ${{ matrix.python-version == '3.16' }}\n"
+            "    steps:\n",
+            "    continue-on-error: ${{ matrix.python-version == '3.16' || "
+            "matrix.python-version == '3.14t' }}\n"
+            "    steps:\n",
+        ),
+        trips=(
+            "test_every_free_threaded_build_the_classifiers_name_is_a_blocking_leg",
+        ),
+    ),
+    Plant(
+        # A free-threaded build of a release no free-threaded wheel is built for.
+        "tests/test_release_matrix.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '"3.13", "3.14", ',
+            '"3.13", "3.13t", "3.14", ',
+        ),
+        trips=(
+            "test_every_free_threaded_build_the_classifiers_name_is_a_blocking_leg",
+        ),
     ),
     Plant(
         # The push lane sweeping the whole list whichever file a change

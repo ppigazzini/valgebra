@@ -1121,7 +1121,12 @@ first alpha to its first candidate, as
 each follows, and the floor `requires-python` claims to the oldest of them;
 `test_every_supported_interpreter_runs_on_every_event` in
 `tests/test_required_jobs.py` holds that the job runs on every event and that
-the free-threading classifier has a free-threaded leg behind it.
+the free-threading classifier has a free-threaded leg behind it. Each
+free-threaded build the classifiers name is a blocking leg, from 3.14, the first
+PEP 779 supports, and `tests/test_release_matrix.py` holds the two sets equal,
+so a release's free-threaded build gains its leg when the calendar classifies
+the release. The timed lanes read the newest of them alone: a figure is a claim
+about one interpreter, and a leg here is a claim that the wheel works.
 
 **One leg carries the history, and its name says so.** `actions/checkout`
 takes one commit and no tags, and the checks that read `git log` back to the

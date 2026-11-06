@@ -260,7 +260,8 @@ dry run, which is how the matrix is checked before a release.
 supported from its first release candidate, when its ABI freezes, to the end of
 the month its schedule PEP gives for its last security release. Each supported
 release is a blocking leg of the `python` job in `ci.yml` and a classifier in
-`pyproject.toml`, and the oldest is the floor that `requires-python`, ruff's
+`pyproject.toml`, its free-threaded build is a blocking leg from 3.14, the first
+PEP 779 supports, and the oldest is the floor that `requires-python`, ruff's
 `target-version`, the ty and mypy floor steps and `tests/floor_names.json` name.
 So the first release after a version's support ends drops it, and the first
 release after the next one's first candidate supports it.
@@ -288,7 +289,8 @@ from a table of the schedule PEPs' dates. It turns red on the calendar, with no
 commit, and its message names the edit. It does not read the wheels
 `release.yml` builds: `tests/test_release_matrix.py` holds each platform's list
 to the classifiers the calendar moves, with the gaps the platforms set named
-and a row that leaves its interpreters to the build image named too.
+and a row that leaves its interpreters to the build image named too, and each
+free-threaded build to a leg.
 
 ## A companion reads the release
 
