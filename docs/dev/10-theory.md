@@ -761,7 +761,7 @@ no work on the shelf states it:
 | where | the construction | the work it belongs to |
 |---|---|---|
 | `crates/valgebra-core/src/descr/integers.rs` | eventually periodic sets as an interval set per residue class, two periods meeting at their least common multiple | the ultimately periodic sets, which are the **one-variable fragment of Presburger arithmetic**. The representation is semilinear rather than automaton-based |
-| `crates/valgebra-core/src/descr/floats.rs` | closed intervals of floats with `nan` held apart in a bit of its own, an open end written as the neighboring float and `-0.0` read as `0.0` | the order of IEEE 754 doubles, which are discrete: a union of closed intervals is the integers' representation without the residues |
+| `crates/valgebra-core/src/descr/floats.rs` | closed intervals of floats with `nan` held apart in a bit of its own, an open end written as the neighboring float and `-0.0` read as `0.0`, and once a step touches a set, one list of intervals per residue class of the whole floats beside the floats no step holds, the next float of a class found by solving a congruence in each stretch of equally spaced floats | the order of IEEE 754 doubles, which are discrete: a union of closed intervals is the integers' representation, and the residues are theirs over the whole floats, which run out |
 
 **Why they are described and not cited.** A citation here is held to the rule the
 rest of the page is: the theorem was read, and matched to what the code does. For
@@ -970,10 +970,11 @@ HELD-BY: the_complement_laws_hold_of_the_top_however_it_is_spelled, no_relation_
 **Each kind's representation is closed under the three operations, and its top
 denotes what the table says.** Union, intersection and complement stay inside
 each kind's representation -- interval sets with a residue class per step for
-integers, closed intervals of floats with `nan` held apart in a bit of its own, a
-minimal automaton per word kind, a symbolic automaton for sequences, a union of
-lines for sets, labeled fields with a default per key kind for dicts, a class
-lattice for instances -- and the lattice laws hold of each against membership.
+integers, closed intervals of floats with `nan` held apart in a bit of its own and
+a residue class per step over the whole ones, a minimal automaton per word kind, a
+symbolic automaton for sequences, a union of lines for sets, labeled fields with a
+default per key kind and a split of the `str` keys for dicts, a class lattice for
+instances -- and the lattice laws hold of each against membership.
 Each top is checked at the value that decides it: the ends of the integer
 carrier, `nan`, the newline, the empty container. **[LOAD-BEARING: each-kind-is-closed]**
 
