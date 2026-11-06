@@ -565,12 +565,15 @@ def test_no_float_lies_between_a_decimal_and_the_float_next_to_it() -> None:
         == "subset"
     )
     # Under the trap the comparison raises, so the operand is not read, and the
-    # relation declines rather than raising.
+    # relation declines rather than raising. A value no bound above equals, since
+    # `typing` caches an `Annotated` by its metadata's `==`, and `Ge(0.5)` is
+    # `Ge(Decimal("0.5"))` to that cache.
     with localcontext() as context:
         context.traps[FloatOperation] = True
         trapped = Validator(Annotated[float, at.Ge(0.25)])
         assert (
-            trapped.relation_to(Annotated[float, at.Ge(Decimal("0.5"))]) == "undecided"
+            trapped.relation_to(Annotated[float, at.Ge(Decimal("0.625"))])
+            == "undecided"
         )
 
 
