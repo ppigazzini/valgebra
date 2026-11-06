@@ -299,6 +299,26 @@ def test_a_job_hands_its_steps_the_interpreter_its_uv_setup_names() -> None:
                     {"name": "after", "run": "uv sync"},
                 ]
             },
+            "cpython legs": {
+                "strategy": {"matrix": {"python-version": ["3.12", "pypy-3.11"]}},
+                "steps": [
+                    {
+                        "uses": "$/.github/actions/setup-uv",
+                        "with": {"python-version": "${{ matrix.python-version }}"},
+                    },
+                    {"name": "after", "run": "uv sync"},
+                ],
+            },
+            "pypy legs": {
+                "strategy": {"matrix": {"python-version": ["pypy-3.11", "pypy-3.12"]}},
+                "steps": [
+                    {
+                        "uses": "$/.github/actions/setup-uv",
+                        "with": {"python-version": "${{ matrix.python-version }}"},
+                    },
+                    {"name": "after", "run": "uv sync"},
+                ],
+            },
             "unnamed": {
                 "steps": [
                     {"uses": "$/.github/actions/setup-uv"},
@@ -313,6 +333,10 @@ def test_a_job_hands_its_steps_the_interpreter_its_uv_setup_names() -> None:
     assert named["theirs"]["UV_PYTHON"] == "3.12"
     leg = {name: env for name, _, env in gate.steps(spec, "leg")}
     assert leg["after"]["UV_PYTHON"] == gate.caller_release()
+    cpython = {name: env for name, _, env in gate.steps(spec, "cpython legs")}
+    assert cpython["after"]["UV_PYTHON"] == gate.caller_release()
+    implementation = {name: env for name, _, env in gate.steps(spec, "pypy legs")}
+    assert implementation["after"]["UV_PYTHON"] == "pypy-3.11"
     release = {
         "jobs": {
             "job": {

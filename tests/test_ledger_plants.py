@@ -2432,7 +2432,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "scripts/gate.py",
-            "            uv_python = setup_uv_python(step) or uv_python\n",
+            "            uv_python = setup_uv_python(step, matrix) or uv_python\n",
             "",
         ),
         trips=("test_a_job_hands_its_steps_the_interpreter_its_uv_setup_names",),
