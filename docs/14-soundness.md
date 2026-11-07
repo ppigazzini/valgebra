@@ -335,7 +335,16 @@ The soundness is relative to a small, explicit trust base:
   "exactly `int`" from "an `int` or a subclass". The set representation has that
   class for a literal, which is the constant at its exact type, and a bound is
   not read through it: a bound holds of the subclasses too. The case is pinned
-  as a known-unsound test rather than left unwritten. The bound's own operand
+  as a known-unsound test rather than left unwritten. A step rests on the value's
+  `%` the same way: `Annotated[float, MultipleOf(1), Gt(0.0), Lt(1.0)]` is decided
+  empty, and a `float` subclass whose `__mod__` answers `0.0` is admitted by it, a
+  method answering one thing every call. A class need not set out to do this:
+  `np.float64(2.0**53) >= 2**53 + 1` is `True` where the `float` of that value
+  answers `False`, since numpy converts the `int` to a float first, and
+  `np.float64(2.0) > -(10**400)` raises where the `float` answers `True`. So over
+  an integer bound past `2**53` or past a float's range, a relation over `float`
+  holds of the `float`s that compare as `float` does; JSON's `maximum` can be such
+  a bound. The bound's own operand
   is another matter, and is not trusted: a builtin subclass whose `__eq__` or
   order is its own is read by the walk through the builtin's storage or its
   reflected method, so two bounds are compared only where each operand keeps

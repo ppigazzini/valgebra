@@ -238,6 +238,11 @@ assert not Validator(int).is_valid(np.int64(1))
 assert not Validator(bool).is_valid(np.bool_(True))
 ```
 
+A bound over `float` asks the value, so `np.float64` answers it by numpy's comparison,
+which converts an `int` to a float first: the relations read a bound past `2**53` as
+`float` does, and
+[the soundness page](14-soundness.md#what-this-argument-assumes) names the difference.
+
 numpy's own generic reads what it names. `np.ndarray[S, np.dtype[T]]` denotes the
 instances of `np.ndarray` whose `shape` is in `S` and whose elements are `T`'s, read
 by the `kind` and the width of its dtype. So a byte order is storage and reads alike,

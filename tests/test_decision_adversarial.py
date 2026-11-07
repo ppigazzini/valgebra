@@ -860,6 +860,50 @@ class _WeirdInt(int):
         return True
 
 
+class _OwnStepFloat(float):
+    """A `float` whose `%` answers zero, one thing on every call."""
+
+    def __mod__(self, other: object) -> float:
+        return 0.0
+
+
+class _OwnStepInt(int):
+    """An `int` whose `%` answers zero, one thing on every call."""
+
+    def __mod__(self, other: object) -> int:
+        return 0
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "a step's meet with bounds is read off the builtin's residues, and the walk "
+        "asks the value's own `%`, which a subclass can answer alike on every call"
+    ),
+)
+@pytest.mark.parametrize(
+    ("schema", "value"),
+    [
+        pytest.param(
+            Annotated[float, at.MultipleOf(1), at.Gt(0.0), at.Lt(1.0)],
+            _OwnStepFloat(0.5),
+            id="float",
+        ),
+        pytest.param(
+            Annotated[int, at.MultipleOf(2), at.Ge(1), at.Le(1)],
+            _OwnStepInt(1),
+            id="int",
+        ),
+    ],
+)
+def test_a_step_met_with_bounds_rests_on_the_values_own_remainder(
+    schema: object, value: object
+) -> None:
+    """The known-unsound case of a value with a `%` of its own."""
+    assert Validator(schema).is_valid(value), "the walk asks the value's `%`"
+    assert Validator(schema).relation_to(nothing) != "subset"
+
+
 @pytest.mark.xfail(
     strict=True,
     reason=(

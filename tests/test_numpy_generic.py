@@ -304,3 +304,23 @@ def test_a_float64_is_a_float_to_the_relations_as_to_the_walk() -> None:
     assert intersection(np.float64, int).is_empty()
     assert Validator(float).relation_to(np.float64) == "not_subset"
     assert Validator(np.float32).relation_to(float) == "not_subset"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "numpy compares an `int` rounded to a float, where a `float` compares it "
+        "exactly, and a bound past 2**53 is read as a `float` reads it"
+    ),
+)
+def test_a_float64_compares_a_bound_past_the_doubles_as_numpy_does() -> None:
+    """The known-unsound case of a comparison a subclass answers its own way."""
+    np = pytest.importorskip("numpy")
+    above, past = (
+        Annotated[float, at.Ge(2**53 + 1)],
+        Annotated[float, at.Gt(2.0**53)],
+    )
+    value = np.float64(2.0**53)
+    assert Validator(above).is_valid(value), "numpy reads the bound as 2.0**53"
+    assert not Validator(past).is_valid(value), "and no float is past itself"
+    assert Validator(above).relation_to(past) != "subset"

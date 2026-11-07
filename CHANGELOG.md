@@ -22,6 +22,12 @@ answer of its own, or a repair to a change not yet released.
 
 ### Security
 
+- **What a relation over a float's bound or a step assumes of a subclass is stated.** A step met
+  with bounds is proved empty over the builtin's residues, and a subclass with a `%` of its own
+  is admitted by it, and `np.float64` compares an integer past `2**53` rounded where the bound is
+  read exactly. Both answers stay, inside the assumption the soundness page names, and
+  known-unsound tests pin them.
+
 - **A proof between a record and a mapping narrowed by a language names what it assumes.**
   `dict[Annotated[str, Regex("a")], int]` is `subset` of `{"a?": int}`, and `{"a": int}` of
   that mapping, on 0.0.24 as here. A `str` subclass with a `__hash__` or `__eq__` of its own
