@@ -1114,6 +1114,12 @@ as a list against a length-bounded list of the same element.
   JSON Schema containment suite read 37% fewer instructions on a release build,
   `--decision-sets` 29.82% fewer and `--decision-lengths` 66.37%, and what a
   relation keeps of its allowance decides a few a dearer reading declines.
+- **A step's table is charged by what it holds.** An operation over a
+  `MultipleOf`'s table reads a list per residue, so one unit of a build's allowance
+  bought up to 4,096 lists and each automaton edge kept them. A unit per thousand
+  residues and spans leaves every table under that at no charge, and two list
+  bounds over a step of 4096 decline in under a second, where they read for a
+  minute, kept gigabytes, and ended a process short of memory.
 - **A language is empty where no state accepts.** Every table a set holds is minimal
   or the complement of one, so a word reaches every state, and whether the language
   holds a word is a scan of the accepting flags (`RegularSet::is_empty` in

@@ -38,6 +38,7 @@
 
 use std::borrow::Cow;
 
+use super::budget;
 use super::integers::MAX_PERIOD;
 
 /// The floats from `lo` to `hi`, both held.
@@ -409,6 +410,14 @@ struct Stepped {
     classes: Vec<Vec<Span>>,
 }
 
+impl Stepped {
+    /// The residues and spans this table holds, which is what an operation over
+    /// it reads ([`budget::TABLE_ENTRIES`]).
+    fn entries(&self) -> usize {
+        self.classes.len() + self.classes.iter().map(Vec::len).sum::<usize>()
+    }
+}
+
 /// A set of floats.
 #[derive(Debug, Clone)]
 pub(crate) struct FloatSet {
@@ -680,7 +689,7 @@ impl FloatSet {
         let modulus = common_period(self.period(), other.period())?;
         let (my_spans, my_classes) = self.split_at(modulus);
         let (their_spans, their_classes) = other.split_at(modulus);
-        let classes = my_classes
+        let classes: Vec<Vec<Span>> = my_classes
             .iter()
             .zip(their_classes.iter())
             .zip(0..)
@@ -688,10 +697,11 @@ impl FloatSet {
                 fitted(Part::Residue { modulus, residue }, op(mine, theirs))
             })
             .collect();
-        Some(FloatSet {
+        let stepped = Stepped { modulus, classes };
+        budget::spend_on_a_table(stepped.entries()).then(|| FloatSet {
             spans: fitted(Part::Stepless, op(&my_spans, &their_spans)),
             nan,
-            stepped: Some(Box::new(Stepped { modulus, classes })),
+            stepped: Some(Box::new(stepped)),
         })
     }
 
@@ -801,6 +811,9 @@ impl FloatSet {
             }
             .canonical();
         };
+        // The answer is not read here: an allowance this exhausts refuses the
+        // next charge, which is the one that can refuse.
+        let _ = budget::spend_on_a_table(stepped.entries());
         let modulus = stepped.modulus;
         let classes = stepped
             .classes

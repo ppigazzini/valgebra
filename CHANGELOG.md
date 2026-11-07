@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a class's kind reads a builtin its order names
 - fix: a required field is paid for by the entry its name finds
+- fix: a build pays for a step's table by what it holds
 
 -->
 
@@ -45,6 +46,16 @@ answer of its own, or a repair to a change not yet released.
   The answers were wrong in 0.0.23 and 0.0.24. Its `__base__` is `floating`, so a reading
   along the chain found no builtin. A class with none there takes its kind from a builtin
   its order names, which CPython refuses an `mro()` to add.
+
+### Fixed
+
+- **A relation over a large step keeps to the memory it may have.** A `MultipleOf`'s table
+  holds a list per residue, and an operation over it counted as one step of a build: two list
+  bounds over a union of ranges beside a step of 4096, in about fifty nodes, read for over a
+  minute, kept 6.4 GB, and under a limit on memory ended the interpreter with no exception,
+  from 0.0.23 over integers and from 0.0.24 over floats. A build pays for a table by the
+  residues and spans it holds, so such a pair declines within seconds, where a table under a
+  thousand of them answers as it did.
 
 ## [0.0.24] - 2026-11-06
 

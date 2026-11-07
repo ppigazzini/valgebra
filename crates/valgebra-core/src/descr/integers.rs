@@ -29,6 +29,7 @@
 
 use std::borrow::Cow;
 
+use super::budget;
 use super::interval::IntervalSet;
 
 /// A set of integers, held as an interval set per residue class.
@@ -275,7 +276,13 @@ impl IntSet {
                 .map(|(a, b)| op(a, b))
                 .collect(),
         )?;
-        Some(combined.without_a_step())
+        budget::spend_on_a_table(combined.entries()).then(|| combined.without_a_step())
+    }
+
+    /// The residues and spans this set's table holds, which is what an operation
+    /// over it reads ([`budget::TABLE_ENTRIES`]).
+    fn entries(&self) -> usize {
+        self.classes.len() + self.classes.iter().map(IntervalSet::spans).sum::<usize>()
     }
 
     /// This set written with no step where its classes do not need one.
@@ -329,6 +336,9 @@ impl IntSet {
     /// every pair.
     #[must_use]
     pub(crate) fn complement(&self) -> IntSet {
+        // The answer is not read here: an allowance this exhausts refuses the
+        // next charge, which is the one that can refuse.
+        let _ = budget::spend_on_a_table(self.entries());
         IntSet {
             modulus: self.modulus,
             classes: self.classes.iter().map(IntervalSet::complement).collect(),

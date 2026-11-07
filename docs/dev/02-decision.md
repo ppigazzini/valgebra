@@ -1102,6 +1102,20 @@ lattice holds and stopped there by the node bound, declines beside the rules in
 37 ms, where folding it takes 5.9 s. `--decision-unions` holds the count, and the
 metamorphic gate's `tagged-2048` holds the time to the last release.
 
+**A step's table is paid for by what it holds.** A `MultipleOf(4096)` holds 4,096
+lists, and a union of ranges beside it holds their spans in each, so one operation
+over it reads what a whole product of small sets does, and each edge of a length
+bound's automaton keeps the table it took. `budget::spend_on_a_table` charges a
+unit per `TABLE_ENTRIES` residues and spans it reads, at the two operations
+that combine tables and at a complement, so a table under that figure spends what
+it did and a build's tables are bounded in total. Uncharged, two list bounds over
+twelve such unions, about fifty nodes, read for 65 s and kept 6.4 GB, and past the
+memory a process may have the failed allocation ended it; charged, they decline in
+under a second, with the 2,046 elements the state bound allows.
+`an_operation_over_a_table_charges_what_the_table_holds` holds the charge, and
+`test_a_step_table_beneath_a_length_bound_keeps_to_the_memory_it_may_have` the
+answer under a limit of a gibibyte.
+
 **A complement is built only where it is read.** The parts of the universe are
 questions of their own [FCB08, (4)], and most sets hold a kind or two, so a
 complement spends most of what it costs on a top for every kind the set misses.

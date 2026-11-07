@@ -1553,3 +1553,68 @@ def test_a_user_class_is_whatever_python_says_it_is() -> None:
     proxy = Proxy()
     assert isinstance(proxy, Target)
     assert Validator(Target).is_valid(proxy)
+
+
+# BOUND: TABLE_ENTRIES
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux applies an address-space cap to the child"
+)
+@pytest.mark.parametrize(
+    ("base", "step", "ranges", "length"),
+    [
+        pytest.param("int", 2, 12, 2046, id="integers"),
+        pytest.param("float", 1, 240, 512, id="floats"),
+    ],
+)
+def test_a_step_table_beneath_a_length_bound_keeps_to_the_memory_it_may_have(
+    base: str, step: int, ranges: int, length: int
+) -> None:
+    """A step of 4096 beneath a list's bound, in about fifty nodes.
+
+    The table is what an operation reads and what each edge of the bound's
+    automaton keeps, and a failed allocation in Rust ends the process, so the
+    answer is read from a child under a limit: it declines rather than aborts.
+    """
+    code = textwrap.dedent(
+        f"""
+        import resource
+        import typing
+        import annotated_types as at
+        from valgebra import Validator, union
+
+        # Counted from what is mapped: a free-threaded interpreter's allocator
+        # reserves a gibibyte of address space before any of this runs.
+        with open("/proc/self/statm") as statm:
+            mapped = int(statm.read().split()[0]) * resource.getpagesize()
+        resource.setrlimit(resource.RLIMIT_AS, (mapped + (1 << 30), mapped + (1 << 30)))
+
+        def spell(base, *markers):
+            return typing._AnnotatedAlias(base, markers)
+
+        def ranges(top):
+            return union(
+                *[
+                    spell(
+                        {base},
+                        at.MultipleOf({step}),
+                        at.Ge(i * 100000),
+                        at.Le(i * 100000 + top),
+                    )
+                    for i in range({ranges})
+                ],
+                spell({base}, at.MultipleOf(4096)),
+            )
+
+        subject = Validator(spell(list[ranges(50000)], at.MinLen({length})))
+        print(subject.relation_to(spell(list[ranges(40000)], at.MinLen({length} - 1))))
+        """
+    )
+    done = subprocess.run(  # noqa: S603 - this interpreter, a fixed program
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr[-300:]
+    assert done.stdout.strip() == "undecided"

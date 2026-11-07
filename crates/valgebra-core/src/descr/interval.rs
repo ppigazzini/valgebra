@@ -91,6 +91,11 @@ pub(crate) struct IntervalSet {
 }
 
 impl IntervalSet {
+    /// How many spans this set holds.
+    pub(crate) fn spans(&self) -> usize {
+        self.spans.len()
+    }
+
     /// The empty set.
     #[must_use]
     pub(crate) fn empty() -> IntervalSet {

@@ -766,3 +766,40 @@ fn a_step_splits_the_line_and_every_other_set_reads_across_it() {
     assert!(!FloatSet::just(4.0).intersect(&whole).unwrap().is_empty());
     assert!(FloatSet::just(4.5).intersect(&whole).unwrap().is_empty());
 }
+
+/// A table holds its residues and the spans in each, as the integers' does.
+#[test]
+fn a_table_holds_its_residues_and_their_spans() {
+    let four = FloatSet::multiples_of(4).expect("a step inside the bound");
+    let table = four.stepped.as_deref().expect("a step's table");
+    assert_eq!(table.entries(), 4 + 1);
+    let cut = four
+        .intersect(
+            &FloatSet::at_most(100.0)
+                .union(&FloatSet::at_least(200.0))
+                .unwrap(),
+        )
+        .expect("a small set");
+    let table = cut.stepped.as_deref().expect("a step's table");
+    assert_eq!(table.entries(), 4 + 2);
+}
+
+/// An operation over a step's table charges the residues and spans it holds, as
+/// an operation over the integers' does.
+#[test]
+fn an_operation_over_a_table_charges_what_the_table_holds() {
+    use crate::descr::budget::{TABLE_ENTRIES, under};
+    let wide = FloatSet::multiples_of(MAX_PERIOD).expect("a step inside the bound");
+    let table = wide.stepped.as_deref().expect("a step's table");
+    let units = u64::try_from(table.entries() / TABLE_ENTRIES).expect("a table's size");
+    assert!(units > 0, "the widest table is past a unit");
+    assert!(under(units, || wide.union(&wide)).is_some());
+    assert!(under(units - 1, || wide.union(&wide)).is_none());
+    assert!(
+        under(units, || {
+            let other = wide.complement();
+            wide.union(&other)
+        })
+        .is_none()
+    );
+}

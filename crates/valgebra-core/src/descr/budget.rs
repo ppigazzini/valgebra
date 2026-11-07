@@ -60,6 +60,35 @@ pub(crate) fn spend() -> bool {
     })
 }
 
+/// The entries of a step's table one unit of the allowance reads: a residue, or
+/// a span one holds.
+///
+/// A table is the one leaf a build holds whose size no schema node shows: a
+/// `MultipleOf(4096)` holds 4,096 lists, and its period times its spans is what
+/// each operation over it reads and what an automaton's edge keeps. Charged
+/// nothing, one unit read all of that, so eight thousand of them could keep
+/// gigabytes, past which an allocation ends the process. At this figure a build
+/// reads about eight million entries, and a table under a thousand of them, which
+/// is every step a schema writes below 1,024 with a few bounds, spends what it
+/// spent uncharged.
+pub(crate) const TABLE_ENTRIES: usize = 1024;
+
+/// Charge what an operation over a step's table reads, `entries` being its
+/// residues and spans, and say whether it was there to charge.
+///
+/// A table under [`TABLE_ENTRIES`] charges nothing: its operation is one the
+/// step around it has paid for. Past the allowance the charge spends what is
+/// left, so the operation after this one refuses as well.
+#[must_use = "a charge that ran out is the refusal; a caller that ignores it builds past the allowance"]
+pub(crate) fn spend_on_a_table(entries: usize) -> bool {
+    let units = u64::try_from(entries / TABLE_ENTRIES).unwrap_or(u64::MAX);
+    LEFT.with(|left| {
+        let rest = left.get().checked_sub(units);
+        left.set(rest.unwrap_or(0));
+        rest.is_some()
+    })
+}
+
 /// An allowance, for as long as this is held.
 ///
 /// The build is the guard's scope, and it ends where the guard drops --
@@ -128,7 +157,7 @@ pub fn under<T>(units: u64, build: impl FnOnce() -> T) -> T {
 
 #[cfg(test)]
 mod tests {
-    use super::{armed, spend, under};
+    use super::{TABLE_ENTRIES, armed, spend, spend_on_a_table, under};
 
     /// The allowance is what it was given, and refuses once it is gone.
     #[test]
@@ -157,6 +186,22 @@ mod tests {
         for _ in 0..1_000 {
             assert!(spend(), "and the scope gave the caller's allowance back");
         }
+    }
+
+    /// A small table charges nothing, a large one what it reads, and one past
+    /// what is left spends the rest.
+    #[test]
+    fn a_table_is_charged_by_what_it_reads() {
+        under(2, || {
+            assert!(spend_on_a_table(TABLE_ENTRIES - 1));
+            assert!(spend_on_a_table(TABLE_ENTRIES));
+            assert!(spend(), "one unit went to the table, and one is left");
+            assert!(!spend());
+        });
+        under(5, || {
+            assert!(!spend_on_a_table(6 * TABLE_ENTRIES));
+            assert!(!spend(), "a charge past the allowance spends it");
+        });
     }
 
     /// Outside a build nothing is charged, so the laws are not measuring this.
