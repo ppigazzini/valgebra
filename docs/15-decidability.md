@@ -132,7 +132,8 @@ answers `"undecided"`.
   `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is empty.
   `Literal[1]` and `Literal[True]` are disjoint although `1 == True`, because the
   two pin different types. A plain value of a kind is outside a table of another
-  exact type, so `list[str]` is `not_subset` of `Literal[Color.RED]`, on `[]`. The rule reads the constant's type and applies only to
+  exact type, so `list[str]` is `not_subset` of `Literal[Color.RED]`, on `[]`, and
+  `~Literal[Color.RED]` of `str`, on `None`. The rule reads the constant's type and applies only to
   the builtin scalars, whose equality is Python's own, and to any type that
   compares by *identity* -- which an enumeration does unless it says otherwise,
   so two of its members are two values and a meet of them is empty, and which

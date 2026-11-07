@@ -1073,8 +1073,19 @@ impl Schema {
     /// the set also holds. So `list[str]` is outside `Literal[Color.RED]`, and `bool`
     /// outside `Literal[2**63]`, where the sets read no such constant and a class is
     /// not asked: a member of an `IntEnum` is an `int`, and shares no plain one.
+    ///
+    /// The complement of a table holds such a value too: `None` is outside
+    /// `Literal[Color.RED]`, so `~Literal[Color.RED]` is outside `str` on it
+    /// ([`plain_kind_beside_a_table`](Self::plain_kind_beside_a_table)).
     #[inline(never)]
     fn a_plain_value_outside_a_table(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        if let Schema::Complement(table) = self {
+            return if table.plain_kind_beside_a_table(other, cx) {
+                Relation::Fails
+            } else {
+                Relation::Unknown
+            };
+        }
         if !matches!(other, Schema::Literal(_) | Schema::Union(_)) {
             return Relation::Unknown;
         }

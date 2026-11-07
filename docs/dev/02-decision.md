@@ -1192,7 +1192,9 @@ found wrong.
 `Literal[2**63]` on `True`, where the sets read no such constant
 (`a_plain_value_outside_a_table`). A subject of a builtin kind holds a plain value
 wherever it holds any, the subclass a set may also hold being equal to one. A class
-subject is not read: a member of an `IntEnum` is an `int`, and shares no plain one.
+subject is not read: a member of an `IntEnum` is an `int`, and shares no plain one. The
+complement of a table holds a plain value of any kind it has no constant of, so it is
+outside a supertype holding no value of that kind (`plain_kind_beside_a_table`).
 
 **A position or a clause holding no value is read in the last asking.** `list[t]` for a `t`
 with no finite value holds `[]` alone (`holds_its_prefix_alone_within`), and a clause with
