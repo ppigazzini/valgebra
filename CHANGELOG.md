@@ -30,10 +30,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a position or a clause holding no value is read as what it leaves
 - feat: two sequences meet in nothing at a position each of their values has
 - feat: a plain value of a kind is outside a table of another exact type
+- feat: a float refinement and a float step over the integers hold a value
 
 -->
 
 ### Added
+
+- **A float refinement and a float step over the integers hold a value.**
+  `Annotated[set[Annotated[float, Ge(0)]], MinLen(1)]` and `Annotated[int, MultipleOf(0.5)]` are
+  `not_subset` of `nothing`, where they stayed `undecided`.
 
 - **A plain value of a kind is outside a table of another exact type.** `list[str]`, `bool` and
   `Annotated[int, Ge(2)]` are `not_subset` of `Literal[Color.RED]`, and `bool` of `Literal[2**63]`,

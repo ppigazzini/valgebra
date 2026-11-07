@@ -1165,6 +1165,18 @@ answers it loses none. `holds_parts` stays as it is for a refinement over a cons
 reading those too moved `Annotated[list[B3], Len(1, 1)]` below `nothing` and read 22.8%
 more on `--decision-matrix`.
 
+**A float refinement is read by the sets in every asking.** An order bound over a float is
+one interval, a two-node lowering of a step's cost, and a refutation over it stands on its
+value: `Annotated[float, Ge(Fraction(1, 2))]` below `Literal[2**63]` declined.
+`refinement_read` asks the sets for one where the rules read nothing, as the last asking
+does for the rest, for 44 answers and one lost, at +0.02% on the matrix.
+
+**Two bounds past what a carrier reads are refused.** `Annotated[int, Ge(Decimal("Infinity"))]`
+holds no integer, and `Annotated[bool, Ge(10**400)]` no boolean, and both decline. `floor` raises
+on an infinite `Decimal`, as on `inf`, which is read through the float carrier, and a bound
+past 64 bits has none. A rule apiece for bounds no schema writes, against nothing a hunt
+found wrong.
+
 **A plain value of a kind is outside a table of another exact type.** A literal pins
 `type(x)`, so `list[str]` is outside `Literal[Color.RED]` on `[]`, and `bool` outside
 `Literal[2**63]` on `True`, where the sets read no such constant

@@ -194,7 +194,7 @@ impl Schema {
         cx: &mut Cx<'_>,
     ) -> Verdict {
         let verdict = refinement_verdict(base, constraints, cx);
-        if verdict == Verdict::Unknown && cx.reads_leaves {
+        if verdict == Verdict::Unknown && (cx.reads_leaves || matches!(base, Schema::Float)) {
             return self.a_value_the_sets_read(cx);
         }
         verdict
@@ -1677,6 +1677,14 @@ fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations
         } else {
             Verdict::Inhabited
         };
+    }
+    // Zero is a multiple of every float step a build admits, `0 % 0.5` being `0.0`.
+    // An operand of no exact builtin type declines here: a `float` subclass's
+    // `__rmod__` answers the remainder of an integer, and may refuse zero.
+    if constraints.iter().all(|c| {
+        matches!(c, Constraint::MultipleOf(step) if oracle.operand_kind(*step) == Some(Kind::Float))
+    }) {
+        return Verdict::Inhabited;
     }
     // A constraint that is not an order bound narrows the set by something this
     // cannot read, so it names no value.
