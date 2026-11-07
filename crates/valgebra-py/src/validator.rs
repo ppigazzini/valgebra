@@ -13,16 +13,16 @@ use jiter::JsonValue;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::{OnceLockExt, PyOnceLock};
-use pyo3::types::PyBool;
+use pyo3::types::{PyBool, PyString};
 use pyo3::{PyTraverseError, PyVisit};
 use valgebra_core::{Measure, Openness, Relation, Schema};
 
-use crate::build::{Pool, PoolKeys, build_root};
+use crate::build::{Pool, PoolKeys, build_root, build_root_inside};
 use crate::check::{
     Ctx, Frame, RegexIndex, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index_from,
     compile_patterns, member, root_scalar,
 };
-use crate::errors::into_pyerr;
+use crate::errors::{into_pyerr, refused_memory_is_memory_error};
 use crate::input::{JsonInput, Value, decode_json_input, parse_json};
 use crate::oracle::PoolRelations;
 use crate::render::render;
@@ -518,7 +518,9 @@ impl Validator {
         if ok {
             Ok(())
         } else {
-            Err(into_pyerr(obj.py(), violations))
+            // The report is where a refusal builds Python objects, so a member
+            // pays for no catch.
+            refused_memory_is_memory_error(|| Err(into_pyerr(obj.py(), violations)))
         }
     }
 
@@ -600,8 +602,10 @@ impl Validator {
     ///         rather than being read as a non-member.
     #[pyo3(signature = (data, /, *, fail_fast = false))]
     fn validate_json(&self, data: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
-        let parsed = parse_json(data)?;
-        self.validate(&parsed, fail_fast)
+        refused_memory_is_memory_error(|| {
+            let parsed = parse_json(data)?;
+            self.validate(&parsed, fail_fast)
+        })
     }
 
     /// Validate a JSON document and return the parsed value.
@@ -627,9 +631,11 @@ impl Validator {
     ///         rather than being read as a non-member.
     #[pyo3(signature = (data, /, *, fail_fast = false))]
     fn load<'py>(&self, data: &Bound<'py, PyAny>, fail_fast: bool) -> PyResult<Bound<'py, PyAny>> {
-        let parsed = parse_json(data)?;
-        self.validate(&parsed, fail_fast)?;
-        Ok(parsed)
+        refused_memory_is_memory_error(|| {
+            let parsed = parse_json(data)?;
+            self.validate(&parsed, fail_fast)?;
+            Ok(parsed)
+        })
     }
 
     /// Whether a JSON document parses and is a member of the schema's set.
@@ -654,13 +660,15 @@ impl Validator {
     ///         signal, it propagates rather than being read as a non-member.
     #[pyo3(signature = (data, /))]
     fn is_valid_json(&self, data: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let py = data.py();
-        match decode_json_input(data) {
-            JsonInput::Bytes(bytes) => self.matches_json(py, bytes),
-            // An undecodable string and a non-str/bytes argument are both
-            // not members — the same verdict the raising path reports structurally.
-            JsonInput::Undecodable | JsonInput::NotStrOrBytes => Ok(false),
-        }
+        refused_memory_is_memory_error(|| {
+            let py = data.py();
+            match decode_json_input(data) {
+                JsonInput::Bytes(bytes) => self.matches_json(py, bytes),
+                // An undecodable string and a non-str/bytes argument are both
+                // not members — the same verdict the raising path reports structurally.
+                JsonInput::Undecodable | JsonInput::NotStrOrBytes => Ok(false),
+            }
+        })
     }
 
     /// Whether the schema is unsatisfiable — provably empty, so `is_valid`
@@ -697,9 +705,11 @@ impl Validator {
     ///         interpreter signal; it propagates rather than being read as an
     ///         answer.
     fn is_empty(&self, py: Python<'_>) -> PyResult<bool> {
-        let oracle = PoolRelations::new(py, &self.literals, &self.definitions);
-        let empty = self.schema.is_empty_with(&oracle, &self.definitions);
-        oracle.answer(empty)
+        refused_memory_is_memory_error(|| {
+            let oracle = PoolRelations::new(py, &self.literals, &self.definitions);
+            let empty = self.schema.is_empty_with(&oracle, &self.definitions);
+            oracle.answer(empty)
+        })
     }
 
     /// Whether every value of this schema is also a value of `other` — set
@@ -737,14 +747,16 @@ impl Validator {
     ///         rather than being read as an answer.
     #[pyo3(signature = (other, /))]
     fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let mut literals = self.relation_pool(py, other);
-        let mut definitions = self.definitions.clone();
-        let other = build_root(other, &mut literals, &mut definitions)?;
-        let oracle = PoolRelations::new(py, literals.items(), &definitions);
-        let holds = self
-            .schema
-            .is_subtype_of_under(&other, &oracle, &definitions);
-        oracle.answer(holds)
+        refused_memory_is_memory_error(|| {
+            let mut literals = self.relation_pool(py, other);
+            let mut definitions = self.definitions.clone();
+            let other = build_root_inside(other, &mut literals, &mut definitions)?;
+            let oracle = PoolRelations::new(py, literals.items(), &definitions);
+            let holds = self
+                .schema
+                .is_subtype_of_under(&other, &oracle, &definitions);
+            oracle.answer(holds)
+        })
     }
 
     /// The inclusion in three answers rather than two.
@@ -790,18 +802,27 @@ impl Validator {
     ///         decision runs raises a fatal interpreter signal; it propagates
     ///         rather than being read as an answer.
     #[pyo3(signature = (other, /))]
-    fn relation_to(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<&'static str> {
-        let mut literals = self.relation_pool(py, other);
-        let mut definitions = self.definitions.clone();
-        let other = build_root(other, &mut literals, &mut definitions)?;
-        let oracle = PoolRelations::new(py, literals.items(), &definitions);
-        let relation = self
-            .schema
-            .subtype_relation_under(&other, &oracle, &definitions);
-        oracle.answer(match relation {
-            Relation::Holds => "subset",
-            Relation::Fails => "not_subset",
-            Relation::Unknown => "undecided",
+    fn relation_to<'py>(
+        &self,
+        py: Python<'py>,
+        other: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyString>> {
+        refused_memory_is_memory_error(|| {
+            let mut literals = self.relation_pool(py, other);
+            let mut definitions = self.definitions.clone();
+            let other = build_root_inside(other, &mut literals, &mut definitions)?;
+            let oracle = PoolRelations::new(py, literals.items(), &definitions);
+            let relation = self
+                .schema
+                .subtype_relation_under(&other, &oracle, &definitions);
+            let answer = oracle.answer(match relation {
+                Relation::Holds => "subset",
+                Relation::Fails => "not_subset",
+                Relation::Unknown => "undecided",
+            })?;
+            // Made here rather than by the return's conversion, which runs past the
+            // catch.
+            Ok(PyString::new(py, answer))
         })
     }
 
@@ -833,20 +854,25 @@ impl Validator {
     ///         rather than being read as an answer.
     #[pyo3(signature = (other, /))]
     fn is_equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let mut literals = self.relation_pool(py, other);
-        let mut definitions = self.definitions.clone();
-        let other = build_root(other, &mut literals, &mut definitions)?;
-        let oracle = PoolRelations::new(py, literals.items(), &definitions);
-        let equivalent = self
-            .schema
-            .is_equivalent_under(&other, &oracle, &definitions);
-        oracle.answer(equivalent)
+        refused_memory_is_memory_error(|| {
+            let mut literals = self.relation_pool(py, other);
+            let mut definitions = self.definitions.clone();
+            let other = build_root_inside(other, &mut literals, &mut definitions)?;
+            let oracle = PoolRelations::new(py, literals.items(), &definitions);
+            let equivalent = self
+                .schema
+                .is_equivalent_under(&other, &oracle, &definitions);
+            oracle.answer(equivalent)
+        })
     }
 
     /// Render the compiled schema back as the annotation expression that
     /// produces it.
-    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        render(py, &self.schema, &self.literals, &self.definitions)
+    fn __repr__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
+        refused_memory_is_memory_error(|| {
+            render(py, &self.schema, &self.literals, &self.definitions)
+                .map(|text| PyString::new(py, &text))
+        })
     }
 
     /// Refuse to pickle, and say what to do instead.

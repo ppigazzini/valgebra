@@ -19,7 +19,7 @@ use valgebra_core::{
     fresh_self_token,
 };
 
-use crate::errors::summarize;
+use crate::errors::{refused_memory_is_memory_error, summarize};
 use crate::validator::{MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES, Validator};
 
 /// The `build_schema` recursion running on this thread, read and written once on
@@ -1053,6 +1053,19 @@ impl Drop for RootScope {
 /// own: the entry every caller outside the frontend takes, where
 /// [`build_schema`] is one descent inside a build.
 pub(crate) fn build_root(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    // A build is where an argument's Python objects are made, so every door that
+    // builds from one -- the constructor, a combinator, an operator -- reads a
+    // refused allocation as `MemoryError` here.
+    refused_memory_is_memory_error(|| build_root_inside(obj, lits, defs))
+}
+
+/// [`build_root`] for a caller that reads a refused allocation itself: a
+/// relation, whose decision makes Python objects of its own, is caught once.
+pub(crate) fn build_root_inside(
     obj: &Bound<'_, PyAny>,
     lits: &mut Pool,
     defs: &mut Vec<Schema>,

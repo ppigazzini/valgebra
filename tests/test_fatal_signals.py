@@ -13,6 +13,7 @@ resource-exhausted check stops rather than continuing.
 from __future__ import annotations
 
 import dataclasses
+import json
 import subprocess
 import sys
 import textwrap
@@ -688,3 +689,91 @@ def test_a_fatal_signal_while_a_refusal_is_written_propagates(
         Validator(Annotated[list[int], at.MinLen(carrier(signal()))])  # ty: ignore[invalid-argument-type]
     with pytest.raises(ValueError, match="must be a length a value can have"):
         Validator(Annotated[list[int], at.MinLen(carrier(ValueError("boom")))])  # ty: ignore[invalid-argument-type]
+
+
+def _testcapi_refusing() -> typing.Any:
+    """Return `_testcapi` where it refuses allocations on request, else `None`."""
+    try:
+        import _testcapi  # noqa: PLC0415 # ty: ignore[import-not-found] -- only some builds carry it
+    except ImportError:
+        return None
+    return _testcapi if hasattr(_testcapi, "set_nomemory") else None
+
+
+# A child of one thread refuses one allocation at each place a call reaches in
+# turn: `_testcapi.set_nomemory` refuses every thread of the process, and a
+# test runner's own threads allocate. Each call builds Python objects of its
+# own: a schema's, a report's, a parsed document's, a relation's answer, a
+# rendering, an error's attributes.
+_REFUSING = r"""
+import contextlib, dataclasses, json, sys
+from typing import Annotated
+import annotated_types as at
+import _testcapi
+from valgebra import ValidationError, Validator
+
+@dataclasses.dataclass
+class Spot:
+    x: int
+
+REFUSED = Validator({"a": list[int], "b": Spot})
+BAD = {"a": [1, "x"], "b": Spot(x="y")}
+
+def errors_of():
+    try:
+        REFUSED.validate(BAD)
+    except ValidationError as error:
+        return (error.errors, error.path, error.message, error.code)
+
+CALLS = {
+    "build": lambda: Validator({"a": list[int], "b": Annotated[int, at.Ge(0)]}),
+    "validate": lambda: REFUSED.validate(BAD),
+    "validate_json": lambda: REFUSED.validate_json('{"a": [1, "x"], "b": 2}'),
+    "load": lambda: Validator({"a": list[int]}).load('{"a": [1, 2, 3]}'),
+    "relation_to": lambda: REFUSED.relation_to({"a": list[int | str], "b": Spot}),
+    "repr": lambda: repr(REFUSED),
+    "errors": errors_of,
+}
+run = CALLS[sys.argv[1]]
+with contextlib.suppress(ValidationError):
+    run()
+refused, other = 0, []
+for at_place in range(400):
+    _testcapi.set_nomemory(at_place, at_place + 1)
+    try:
+        run()
+    except MemoryError:
+        refused += 1
+    except ValidationError:
+        pass
+    except BaseException as raised:
+        other.append(f"{at_place}: {type(raised).__name__}: {raised}")
+    finally:
+        _testcapi.remove_mem_hooks()
+print(json.dumps({"refused": refused, "other": other}))
+"""
+
+
+@pytest.mark.skipif(_testcapi_refusing() is None, reason="needs _testcapi.set_nomemory")
+@pytest.mark.parametrize(
+    "call",
+    ["build", "validate", "validate_json", "load", "relation_to", "repr", "errors"],
+)
+def test_an_allocation_refused_inside_a_call_raises_memory_error(call: str) -> None:
+    """Python's allocator refusing an object the call builds raises `MemoryError`.
+
+    The binding layer reads a null from a constructor that cannot fail as a
+    panic, which reached the caller as `PanicException`, a `BaseException`
+    that neither `except MemoryError` nor `except Exception` catches.
+    """
+    done = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [sys.executable, "-c", _REFUSING, call],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    read = json.loads(done.stdout.splitlines()[-1])
+    assert read["other"] == [], read["other"]
+    assert read["refused"], f"{call} met no refusal"

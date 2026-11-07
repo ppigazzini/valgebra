@@ -1,9 +1,11 @@
 {
   "_comment": "Mutation survivors accepted as a baseline for the pytest sweep. The nightly ratchet fails when a survivor appears outside this set, and when an entry is no longer a survivor. Regenerate with `python scripts/mutation_gate.py --baseline pytest --update` after a sweep, and only ever let this set shrink. Entries are the survivor line without its line:col position, so they survive unrelated code motion.",
   "survivors": [
+    "crates/valgebra-py/src/errors.rs: replace || with && in refused_memory_is_memory_error",
     "crates/valgebra-py/src/validator.rs: delete field patterns from struct Validator expression in Validator::checked"
   ],
   "_accepted": {
-    "crates/valgebra-py/src/validator.rs: delete field patterns from struct Validator expression in Validator::checked": "Deleting the field leaves `patterns` at its default, an empty index, and the walk's index then compiles the schema's patterns itself on first use: the same programs and the same answers, compiled twice. Construction still compiles and bounds them together first (`compile_patterns`), so a validator past the allowance is refused either way. What the field saves is the second compile, which no answer a Python test can read shows."
+    "crates/valgebra-py/src/validator.rs: delete field patterns from struct Validator expression in Validator::checked": "Deleting the field leaves `patterns` at its default, an empty index, and the walk's index then compiles the schema's patterns itself on first use: the same programs and the same answers, compiled twice. Construction still compiles and bounds them together first (`compile_patterns`), so a validator past the allowance is refused either way. What the field saves is the second compile, which no answer a Python test can read shows.",
+    "crates/valgebra-py/src/errors.rs: replace || with && in refused_memory_is_memory_error": "The two payloads the panic is read from are reached only where Python's allocator refuses an object a call builds, which the sweep's interpreter cannot arrange: uv's CPython carries no `_testcapi`, so `tests/test_fatal_signals.py::test_an_allocation_refused_inside_a_call_raises_memory_error` is skipped there, and no other suite runs a constructor into a refused allocation. Where `_testcapi.set_nomemory` exists that test kills the mutant: the panic is then raised as `PanicException` rather than `MemoryError`."
   }
 }

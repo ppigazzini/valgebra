@@ -27,6 +27,37 @@ pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> PyResult<String> {
     }
 }
 
+/// A call's answer where Python's allocator refused an object the call built:
+/// `MemoryError`, which is what the interpreter raises for a refusal of its own.
+///
+/// `PyO3`'s constructors whose signature cannot fail panic on the null a refused
+/// allocation returns, having written the interpreter's `MemoryError` as
+/// unraisable, and the panic reaches the caller as `PanicException`, a
+/// `BaseException` that neither `except MemoryError` nor `except Exception`
+/// reads. Caught here at the entry point and raised as `MemoryError`; any other
+/// panic goes on as it would. The panic is told by its message, which a `PyO3`
+/// release could reword, and `tests/test_fatal_signals.py` refuses allocations
+/// at each place a call reaches and reads `MemoryError` back.
+pub(crate) fn refused_memory_is_memory_error<T>(call: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)) {
+        Ok(answer) => answer,
+        Err(payload) => {
+            let says = |text: &str| text.contains("pointer is null");
+            if payload
+                .downcast_ref::<&str>()
+                .is_some_and(|text| says(text))
+                || payload
+                    .downcast_ref::<String>()
+                    .is_some_and(|text| says(text))
+            {
+                Err(pyo3::exceptions::PyMemoryError::new_err(()))
+            } else {
+                std::panic::resume_unwind(payload)
+            }
+        }
+    }
+}
+
 /// What a message says of an object whose `__repr__` raises.
 pub(crate) const UNREPRESENTABLE: &str = "<unrepresentable>";
 
@@ -257,43 +288,45 @@ pub(crate) fn validation_error_getattr<'py>(
     instance: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py = instance.py();
-    if !LAZY_ATTRIBUTES.contains(&name) {
-        return Err(pyo3::exceptions::PyAttributeError::new_err(format!(
-            "'{}' object has no attribute '{name}'",
-            instance.get_type().name()?
-        )));
-    }
-    // An error built by hand reports no failures, and the model describes
-    // *failures*: the empty answer is the honest one, and an `AttributeError`
-    // here would describe the object rather than the model.
-    let Ok(carried) = instance.getattr(intern!(py, "_failures")) else {
-        return empty_attribute(py, name);
-    };
-    let Ok(failures) = carried.cast::<Failures>() else {
-        return empty_attribute(py, name);
-    };
-    let failures = failures.get();
-    let first = failures.first();
-    let keys = Keys::get(py);
-    let built = match name {
-        "code" => first.code.into_pyobject(py)?.into_any(),
-        "expected" => first.expected.as_str().into_pyobject(py)?.into_any(),
-        "value" => first.value_summary.as_str().into_pyobject(py)?.into_any(),
-        "message" => first.to_string().into_pyobject(py)?.into_any(),
-        "path" => build_path(py, &first.path)?.into_any(),
-        _ => {
-            let (first_violation, rest) =
-                failures.violations.split_first().unwrap_or((&GENERIC, &[]));
-            let message = first_violation.to_string();
-            let path = build_path(py, &first_violation.path)?;
-            error_items(py, &keys, &message, &path, first_violation, rest)?.into_any()
+    refused_memory_is_memory_error(|| {
+        let py = instance.py();
+        if !LAZY_ATTRIBUTES.contains(&name) {
+            return Err(pyo3::exceptions::PyAttributeError::new_err(format!(
+                "'{}' object has no attribute '{name}'",
+                instance.get_type().name()?
+            )));
         }
-    };
-    // Cached on the instance, so this runs once per attribute per error and the
-    // next lookup never reaches here.
-    instance.setattr(name, &built)?;
-    Ok(built)
+        // An error built by hand reports no failures, and the model describes
+        // *failures*: the empty answer is the honest one, and an `AttributeError`
+        // here would describe the object rather than the model.
+        let Ok(carried) = instance.getattr(intern!(py, "_failures")) else {
+            return empty_attribute(py, name);
+        };
+        let Ok(failures) = carried.cast::<Failures>() else {
+            return empty_attribute(py, name);
+        };
+        let failures = failures.get();
+        let first = failures.first();
+        let keys = Keys::get(py);
+        let built = match name {
+            "code" => first.code.into_pyobject(py)?.into_any(),
+            "expected" => first.expected.as_str().into_pyobject(py)?.into_any(),
+            "value" => first.value_summary.as_str().into_pyobject(py)?.into_any(),
+            "message" => first.to_string().into_pyobject(py)?.into_any(),
+            "path" => build_path(py, &first.path)?.into_any(),
+            _ => {
+                let (first_violation, rest) =
+                    failures.violations.split_first().unwrap_or((&GENERIC, &[]));
+                let message = first_violation.to_string();
+                let path = build_path(py, &first_violation.path)?;
+                error_items(py, &keys, &message, &path, first_violation, rest)?.into_any()
+            }
+        };
+        // Cached on the instance, so this runs once per attribute per error and the
+        // next lookup never reaches here.
+        instance.setattr(name, &built)?;
+        Ok(built)
+    })
 }
 
 /// What each attribute is for an error carrying no failures.
@@ -376,28 +409,30 @@ pub(crate) fn install_lazy_attributes(py: Python<'_>) -> PyResult<()> {
 pub(crate) fn validation_error_reduce<'py>(
     instance: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py = instance.py();
-    for name in LAZY_ATTRIBUTES {
-        let _ = instance.getattr(name)?;
-    }
-    let base = py.get_type::<pyo3::exceptions::PyException>();
-    let reduced = base
-        .getattr(intern!(py, "__reduce__"))?
-        .call1((instance,))?
-        .cast_into::<PyTuple>()?;
-    // `(type, args)`, and the dictionary third where it holds anything.
-    let Ok(state) = reduced.get_item(2) else {
-        return Ok(reduced.into_any());
-    };
-    let state = state.cast_into::<PyDict>()?.copy()?;
-    if state.contains(intern!(py, "_failures"))? {
-        state.del_item(intern!(py, "_failures"))?;
-    }
-    Ok(PyTuple::new(
-        py,
-        [reduced.get_item(0)?, reduced.get_item(1)?, state.into_any()],
-    )?
-    .into_any())
+    refused_memory_is_memory_error(|| {
+        let py = instance.py();
+        for name in LAZY_ATTRIBUTES {
+            let _ = instance.getattr(name)?;
+        }
+        let base = py.get_type::<pyo3::exceptions::PyException>();
+        let reduced = base
+            .getattr(intern!(py, "__reduce__"))?
+            .call1((instance,))?
+            .cast_into::<PyTuple>()?;
+        // `(type, args)`, and the dictionary third where it holds anything.
+        let Ok(state) = reduced.get_item(2) else {
+            return Ok(reduced.into_any());
+        };
+        let state = state.cast_into::<PyDict>()?.copy()?;
+        if state.contains(intern!(py, "_failures"))? {
+            state.del_item(intern!(py, "_failures"))?;
+        }
+        Ok(PyTuple::new(
+            py,
+            [reduced.get_item(0)?, reduced.get_item(1)?, state.into_any()],
+        )?
+        .into_any())
+    })
 }
 
 /// Build the Python [`ValidationError`] for one or more violations.

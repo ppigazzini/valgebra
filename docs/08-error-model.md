@@ -336,8 +336,7 @@ a validator are the last: a constant whose `__eq__`, `__hash__` or `__repr__`
 raises an ordinary exception reads as unequal, as adding nothing to the hash,
 and as `<unrepresentable>`, and one raising a fatal signal raises it out of
 `==`, `hash` or `repr`. Python's allocator refusing an object valgebra itself
-builds is the one exception: it reaches the caller as `PanicException`, a
-`BaseException`, rather than `MemoryError`
+builds raises `MemoryError` too
 ([limits](10-limits.md#what-the-bounds-do-not-bound)).
 
 ## The model is built when it is asked for

@@ -46,6 +46,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a value sharing a sub-object answers as its copy past the walk's bounds
 - fix: the module loads in the main interpreter of a process, once
 - fix: what a marker or a class yields is read within the node bound
+- fix: an allocation Python refuses inside a call raises MemoryError
 
 -->
 
@@ -195,6 +196,12 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **An allocation Python refuses inside a call raises `MemoryError`.** Where the interpreter
+  could not give memory to an object valgebra builds -- a schema's, a report's, a parsed
+  document's, a relation's answer, a rendering, an error's attributes -- the call raised
+  `PanicException`, a `BaseException` that neither `except MemoryError` nor `except Exception`
+  catches, and ended the process where even that exception could not be built.
 
 - **What a marker or a class yields is read within the node bound.** A grouped marker whose
   constraints never end was read until memory ended and the process aborted, with no Python
