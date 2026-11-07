@@ -135,6 +135,12 @@ answer of its own, or a repair to a change not yet released.
   between `properties` and `patternProperties`, over keys JSON gives none of these for; the
   soundness page states the assumption, and known-unsound tests pin both cases.
 
+- **What the walk assumes of a dict's storage is stated.** PyPy's `PyDict_Next` answers each
+  value with a lookup of its key, so a dict holding two keys that reach one name through a slot
+  a deleted key left reads one value for both on PyPy, and `{str: int}` admits `{Plain("a"): "s",
+  Folded("A"): 1}` there, which CPython refuses on `"s"`. The soundness page states the
+  assumption and a known-unsound test pins it.
+
 - **A required field is paid for by the entry its name finds.** A dict can hold two
   keys that reach one name, since `str`'s `==` and a subclass's own need not agree: with
   `Plain` a `str` subclass and `Folded` one comparing by its folded case, `{Plain("a"): 1,
