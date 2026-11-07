@@ -260,6 +260,15 @@ The soundness is relative to a small, explicit trust base:
   a key's text and what it reaches apart gives up every proof between a record and
   a mapping narrowed by a language, which is what `properties` beside
   `patternProperties` asks. The cases are pinned as known-unsound tests.
+- **A dict's entries are read from its storage.** The walk reads a dict through
+  the interpreter's C API, and CPython's `PyDict_Next` hands back each entry as the
+  table holds it. PyPy's answers each value with a lookup of its key, so where two
+  keys reach one name, as `Plain("a")` and `Folded("A")` do through a slot a
+  deleted key left, both read the value the lookup finds: `{str: int}` admits
+  `{Plain("a"): "s", Folded("A"): 1}` there, which CPython refuses on `"s"`, and a
+  copy of the dict reads alike. Reading such a dict through PyPy's own `items` is
+  what would repair it, at a list per dict holding a key that is no exact `str`.
+  The case is pinned as a known-unsound test.
 - **An enumeration's instances are made through it.** `Color` is decided to be
   the union of its members because the class makes no other instance.
   `object.__new__(Color)` makes one past it: the walk admits it to `Color`,

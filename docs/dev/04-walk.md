@@ -520,11 +520,12 @@ and the copy is a dict nothing else can reach.
 
 **On PyPy a value read from a dict is what a lookup of its key answers.** `PyDict_Next`
 reads each value through a lookup there, so where two keys reach one name and the lookup
-answers one of them, both are read with that key's value and the other's is never seen.
-A field is then paid for by the first read and the second is a key the record does not
-declare, which refuses a member CPython admits: a refusal, on that shape alone, and no
-wrong acceptance. `test_a_field_is_the_entry_the_lookup_finds_and_not_the_first_read`
-holds it on CPython.
+answers one of them, both are read with that key's value and the other's is never seen,
+on a copy of the dict as on the dict. A member is refused and a non-member admitted on
+that shape, `{str: int}` admitting a dict whose other entry holds `"s"`, which
+[14-soundness.md](../14-soundness.md) states as an assumption of the walk's and a
+known-unsound test pins; `test_a_field_is_the_entry_the_lookup_finds_and_not_the_first_read`
+holds the reading on CPython.
 
 **Every container the walk reads answers this way, and for one reason.** A
 schema over a container denotes what the value *holds*, so the reading of it

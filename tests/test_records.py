@@ -464,6 +464,35 @@ def test_a_field_is_the_entry_the_lookup_finds_and_not_the_first_read() -> None:
     assert not Validator({"a": str, str: int}).is_valid(value)
 
 
+@pytest.mark.xfail(
+    sys.implementation.name == "pypy",
+    strict=True,
+    reason="PyPy's `PyDict_Next` answers each value with a lookup of its key",
+)
+# TRUST: A dict's entries are read from its storage.
+def test_a_dicts_entries_are_read_from_its_storage() -> None:
+    """The known-unsound case on PyPy: two keys reaching one name read one value."""
+
+    class Collides(str):
+        __slots__ = ()
+
+        def __hash__(self) -> int:
+            return hash("a")
+
+        def __eq__(self, other: object) -> bool:
+            return self is other
+
+    value: dict[str, object] = {Collides("x"): 0, _PlainName("a"): "s"}
+    del value[next(iter(value))]
+    value[_Folded("A")] = 1
+    if not isinstance(value["a"], int):
+        pytest.skip("this interpreter's lookup answers with the entry read first")
+    assert list(value.values()) == ["s", 1]
+    assert not Validator({str: int}).is_valid(value)
+    assert not Validator({"a": int, str: int}).is_valid(value)
+    assert Validator({str: object}).is_valid(value)
+
+
 def _dicts_over_odd_keys() -> Iterator[dict[Any, object]]:
     """Every dict of up to three keys reaching `"a"` and `"b"` every way a key can."""
     keys = [
