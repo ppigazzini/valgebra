@@ -1221,6 +1221,13 @@ map atom would hold one, every operation over atoms would meet it, and the froze
 refused in [01-schema-ir.md](01-schema-ir.md) read +2% to +7% for a part of the same cost.
 No caller has reported the shape past a fuzz harness, and it is not prototyped.
 
+**A nested meet distributed under a narrowed one, refused.** Narrowing a meet at the top
+and distributing the meets beneath it decides a guarded record three deep below the
+complement of a fixpoint of digits in a twentieth of the time, which 0.0.22 decided and
+every release since declines. It gives back three refutations of that shape and one of
+another, 1 answer gained against 4 lost over the seeds and families read, so it does not
+land while a query reads a narrowed meet at every level.
+
 **A complement of a reference unfolded through its definition, refused.** `~t` under `t =
 ¬(t,)` is `(t,)`, which `Schema::complement` folds, and asked that way
 `complement(T1).relation_to(tuple[T1])` proves. It moves that one row and no answer over the
