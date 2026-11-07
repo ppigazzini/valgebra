@@ -808,7 +808,13 @@ program that builds validators per request, and to no validation call.
   under two bounds cost 12% fewer instructions, and a thousand strings under two
   length bounds 19%. Deciding over a base of `int`, `float` or `str`, its kind is
   read once and has a loop of its own (`refined_scalar_list`): strings under a
-  pattern read 7.4% fewer instructions on the profiled CPython 3.15 wheel. A list of records reads each element by its record's check,
+  pattern read 7.4% fewer instructions on the profiled CPython 3.15 wheel. Order
+  bounds on an `int` whose operands a machine word holds are one range read once for
+  the list, and an exact `int` that fits a word is compared with it where it lies
+  (`machine_range_list`): a thousand integers under one bound read 74% fewer
+  instructions there, and 77% on the build without a profile (`--binding-refined`).
+  A value past the word is read by the comparisons, once its read has raised, and
+  that ends the range for the list. A list of records reads each element by its record's check,
   inlined into the reader, with that level held the same way
   (`record_list_matches`): two hundred three-field `TypedDict`s cost 7.5% fewer
   instructions on 3.12 and 3.14. What its node says of every element, its plan and
@@ -1279,12 +1285,14 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
 - **A memo over every goal of a query**: up to 18% dearer on the queries whose
   goals do not repeat, which is most of them; the memo kept is one entry, in
   the one loop where a goal repeats.
-- **Comparing an order bound as a native integer**: 28% dearer on
-  `--binding-refined`, since reading a Python integer out costs more than the
+- **Comparing an order bound as a native integer, a value at a time**: 28% dearer
+  on `--binding-refined`, since reading a Python integer out costs more than the
   rich comparison it would replace. Read once per value and once per bound as
   a machine word, it is still 4.6% dearer on CPython 3.14, and an `int` past
   the word raises on every read, nearly four times the cost; only a `float`,
-  whose value is a field, reads cheaper.
+  whose value is a field, reads cheaper. A list reads its bounds once and stops
+  reading words at the first that raises, which is what makes
+  [a list's range](#sequences-and-sets) a gain.
 - **A JSON string cache of keys only, or none**: jiter's default caches every
   string it parses, and parsing alone on CPython 3.14, a 1.5 MiB document of
   ninety thousand distinct strings reads 18% faster caching keys only and 28%

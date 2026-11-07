@@ -444,6 +444,52 @@ pub(super) fn constraints_hold(
     ok
 }
 
+/// The machine integers every one of `constraints` admits, as an inclusive range,
+/// where each is an order bound whose operand is an exact `int` that fits a
+/// machine word, and `None` elsewhere: a bound the rich comparison must read.
+///
+/// An exact `int` compared with an exact `int` is the two numbers compared, runs
+/// no Python and reads nothing else, so for a value that fits a word the range
+/// answers what the comparisons answer. Read once for a list
+/// ([`refined_list_matches`](super::sequence)): the operand costs its read once,
+/// where a read per comparison costs more than the comparison it replaces.
+pub(super) fn machine_range(
+    constraints: &[Constraint],
+    ctx: Ctx<'_>,
+    py: Python<'_>,
+) -> Option<(i64, i64)> {
+    let word = |index: OperandIx| {
+        let operand = operand_at(ctx, index, py)?;
+        operand
+            .is_exact_instance_of::<PyInt>()
+            .then(|| operand.extract::<i64>().map_err(set_aside).ok())?
+    };
+    let (mut least, mut most) = (i64::MIN, i64::MAX);
+    for constraint in constraints {
+        match constraint {
+            Constraint::Ge(i) => least = least.max(word(*i)?),
+            Constraint::Gt(i) => least = least.max(word(*i)?.checked_add(1)?),
+            Constraint::Le(i) => most = most.min(word(*i)?),
+            Constraint::Lt(i) => most = most.min(word(*i)?.checked_sub(1)?),
+            _ => return None,
+        }
+    }
+    Some((least, most))
+}
+
+/// `value` as a machine word, where it is an exact `int` that fits one.
+///
+/// `Ok(None)` for a value that is no exact `int`, and `Err` for one past the
+/// word, whose read raises and is dropped here: a caller reading a list stops
+/// asking, so a list of such values pays that once.
+#[inline]
+pub(super) fn machine_word(value: &Bound<'_, PyAny>) -> Result<Option<i64>, ()> {
+    if !value.is_exact_instance_of::<PyInt>() {
+        return Ok(None);
+    }
+    value.extract::<i64>().map(Some).map_err(set_aside)
+}
+
 /// The object a refinement's constraints read off a parsed JSON value -- the
 /// one `json.loads` would have given -- or the answer where none is built.
 ///

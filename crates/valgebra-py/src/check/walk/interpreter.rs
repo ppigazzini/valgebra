@@ -15,6 +15,7 @@ use super::record::{
     RecordReading, SMALL_OBJECT, Undeclared, keyed_map_matches_json, resolves_through_the_plan,
     scan_dict,
 };
+use super::scalar::machine_range;
 use super::sequence::{refined_scalar_list, scan_list};
 use super::*;
 use crate::check::ctx::{MAX_RECURSION_DEPTH, MAX_WALK_DEPTH};
@@ -6734,6 +6735,84 @@ fn a_list_of_refinements_answers_as_the_walk_does() {
     });
 }
 
+/// Order bounds a machine word holds answer, over a list, what the comparisons
+/// answer over a tuple of the same values, at every edge of the word, for a value
+/// of every kind, and for a bound of every kind the range declines.
+#[test]
+fn a_list_of_bounded_integers_reads_as_the_comparisons_read_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Int(int):\n\
+              \x20   def __ge__(self, other):\n\
+              \x20       return False\n\
+              \x20   __gt__ = __le__ = __lt__ = __ge__\n\
+              TOP = 2 ** 63 - 1\n\
+              LOW = -2 ** 63\n\
+              OPERANDS = [0, 5, -1, TOP, LOW, TOP + 1, LOW - 1, True, 1.5, Int(0)]\n\
+              VALUES = [0, 1, 4, 5, 6, -1, -2, TOP, TOP - 1, LOW, LOW + 1, TOP + 1,\n\
+              \x20         LOW - 1, 2 ** 200, -2 ** 200, True, False, Int(3)]\n",
+            c"bounded_integers.py",
+            c"bounded_integers",
+        )
+        .expect("the corpus compiles");
+        let list_of = |name: &str| -> Vec<Bound<'_, PyAny>> {
+            module
+                .getattr(name)
+                .expect("the corpus")
+                .try_iter()
+                .expect("a list")
+                .map(|item| item.expect("an element"))
+                .collect()
+        };
+        let operands = list_of("OPERANDS");
+        let values = list_of("VALUES");
+        let pool: Vec<Py<PyAny>> = operands.iter().map(|o| o.clone().unbind()).collect();
+        let bounds: [fn(OperandIx) -> Constraint; 4] = [
+            Constraint::Ge,
+            Constraint::Gt,
+            Constraint::Le,
+            Constraint::Lt,
+        ];
+        let refined = |constraints: Vec<Constraint>| Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: constraints.into(),
+        };
+        let mut read = Vec::new();
+        for at in 0..pool.len() {
+            for bound in bounds {
+                read.push(vec![bound(OperandIx::new(at))]);
+                for other in bounds {
+                    read.push(vec![bound(OperandIx::new(at)), other(OperandIx::new(0))]);
+                }
+            }
+        }
+        for constraints in read {
+            let element = refined(constraints);
+            let list = Schema::list(SeqShape::homogeneous(element.clone()));
+            let tuple = Schema::tuple(SeqShape::homogeneous(element));
+            for value in &values {
+                let listed = PyList::new(py, [value]).expect("a list").into_any();
+                let tupled = PyTuple::new(py, [value]).expect("a tuple").into_any();
+                assert_eq!(
+                    decide(py, &list, &listed, &pool, &[]),
+                    decide(py, &tuple, &tupled, &pool, &[]),
+                    "{list:?} and {tuple:?} part over {value:?}"
+                );
+            }
+            // Past the word the reading ends, and the elements after one are read
+            // by the comparisons all the same.
+            let mixed = PyList::new(py, &values).expect("a list").into_any();
+            let tupled = PyTuple::new(py, &values).expect("a tuple").into_any();
+            assert_eq!(
+                decide(py, &list, &mixed, &pool, &[]),
+                decide(py, &tuple, &tupled, &pool, &[]),
+                "{list:?} and {tuple:?} part over the corpus"
+            );
+        }
+    });
+}
+
 /// A fatal signal an element's bound raises ends a list of refined scalars there,
 /// for every kind the reader takes: no later element is asked, which is what lets
 /// the reader's loop read no flag.
@@ -6870,6 +6949,106 @@ fn a_list_of_refined_scalars_is_read_by_its_kind() {
             ),
             None
         );
+    });
+}
+
+/// A value is read as a word where it is an exact `int` that fits one, and the
+/// first past the word is told from one of another kind, which is what ends the
+/// reading for a list.
+#[test]
+fn a_machine_word_is_an_exact_int_that_fits_one() {
+    Python::attach(|py| {
+        let word = |source: &str| super::scalar::machine_word(&evaluate(py, source));
+        assert_eq!(word("5"), Ok(Some(5)));
+        assert_eq!(word("-7"), Ok(Some(-7)));
+        assert_eq!(word("2 ** 63 - 1"), Ok(Some(i64::MAX)));
+        assert_eq!(word("-2 ** 63"), Ok(Some(i64::MIN)));
+        assert_eq!(word("2 ** 63"), Err(()));
+        assert_eq!(word("-2 ** 63 - 1"), Err(()));
+        assert_eq!(word("True"), Ok(None));
+        assert_eq!(word("1.0"), Ok(None));
+        assert_eq!(word("'x'"), Ok(None));
+    });
+}
+
+/// A fatal signal the comparison of an element past the range's reading raises
+/// ends the list there, and a word before it needed no comparison at all.
+#[test]
+fn a_fatal_signal_ends_a_list_read_as_a_range() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"ASKED = []\n\
+              class Interrupting(int):\n\
+              \x20   def __ge__(self, other):\n\
+              \x20       ASKED.append(int(self))\n\
+              \x20       raise KeyboardInterrupt\n\
+              VALUE = [1, Interrupting(2), Interrupting(3), 4]\n",
+            c"interrupting_ints.py",
+            c"interrupting_ints",
+        )
+        .expect("the module compiles");
+        let pool = vec![evaluate(py, "0").unbind()];
+        let list = Schema::list(SeqShape::homogeneous(Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+        }));
+        let value = module.getattr("VALUE").expect("the value");
+        assert_eq!(decide_with_fatal(py, &list, &value, &pool), (false, true));
+        let asked = module.getattr("ASKED").expect("the list");
+        assert_eq!(asked.extract::<Vec<i64>>().expect("integers"), [2]);
+    });
+}
+
+/// The range takes the bounds a machine word holds and declines every other.
+#[test]
+fn a_machine_range_is_the_bounds_a_word_holds() {
+    Python::attach(|py| {
+        let pool: Vec<Py<PyAny>> = vec![
+            5_i64.into_pyobject(py).expect("an int").into_any().unbind(),
+            i64::MAX
+                .into_pyobject(py)
+                .expect("an int")
+                .into_any()
+                .unbind(),
+            i64::MIN
+                .into_pyobject(py)
+                .expect("an int")
+                .into_any()
+                .unbind(),
+            PyBool::new(py, true).to_owned().into_any().unbind(),
+            PyFloat::new(py, 1.5).into_any().unbind(),
+            evaluate(py, "2 ** 63").unbind(),
+        ];
+        let index = ValidatorIndex::default();
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &pool,
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let range = |constraints: &[Constraint]| machine_range(constraints, ctx, py);
+        let at = OperandIx::new;
+        assert_eq!(range(&[Constraint::Ge(at(0))]), Some((5, i64::MAX)));
+        assert_eq!(range(&[Constraint::Gt(at(0))]), Some((6, i64::MAX)));
+        assert_eq!(range(&[Constraint::Le(at(0))]), Some((i64::MIN, 5)));
+        assert_eq!(range(&[Constraint::Lt(at(0))]), Some((i64::MIN, 4)));
+        assert_eq!(
+            range(&[Constraint::Ge(at(2)), Constraint::Le(at(1))]),
+            Some((i64::MIN, i64::MAX))
+        );
+        for declined in [
+            Constraint::Gt(at(1)),
+            Constraint::Lt(at(2)),
+            Constraint::Ge(at(3)),
+            Constraint::Ge(at(4)),
+            Constraint::Ge(at(5)),
+            Constraint::MinLen(1),
+        ] {
+            assert_eq!(range(&[declined]), None);
+        }
     });
 }
 
