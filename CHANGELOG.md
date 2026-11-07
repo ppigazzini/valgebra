@@ -23,10 +23,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a table of constants beside what holds them is the table
 - feat: a meet is read as a member below all the others
 - fix: a build pays for a product of two automata by what it holds
+- feat: the complement of a set proved empty is every value
 
 -->
 
 ### Added
+
+- **The complement of a set proved empty is every value.** `complement(S)` for an `S` `is_empty`
+  proves empty relates as `anything` does, where it read for up to a few seconds and stayed
+  `undecided`.
 
 - **A meet is read as a member below all the others.** Where the pair declined everything else,
   `A & B` answers as `A` wherever `A` is proved below `B`. `Color & (str | Color)` is `not_subset`

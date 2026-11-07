@@ -13649,7 +13649,7 @@ mod a_supertype_with_no_value {
         // Inhabited at `None`.
         let holds = Schema::Ref(DefIx::new(0));
         assert_eq!(
-            Schema::Str.below_a_supertype_with_no_value(&holds, &mut cx),
+            Schema::Str.a_side_with_no_value(&holds, &mut cx),
             Relation::Unknown
         );
         // Empty, with no reference, and so the sets' own.
@@ -13660,9 +13660,27 @@ mod a_supertype_with_no_value {
             }]),
         };
         assert_eq!(
-            Schema::Str.below_a_supertype_with_no_value(&cut_nowhere, &mut cx),
+            Schema::Str.a_side_with_no_value(&cut_nowhere, &mut cx),
             Relation::Unknown
         );
+    }
+
+    /// The complement of a set with no value is every value.
+    #[test]
+    fn the_complement_of_a_side_with_no_value_is_the_universe() {
+        let defs = definition();
+        let everything = Schema::Ref(DefIx::new(0)).complement();
+        for (other, answer) in [
+            (Schema::Nothing, Relation::Fails),
+            (Schema::Int, Relation::Fails),
+            (Schema::ANYTHING, Relation::Holds),
+        ] {
+            assert_eq!(
+                everything.subtype_relation_under(&other, &Pure, &defs),
+                answer,
+                "{other:?}"
+            );
+        }
     }
 
     /// A subject only the sets read is refuted through them, and one neither reading
@@ -13676,7 +13694,7 @@ mod a_supertype_with_no_value {
         let none = Schema::Ref(DefIx::new(0));
         let pattern = Schema::refine(Schema::Str, vec![Constraint::Regex("a".into())]);
         assert_eq!(
-            pattern.below_a_supertype_with_no_value(&none, &mut cx),
+            pattern.a_side_with_no_value(&none, &mut cx),
             Relation::Fails
         );
         let opaque = Schema::Refine {
@@ -13684,7 +13702,7 @@ mod a_supertype_with_no_value {
             constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
         };
         assert_eq!(
-            opaque.below_a_supertype_with_no_value(&none, &mut cx),
+            opaque.a_side_with_no_value(&none, &mut cx),
             Relation::Unknown
         );
     }

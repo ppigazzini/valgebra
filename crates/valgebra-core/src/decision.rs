@@ -1022,9 +1022,9 @@ impl Schema {
     /// of the loop, at 3%.
     #[inline(never)]
     fn decided_by_sets(&self, other: &Schema, cx: &mut Cx<'_>, by_branch: bool) -> Relation {
-        let below_nothing = self.below_a_supertype_with_no_value(other, cx);
-        if below_nothing != Relation::Unknown {
-            return below_nothing;
+        let read_alone = self.a_side_with_no_value(other, cx);
+        if read_alone != Relation::Unknown {
+            return read_alone;
         }
         self.descriptor_contained_in(other, cx.oracle, cx.defs)
             .or_else(|| self.decided_by_parts(other, cx, by_branch))
@@ -1114,28 +1114,37 @@ impl Schema {
         self.descriptor_contained_in(other, cx.oracle, cx.defs)
     }
 
-    /// A supertype proved empty is the bottom, so the pair is the subject's own
-    /// emptiness: the dual of [BBC+26, (uninhabited)]. A reference is what no reading
-    /// of the pair sees through: `μt. attr{y: t}` holds no finite value, `is_empty`
-    /// says so at once, and the difference the set reading builds of `str` against it
-    /// is read as holding values both ways, to a depth that doubles. A schema with no
-    /// reference is read by the sets, with nothing cut, so it is not asked. `Unknown`
-    /// where the subject's own emptiness is undecided, which leaves the pair to the
-    /// readings after this one: answered here, they lost a hundred answers in 72,000
-    /// drawn pairs.
+    /// A side proved empty settles the pair without the difference. A supertype with
+    /// no value is the bottom, so the pair is the subject's own emptiness: the dual of
+    /// [BBC+26, (uninhabited)]. The complement of a set with no value is every value
+    /// [FCB08, Def. 4.1], so the pair is the universe's. A reference is what no reading
+    /// of the pair sees through: `μt. attr{y: t}` holds no finite value, `is_empty` says
+    /// so at once, and the difference the set reading builds of `str` against it is read
+    /// as holding values both ways, to a depth that doubles. A schema with no reference
+    /// is read by the sets, with nothing cut, so it is not asked. `Unknown` where the
+    /// other side is undecided, which leaves the pair to the readings after this one:
+    /// answered here, an undecided subject lost a hundred answers in 72,000 drawn pairs.
     #[inline(never)]
-    fn below_a_supertype_with_no_value(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
-        if !matches!(
-            other,
-            Schema::Ref(_) | Schema::AttrRecord { .. } | Schema::KeyedMap { .. }
-        ) || other.holds_a_value_shallowly()
-            || !other.has_reference()
-            || !other.is_empty_with(cx.oracle, cx.defs)
-        {
-            return Relation::Unknown;
+    fn a_side_with_no_value(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        let no_value = |schema: &Schema, cx: &Cx<'_>| {
+            matches!(
+                schema,
+                Schema::Ref(_) | Schema::AttrRecord { .. } | Schema::KeyedMap { .. }
+            ) && !schema.holds_a_value_shallowly()
+                && schema.has_reference()
+                && schema.is_empty_with(cx.oracle, cx.defs)
+        };
+        if no_value(other, cx) {
+            return self
+                .is_subtype_rec(&Schema::Nothing, cx)
+                .or_else(|| self.descriptor_contained_in(&Schema::Nothing, cx.oracle, cx.defs));
         }
-        self.is_subtype_rec(&Schema::Nothing, cx)
-            .or_else(|| self.descriptor_contained_in(&Schema::Nothing, cx.oracle, cx.defs))
+        if let Schema::Complement(inner) = self
+            && no_value(inner, cx)
+        {
+            return Schema::ANYTHING.is_subtype_rec(other, cx);
+        }
+        Relation::Unknown
     }
 
     /// The two lattice bounds read once more, each under an emptiness query of its
