@@ -13616,6 +13616,77 @@ mod leaves {
         assert_eq!(pairs_read_by_the_sets() - before, read);
     }
 
+    /// A refinement only the sets read holds a value there, in the last asking
+    /// alone, and the half read is the value: one the sets read empty stays open.
+    #[test]
+    fn a_refinement_is_read_by_the_sets_for_a_value() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        let a = pattern("a");
+        let none = Schema::refine(pattern("a"), vec![Constraint::MinLen(2)]);
+        assert_eq!(a.verdict_rec(&mut cx), Verdict::Unknown);
+        cx.reads_leaves = true;
+        assert_eq!(a.verdict_rec(&mut cx), Verdict::Inhabited);
+        assert_ne!(none.verdict_rec(&mut cx), Verdict::Inhabited);
+    }
+
+    /// A step for eight nodes, and none to spend is a stop the second asking reads.
+    #[test]
+    fn a_refinement_read_for_a_value_is_charged_by_its_nodes() {
+        use super::emptiness::NODES_A_STEP;
+        let charged = |schema: &Schema| {
+            let budget = Budget::new(DECISION_BUDGET);
+            let cx = Cx::new(&Pure, &[], &budget);
+            schema.a_value_the_sets_read(&cx);
+            DECISION_BUDGET - budget.left()
+        };
+        let a = pattern("a");
+        assert!(a.node_count() < NODES_A_STEP);
+        assert_eq!(charged(&a), 1);
+        // One node short of the figure is one step, and the figure itself two.
+        let positions = |n: usize| {
+            Schema::refine(
+                Schema::tuple(SeqShape::fixed(vec![Schema::Int; n])),
+                vec![Constraint::MinLen(n)],
+            )
+        };
+        let around = positions(1).node_count() - 1;
+        let (short, at) = (
+            positions(NODES_A_STEP - 1 - around),
+            positions(NODES_A_STEP - around),
+        );
+        assert_eq!(short.node_count(), NODES_A_STEP - 1);
+        assert_eq!(at.node_count(), NODES_A_STEP);
+        assert_eq!(charged(&short), 1);
+        assert_eq!(charged(&at), 2);
+        let spent = Budget::new(0);
+        let cx = Cx::new(&Pure, &[], &spent);
+        let met = bounds_met();
+        assert_eq!(a.a_value_the_sets_read(&cx), Verdict::Unknown);
+        assert_ne!(bounds_met(), met);
+    }
+
+    /// A recursion holds a value through a leaf only the sets read, so a shape's
+    /// refutation stands. A leaf the sets read empty leaves no value of it to stand
+    /// on, and a reference is what they cut.
+    #[test]
+    fn a_recursion_over_a_leaf_only_the_sets_read_is_refuted() {
+        let below = |leaf: Schema| {
+            let tuple = Schema::tuple(SeqShape::fixed(vec![Schema::Ref(DefIx::new(0))]));
+            let defs = [Schema::union([leaf, tuple])];
+            Schema::Ref(DefIx::new(0)).subtype_relation_under(&Schema::Str, &Pure, &defs)
+        };
+        assert_eq!(below(pattern("a")), Relation::Fails);
+        let none = Schema::refine(pattern("a"), vec![Constraint::MinLen(2)]);
+        assert_ne!(below(none), Relation::Fails);
+        let budget = Budget::new(DECISION_BUDGET);
+        let defs = [pattern("a")];
+        let mut cx = Cx::new(&Pure, &defs, &budget);
+        cx.reads_leaves = true;
+        let held = Schema::refine(Schema::Ref(DefIx::new(0)), vec![Constraint::MinLen(1)]);
+        assert_eq!(held.a_value_the_sets_read(&cx), Verdict::Unknown);
+    }
+
     /// No step counts a lowering, so this charge is what bounds how many one
     /// asking reads.
     #[test]

@@ -24,10 +24,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet is read as a member below all the others
 - fix: a build pays for a product of two automata by what it holds
 - feat: the complement of a set proved empty is every value
+- feat: a refinement only the sets read holds a value a refutation stands on
 
 -->
 
 ### Added
+
+- **A refinement only the sets read holds a value a refutation stands on.**
+  `recursive(lambda t: union(Annotated[str, Regex("a")], tuple[t]))` is `not_subset` of `str`, by
+  `("a",)`, where it stayed `undecided`.
 
 - **The complement of a set proved empty is every value.** `complement(S)` for an `S` `is_empty`
   proves empty relates as `anything` does, where it read for up to a few seconds and stayed

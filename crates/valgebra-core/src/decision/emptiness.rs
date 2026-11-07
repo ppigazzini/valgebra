@@ -22,7 +22,7 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 
 use crate::descr::classes::Reach;
-use crate::descr::lower::{Constants, an_empty_reading_stands, read_widened};
+use crate::descr::lower::{Constants, an_empty_reading_stands, lower, read_widened};
 use crate::ir::{
     Attribute, ClassIx, ConstIx, Constraint, Constraints, Field, MapClause, REACHED, Schema,
 };
@@ -38,10 +38,17 @@ use super::records::{
     empty_without_the_maps_unread, keyed_map_meet_verdict, keyed_map_minus_keyed_maps,
 };
 use super::{
-    Budget, Cx, DECISION_BUDGET, LeafRelations, NARROWING, NoLeafRelations, READINGS_HELD,
-    asked_again, asks_again, bounds_met, descending, has_complementary_pair, has_disjoint_pair,
-    pushed_complement_is_placed, respelling, spend, spend_at_once,
+    Budget, Cx, DECISION_BUDGET, LEAF_READING, LeafRelations, NARROWING, NoLeafRelations,
+    READINGS_HELD, a_bound_is_met, asked_again, asks_again, bounds_met, descending,
+    has_complementary_pair, has_disjoint_pair, pushed_complement_is_placed, respelling, spend,
+    spend_at_once,
 };
+
+/// The nodes of a refinement the sets read for a value that one step of the query
+/// pays for. A two-node refinement, a bound over a kind, is one step; a wide one is
+/// read for what it holds. At [`LEAF_READING`] apiece the asking lost 44 answers in
+/// 1,119 gained to its own small refinements, and at this figure 3 in 1,127.
+pub(super) const NODES_A_STEP: usize = 8;
 
 impl Schema {
     /// Whether this schema is provably empty — denotes no value. Complete on the
@@ -176,6 +183,48 @@ impl Schema {
         let allowance = Budget::new(cx.budget.left());
         rest.is_subtype_rec(inner, &mut cx.within_this_query(&allowance))
             .or_else(|| rest.decided_by_its_leaves(inner, cx, false))
+    }
+
+    /// What the rules read of this refinement, and where they read nothing and the
+    /// query reads its leaves, what the sets do.
+    fn refinement_read(
+        &self,
+        base: &Schema,
+        constraints: &Constraints,
+        cx: &mut Cx<'_>,
+    ) -> Verdict {
+        let verdict = refinement_verdict(base, constraints, cx);
+        if verdict == Verdict::Unknown && cx.reads_leaves {
+            return self.a_value_the_sets_read(cx);
+        }
+        verdict
+    }
+
+    /// `Inhabited` where the set representation reads a value of a refinement with
+    /// no reference, in the asking that reads a pair's leaves. With no cut a set read
+    /// inhabited holds a value, the one a relation refutes on when it reads this
+    /// schema against nothing. Only that half is read: a set read empty rests on the
+    /// label check, and the rules' answer stands on it.
+    ///
+    /// Charged a step for [`NODES_A_STEP`] nodes, since no step counts a lowering,
+    /// and at most [`LEAF_READING`]. Charged that apiece, as a goal is, one asking's
+    /// many small refinements spent its steps, and it lost answers it holds at this
+    /// figure.
+    #[inline(never)]
+    pub(super) fn a_value_the_sets_read(&self, cx: &Cx<'_>) -> Verdict {
+        if self.has_reference() {
+            return Verdict::Unknown;
+        }
+        let steps = u32::try_from(self.node_count() / NODES_A_STEP + 1).unwrap_or(u32::MAX);
+        if !spend_at_once(cx.budget, steps.min(LEAF_READING)) {
+            a_bound_is_met();
+            return Verdict::Unknown;
+        }
+        if lower(self, cx.oracle).is_some_and(|set| set.emptiness() == Verdict::Inhabited) {
+            Verdict::Inhabited
+        } else {
+            Verdict::Unknown
+        }
     }
 
     /// A complement read as the relation it is, at the root of a question every
@@ -434,9 +483,10 @@ impl Schema {
             Schema::Refine { base, constraints } if constraints.is_empty() => {
                 base.empty_and_region(cx)
             }
-            Schema::Refine { base, constraints } => {
-                (refinement_verdict(base, constraints, cx), Regions::Unknown)
-            }
+            Schema::Refine { base, constraints } => (
+                self.refinement_read(base, constraints, cx),
+                Regions::Unknown,
+            ),
             Schema::Intersection(members) => intersection_verdict(self, members, cx),
             // A set or frozenset admits the empty collection whatever its
             // element schema is, so it is *proven* inhabited -- which two values

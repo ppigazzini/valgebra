@@ -1153,6 +1153,18 @@ value, which a relation of `~S` read the same way. Asked of a reference, an attr
 record or a keyed map holding no value by its shape and holding a reference: the rest
 are read by the sets, with nothing cut.
 
+**A refinement the rules cannot read holds a value by the sets, in the same asking.** A
+refutation stands on a value of its subject, and `refinement_verdict` is `Unknown` for a
+refinement it has no reading of, so `recursive(lambda t: union(Annotated[str, Regex("a")],
+tuple[t]))` below `str` declined over `("a",)`. In the last asking
+(`a_value_the_sets_read`) a refinement with no reference is lowered, and a set read
+inhabited with no cut holds a value. Only that half is read. It is charged a step for
+`NODES_A_STEP` nodes: at `LEAF_READING` apiece an asking's many small refinements spent
+its steps and lost 44 answers in 1,119 gained, and at this figure 3 in 1,127. Over a release's
+answers it loses none. `holds_parts` stays as it is for a refinement over a constructor:
+reading those too moved `Annotated[list[B3], Len(1, 1)]` below `nothing` and read 22.8%
+more on `--decision-matrix`.
+
 **A goal the rules decline is read by the sets once, and last.** The set reading of
 a pair stops for the whole pair: at a cut, at what it cannot lower, past the depth.
 So `bool` below `Annotated[int, Lt(8)]` decides alone and declined beside a recursion,
