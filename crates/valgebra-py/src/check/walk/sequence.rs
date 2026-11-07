@@ -22,7 +22,7 @@ use valgebra_core::{
 
 #[cfg(PyPy)]
 use super::reads_its_length;
-use super::record::{check_attr_record, check_keyed_map};
+use super::record::{RecordReading, check_attr_record, check_keyed_map};
 use super::scalar::{
     Scalar, admitted_quietly, check_refine, homogeneous_scalar_union, scalar_union_admits,
 };
@@ -300,10 +300,11 @@ pub(super) fn record_array_matches(
     };
     let ctx = frame.ctx;
     let _element = ctx.descend()?;
+    let reading = RecordReading::of(fields, defaults, &frame.ctx);
     let mut ok = true;
     for item in items {
         ok &= !ctx.state.signals.fatal_seen.get()
-            && check_keyed_map(fields, defaults, &Value::Json(py, item), frame);
+            && check_keyed_map(&reading, &Value::Json(py, item), frame);
         if !ok && stop(ctx) {
             return Some(false);
         }
@@ -924,8 +925,10 @@ fn refined_list_matches(
 /// ([`refined_list_matches`]): what [`member`] spends around the check, its
 /// depth guard and its dispatch on the element's tag, is spent once. The
 /// fatal-signal flag is read at every element, as [`member`] reads it, since a
-/// record that declares no field reads nothing that would refuse on it. An
-/// explaining walk names each element at its index, as the walk does.
+/// record that declares no field reads nothing that would refuse on it. What the
+/// node says of every element -- its plan, what its clauses admit -- is read once
+/// ([`RecordReading`]). An explaining walk names each element at its index, as
+/// the walk does.
 #[inline(never)]
 fn record_list_matches(
     list: &Bound<'_, PyList>,
@@ -941,13 +944,14 @@ fn record_list_matches(
     }
     let _element = ctx.descend()?;
     let explains = ctx.mode.explains();
+    let reading = RecordReading::of(fields, defaults, &frame.ctx);
     let mut ok = true;
     let scan = scan_list(list, |at, item| {
         if explains {
             frame.path.push(PathSegment::Index(at));
         }
         ok &= !ctx.state.signals.fatal_seen.get()
-            && check_keyed_map(fields, defaults, &Value::Py(item), frame);
+            && check_keyed_map(&reading, &Value::Py(item), frame);
         if explains {
             frame.path.pop();
         }

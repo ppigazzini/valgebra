@@ -295,6 +295,43 @@ impl Decided {
     }
 }
 
+/// What reading a keyed map asks of its node and of no value: its plan, and what
+/// its clauses say of a key it does not declare.
+///
+/// One node has one answer to both, so a list of records resolves them once, as
+/// a list of one scalar kind reads its kind once
+/// ([`record_list_matches`](super::sequence)), rather than hashing the node's
+/// address and reading its clauses again at every element: asked at every
+/// element, a list of two hundred records reads 6.6% more instructions
+/// (`--binding-record-list`). A node declaring no field has no plan, so a mapping
+/// pays no lookup for one.
+#[derive(Clone, Copy)]
+pub(super) struct RecordReading<'a> {
+    fields: &'a [Field],
+    defaults: &'a [MapClause],
+    plan: Option<&'a RecordPlan>,
+    undeclared: Undeclared,
+}
+
+impl<'a> RecordReading<'a> {
+    /// The reading of the keyed map `fields` and `defaults` make, under `ctx`'s
+    /// index.
+    #[inline]
+    pub(super) fn of(fields: &'a [Field], defaults: &'a [MapClause], ctx: &Ctx<'a>) -> Self {
+        let plan = if fields.is_empty() {
+            None
+        } else {
+            ctx.index.records.get(&(fields.as_ptr() as usize))
+        };
+        RecordReading {
+            fields,
+            defaults,
+            plan,
+            undeclared: Undeclared::of(defaults),
+        }
+    }
+}
+
 /// Membership for a keyed map: a record or a mapping, read as a dict.
 ///
 /// The fast check decides; on failure an explaining walk re-reads in declared
@@ -320,8 +357,7 @@ impl Decided {
 )]
 #[inline(always)]
 pub(super) fn check_keyed_map(
-    fields: &[Field],
-    defaults: &[MapClause],
+    reading: &RecordReading<'_>,
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
@@ -334,7 +370,7 @@ pub(super) fn check_keyed_map(
         .then(|| decided.insert(Decided::default()));
     #[cfg(debug_assertions)]
     let written = (frame.path.len(), frame.out.len());
-    let ok = keyed_map_matches(fields, defaults, value, frame, keep);
+    let ok = keyed_map_read(reading, value, frame, keep);
     #[cfg(debug_assertions)]
     debug_assert_eq!(
         written,
@@ -343,7 +379,7 @@ pub(super) fn check_keyed_map(
     );
     if !ok && let Some(decided) = &decided {
         let before = frame.out.len();
-        keyed_map_explain(fields, defaults, value, frame, decided);
+        keyed_map_explain(reading.fields, reading.defaults, value, frame, decided);
         if frame.out.len() == before {
             // Two passes read the same dict and disagreed, so the dict did not
             // stay still between them: report that rather than a failure with
@@ -371,7 +407,8 @@ pub(super) fn check_keyed_map_apart(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
-    check_keyed_map(fields, defaults, value, frame)
+    let reading = RecordReading::of(fields, defaults, &frame.ctx);
+    check_keyed_map(&reading, value, frame)
 }
 
 /// Membership for a keyed map: named fields, then a default clause for every
@@ -388,10 +425,21 @@ pub(super) fn keyed_map_matches(
     frame: &mut Frame<'_, '_>,
     decided: Option<&mut Decided>,
 ) -> bool {
+    let reading = RecordReading::of(fields, defaults, &frame.ctx);
+    keyed_map_read(&reading, value, frame, decided)
+}
+
+/// [`keyed_map_matches`] over a reading its caller holds.
+fn keyed_map_read(
+    reading: &RecordReading<'_>,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+    decided: Option<&mut Decided>,
+) -> bool {
     match value {
-        Value::Py(v) => keyed_map_matches_py(fields, defaults, v, frame, decided),
+        Value::Py(v) => keyed_map_matches_py(reading, v, frame, decided),
         Value::Json(py, JsonValue::Object(entries)) => {
-            keyed_map_matches_json(fields, defaults, *py, entries, frame.ctx)
+            keyed_map_matches_json(reading, *py, entries, frame.ctx)
         }
         Value::Json(..) => false,
     }
@@ -658,7 +706,7 @@ impl Undeclared {
 /// back to.
 fn keyed_map_asks_for_its_keys(
     fields: &[Field],
-    defaults: &[MapClause],
+    undeclared: Undeclared,
     dict: &Bound<'_, PyDict>,
     frame: &mut Frame<'_, '_>,
     plan: &RecordPlan,
@@ -669,7 +717,6 @@ fn keyed_map_asks_for_its_keys(
     // undeclared key together with its value has to be scanned, and the scan
     // walks the declared fields as it goes, so reading those by key first would
     // be work done twice; such a record is not read here.
-    let undeclared = Undeclared::of(defaults);
     if undeclared == Undeclared::Read || plan.keys.len() != fields.len() {
         return None;
     }
@@ -842,13 +889,18 @@ fn other_keys_reach_names(
 /// index (an empty one, or a node the build-time traversal did not reach) falls
 /// back to building the map here.
 fn keyed_map_matches_py(
-    fields: &[Field],
-    defaults: &[MapClause],
+    reading: &RecordReading<'_>,
     dict: &Bound<'_, PyAny>,
     frame: &mut Frame<'_, '_>,
     decided: Option<&mut Decided>,
 ) -> bool {
     let ctx = frame.ctx;
+    let RecordReading {
+        fields,
+        defaults,
+        plan,
+        undeclared,
+    } = *reading;
     let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
     };
@@ -862,10 +914,15 @@ fn keyed_map_matches_py(
     {
         return answered;
     }
-    if let Some(plan) = ctx.index.records.get(&(fields.as_ptr() as usize)) {
-        if let Some(answered) =
-            keyed_map_asks_for_its_keys(fields, defaults, dict, frame, plan, decided.as_deref_mut())
-        {
+    if let Some(plan) = plan {
+        if let Some(answered) = keyed_map_asks_for_its_keys(
+            fields,
+            undeclared,
+            dict,
+            frame,
+            plan,
+            decided.as_deref_mut(),
+        ) {
             return answered;
         }
         keyed_map_scan(
@@ -1142,12 +1199,17 @@ const FOUND_ON_STACK: usize = 16;
 /// `json.loads` does. Records are small, so a linear scan beats building a
 /// per-object map.
 pub(super) fn keyed_map_matches_json(
-    fields: &[Field],
-    defaults: &[MapClause],
+    reading: &RecordReading<'_>,
     py: Python<'_>,
     entries: &[(Cow<'_, str>, JsonValue<'_>)],
     ctx: Ctx<'_>,
 ) -> bool {
+    let RecordReading {
+        fields,
+        defaults,
+        plan,
+        undeclared,
+    } = *reading;
     let mut unwritten = Unwritten::default();
     let mut sub = unwritten.frame(ctx);
     let room = ctx.room_to_descend();
@@ -1160,16 +1222,9 @@ pub(super) fn keyed_map_matches_json(
     // string. A record whose clause reads a key asks it of each undeclared key
     // once the fields are read, as the search below does, where it is wide
     // enough to take the plan at all ([`resolves_through_the_plan`]).
-    let undeclared = Undeclared::of(defaults);
-    if let Some(plan) = ctx
-        .index
-        .records
-        .get(&(fields.as_ptr() as usize))
-        .filter(|plan| {
-            plan.by_name.len() == fields.len()
-                && resolves_through_the_plan(undeclared, fields.len())
-        })
-    {
+    if let Some(plan) = plan.filter(|plan| {
+        plan.by_name.len() == fields.len() && resolves_through_the_plan(undeclared, fields.len())
+    }) {
         // The document's value for each declared field, last occurrence winning
         // as `json.loads` does, gathered before any of them is checked: an
         // earlier duplicate that fails is not the entry the document means.
@@ -1263,7 +1318,6 @@ pub(super) fn keyed_map_matches_json(
     // a name set rebuilt per object. A schema absent from the plan falls back to
     // scanning the field list, so correctness never depends on the plan being
     // complete.
-    let plan = ctx.index.records.get(&(fields.as_ptr() as usize));
     let declares = |name: &str| match plan {
         Some(plan) => plan.by_name.contains_key(name),
         None => fields.iter().any(|f| &*f.name == name),

@@ -402,8 +402,9 @@ its hash and `==` reach (`declared_position`), where the dict answers that name
 with this entry (`the_entry_a_name_finds`) -- and each undeclared key read
 against the clause that covers it. **Explaining**
 (`keyed_map_explain`): the scan that reports every violation rather than the
-first. Which of the first two a record takes is `Undeclared::of` reading the
-record's clauses: an undeclared key is *refused* (no clause), *admitted* (the
+first. A list of records reads its node's plan and clauses once
+(`RecordReading` in `walk/record.rs`). Which of the first two a record takes is
+`Undeclared::of` reading the record's clauses: an undeclared key is *refused* (no clause), *admitted* (the
 top clause), *admitted when it is a string* (`str: anything`, which is what a
 `TypedDict` builds), or *read* (any other clause). The invariant that makes
 the by-keys path sound is that it never probes an undeclared key, so it may

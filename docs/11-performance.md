@@ -809,7 +809,10 @@ program that builds validators per request, and to no validation call.
   length bounds 19%. A list of records reads each element by its record's check,
   inlined into the reader, with that level held the same way
   (`record_list_matches`): two hundred three-field `TypedDict`s cost 7.5% fewer
-  instructions on 3.12 and 3.14. A list of dataclasses walks an element of
+  instructions on 3.12 and 3.14. What its node says of every element, its plan and
+  what its clauses admit, is read once for the list (`RecordReading`), which is
+  6.6% of that shape's instructions on the build without a profile
+  (`--binding-record-list`). A list of dataclasses walks an element of
   exactly the class as the record of its fields, without dispatching the meet,
   the class and the record around it (`class_record_list_matches`): 12% fewer
   instructions for a hundred five-field dataclasses, in both modes.
