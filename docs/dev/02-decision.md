@@ -1192,11 +1192,40 @@ step a lowering reads (`step_over_floats`) is read through the sets only beside 
 clear of zero. Asked of the sets in every asking, a step a lowering, the same answers cost a
 JSON value's declines ten times the time on twenty of 60,000 drawn pairs.
 
-**Two bounds past what a carrier reads are refused.** `Annotated[int, Ge(Decimal("Infinity"))]`
-holds no integer, and `Annotated[bool, Ge(10**400)]` no boolean, and both decline. `floor` raises
-on an infinite `Decimal`, as on `inf`, which is read through the float carrier, and a bound
-past 64 bits has none. A rule apiece for bounds no schema writes, against nothing a hunt
-found wrong.
+**Bounds past what a carrier reads are refused.** `Annotated[int, Ge(Decimal("Infinity"))]`
+holds no integer, and `Annotated[bool, Ge(10**400)]` no boolean, `Annotated[float, Ge(10**40)]`
+holds `1e40` and `Annotated[float, Ge(Decimal("Infinity"))]` holds `inf`, and each declines.
+`floor` raises on an infinite `Decimal`, as on `inf`, which is read through the float carrier,
+and a bound past 64 bits has none. A `Rational` carries its integers in an `i64`, so reading
+these takes an optional floor every reading of that operand tests. A rule apiece for bounds no
+schema writes, against nothing a hunt found wrong.
+
+**A table past 64 bits beside a bounded integer, refused.** `Annotated[int, Ge(2)]` is outside
+`Literal[2**63]` on `2`, and declines, where it is refuted below `Literal[2**53 + 1]`. A constant
+past 64 bits has no integer carrier, so the sets lower neither side, and a plain value is read
+beside a table with no constant of its kind. Reading it takes a rule that an unbounded refinement
+outruns a finite table, for a literal only a hunt writes beside one.
+
+**A step in a `Fraction` or a `Decimal` over the integers, refused.**
+`Annotated[int, MultipleOf(Decimal(2))]` holds `0` and declines on every question, where a float
+step is `not_subset` of `nothing` on it. Such a step's kind is one `operand_kind` declines, and
+`%` in a `Decimal` reads its context: `Decimal(10**30) % Decimal(2)` raises at the default
+precision, so its multiples turn on a state the schema does not name. Zero alone is a new question
+on `LeafRelations`, for a step no translation writes, and it would prove nothing but that one value.
+
+**A builtin kind beside an attribute record, refused.** `tuple[()]` is not below the complement of
+a protocol with `y: int`: `class T(tuple): y = 1` makes a value of both. It declines, as `list[int]`
+and `int` do. The refutation stands on a class of no program, and the reading has to say which
+kinds take a subclass and which attributes a builtin carries of its own: `bool` takes none, and
+`True.real` is an `int`, so `bool` is not below the complement of a protocol with `real: int`
+either. The tables are each interpreter's, for one row and 0 answers over the drawn families.
+
+**A mapping of one word under a length of two, refused.** `Annotated[dict[Annotated[str,
+Regex("a")], int], MinLen(2)]` holds `{Apart("a"): 1, Apart("a"): 2}` for a `str` subclass whose `==`
+is identity, and declines. Under the assumption on a `str` key
+([14-soundness.md](../14-soundness.md)) it is empty, and a proof would stand against a value the
+walk accepts, for a schema no one writes on purpose. The assumption pays for proofs between a
+record and a mapping, and this is neither.
 
 **A plain value of a kind is outside a table of another exact type.** A literal pins
 `type(x)`, so `list[str]` is outside `Literal[Color.RED]` on `[]`, and `bool` outside
