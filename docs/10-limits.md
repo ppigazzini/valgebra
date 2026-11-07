@@ -148,7 +148,10 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   split across a wide union takes a level for each branch it narrows by --
   without the bound each would outrun the stack. A level costs about 1 KiB on the
   shipped wheels, so the deepest relation fits in half of a 1 MiB thread, and
-  the release smoke runs it there.
+  the release smoke runs it there. Two chains of definitions, each
+  `recursive(lambda t: union(previous, list[t]))`, are told apart up to 21 links
+  and answer undecided from 22, within the 128 a schema may hold, in about a tenth
+  of a second at 22 links and a third at 64.
 - **Comparison depth.** `==` reads two definition tables numbered in one order
   index for index, as deep as one tree. Numbered apart, it pairs the
   definitions in the order construction numbered them and reads a body inside
