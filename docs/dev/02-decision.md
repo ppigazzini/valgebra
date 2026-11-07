@@ -1215,7 +1215,10 @@ and distributing the meets beneath it decides a guarded record three deep below 
 complement of a fixpoint of digits in a twentieth of the time, which 0.0.22 decided and
 every release since declines. It gives back three refutations of that shape and one of
 another, 1 answer gained against 4 lost over the seeds and families read, so it does not
-land while a query reads a narrowed meet at every level.
+land while a query reads a narrowed meet at every level. Read as a further asking, where the
+first two decline, it loses none of the four, and reaches that row only by asking again a
+question that has spent all its steps: three million steps where a million is the bound, for
+one row and 0 answers over the 72,000 seeds of the recursive families.
 
 **A complement of a reference unfolded through its definition, refused.** `~t` under `t =
 ¬(t,)` is `(t,)`, which `Schema::complement` folds, and asked that way
