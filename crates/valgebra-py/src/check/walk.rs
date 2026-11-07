@@ -68,6 +68,8 @@ use scalar::{
 };
 use sequence::{check_frozenset, check_seq, check_set};
 
+pub(crate) use scalar::root_scalar;
+
 /// Where a walk is, and what it has found there, beside the context it reads.
 ///
 /// The three travel together through every arm of the walk, and passing them

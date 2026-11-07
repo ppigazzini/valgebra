@@ -20,7 +20,7 @@ use valgebra_core::{Measure, Openness, Relation, Schema};
 use crate::build::{Pool, PoolKeys, build_root};
 use crate::check::{
     Ctx, Frame, RegexIndex, Unwritten, ValidatorIndex, WalkMode, WalkState, build_index_from,
-    compile_patterns, member,
+    compile_patterns, member, root_scalar,
 };
 use crate::errors::into_pyerr;
 use crate::input::{JsonInput, Value, decode_json_input, parse_json};
@@ -497,6 +497,9 @@ impl Validator {
     ///         rather than being read as a non-member.
     #[pyo3(signature = (obj, /, *, fail_fast = false))]
     fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
+        if root_scalar(&self.schema, obj) == Some(true) {
+            return Ok(());
+        }
         let state = WalkState::new();
         let mut path = Vec::new();
         let mut violations = Vec::new();
@@ -538,6 +541,9 @@ impl Validator {
     ///         signal, it propagates rather than being read as a non-member.
     #[pyo3(signature = (obj, /))]
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> PyResult<bool> {
+        if let Some(admitted) = root_scalar(&self.schema, obj) {
+            return Ok(admitted);
+        }
         let state = WalkState::new();
         let ok = member(
             &self.schema,
