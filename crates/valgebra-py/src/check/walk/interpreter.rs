@@ -15,7 +15,7 @@ use super::record::{
     RecordReading, SMALL_OBJECT, Undeclared, keyed_map_matches_json, resolves_through_the_plan,
     scan_dict,
 };
-use super::sequence::scan_list;
+use super::sequence::{refined_scalar_list, scan_list};
 use super::*;
 use crate::check::ctx::{MAX_RECURSION_DEPTH, MAX_WALK_DEPTH};
 use crate::check::index::ValidatorIndex;
@@ -6730,6 +6730,104 @@ fn a_list_of_refinements_answers_as_the_walk_does() {
                     (vec![PathSegment::Index(3)], "less_than_equal"),
                 ]
             )
+        );
+    });
+}
+
+/// A list of refined scalars is read by its kind, and answers what a tuple of
+/// the same values answers through each element's own check, for every kind of
+/// base the reader takes; any other base is not its.
+#[test]
+fn a_list_of_refined_scalars_is_read_by_its_kind() {
+    Python::attach(|py| {
+        let pool: Vec<Py<PyAny>> = vec![
+            PyFloat::new(py, 1.5).into_any().unbind(),
+            PyFloat::new(py, f64::NAN).into_any().unbind(),
+        ];
+        let at = OperandIx::new;
+        let cases: [(Schema, Vec<Constraint>, &str, bool); 7] = [
+            (
+                Schema::Int,
+                vec![Constraint::MultipleOf(at(0))],
+                "[3, 1.5]",
+                false,
+            ),
+            (
+                Schema::Int,
+                vec![Constraint::Ge(at(0))],
+                "[2, True, 3]",
+                false,
+            ),
+            (
+                Schema::Float,
+                vec![Constraint::Ge(at(0))],
+                "[1.5, 2.0]",
+                true,
+            ),
+            (Schema::Float, vec![Constraint::Gt(at(0))], "[1.5]", false),
+            (Schema::Float, vec![Constraint::Le(at(1))], "[1.0]", false),
+            (
+                Schema::Str,
+                vec![Constraint::MinLen(2)],
+                "['ab', 'abc']",
+                true,
+            ),
+            (
+                Schema::Str,
+                vec![Constraint::MaxLen(1)],
+                "['a', 'ab', 1]",
+                false,
+            ),
+        ];
+        let index = ValidatorIndex::default();
+        for (base, constraints, source, want) in cases {
+            let element = Schema::Refine {
+                base: Arc::new(base.clone()),
+                constraints: constraints.clone().into(),
+            };
+            let list = Schema::list(SeqShape::homogeneous(element.clone()));
+            let tuple = Schema::tuple(SeqShape::homogeneous(element));
+            let listed = evaluate(py, source);
+            let tupled = evaluate(py, &format!("tuple({source})"));
+            assert_eq!(decide(py, &list, &listed, &pool, &[]), want, "{source}");
+            assert_eq!(decide(py, &tuple, &tupled, &pool, &[]), want, "{source}");
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &pool,
+                defs: &[],
+                index: &index,
+                state: &state,
+                mode: WalkMode::Fast,
+            };
+            let value = Value::Py(&listed);
+            let read = refined_scalar_list(
+                listed.cast::<PyList>().expect("a list"),
+                &base,
+                &constraints,
+                &value,
+                &mut Unwritten::default().frame(ctx),
+            );
+            assert_eq!(read, Some(want), "{source}");
+        }
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &pool,
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let empty = PyList::empty(py);
+        let value = empty.clone().into_any();
+        assert_eq!(
+            refined_scalar_list(
+                &empty,
+                &Schema::Bool,
+                &[Constraint::MinLen(1)],
+                &Value::Py(&value),
+                &mut Unwritten::default().frame(ctx),
+            ),
+            None
         );
     });
 }

@@ -809,14 +809,16 @@ the two levels below the list free, the tuple's and its positions', as the union
 of scalars needs the union's and its branch's; the named-tuple reader needs the
 meet's as well. A list of refinements has a reader too
 (`refined_list_matches`), which calls each element's own check directly and
-holds the level the walk opens for an element across the whole list. No test
-settles an element apart from that check, which may run Python through an
-operand of a class of its own or through a predicate, so each element is
-checked once, in the walk's own mode, and named at its index as the walk names
-it. Without a call into `member`, its depth guard and its dispatch at every
-element, a thousand integers under two bounds cost 12% fewer instructions on
-3.12 and 3.15, 13% to 14% under `validate`, and a thousand strings under two
-length bounds 19%. A list of records is read so too (`record_list_matches`):
+holds the level the walk opens for an element across the whole list. Each
+element is checked once, in the walk's own mode, and named at its index as the
+walk names it. Without a call into `member`, its depth guard and its dispatch at
+every element, a thousand integers under two bounds cost 12% fewer instructions
+on 3.12 and 3.15, 13% to 14% under `validate`, and a thousand strings under two
+length bounds 19%. A deciding walk over a base of `int`, `float` or `str` reads
+the base's kind once for the list (`refined_scalar_list`), and each kind has a
+loop of its own, whose element is its type test and then its constraints
+(`constraints_hold`). A list of records is read so too
+(`record_list_matches`):
 each element is its record's check, inlined into the reader, with the level
 held across the list, and the fatal-signal flag read at every element, as
 `member` reads it, since a record that declares no field reads nothing that

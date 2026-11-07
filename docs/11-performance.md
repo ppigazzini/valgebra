@@ -806,7 +806,9 @@ program that builds validators per request, and to no validation call.
   refinements calls each element's own check, with the level the walk opens for
   an element held across the list (`refined_list_matches`): a thousand integers
   under two bounds cost 12% fewer instructions, and a thousand strings under two
-  length bounds 19%. A list of records reads each element by its record's check,
+  length bounds 19%. Deciding over a base of `int`, `float` or `str`, its kind is
+  read once and has a loop of its own (`refined_scalar_list`): strings under a
+  pattern read 7.4% fewer instructions on the profiled CPython 3.15 wheel. A list of records reads each element by its record's check,
   inlined into the reader, with that level held the same way
   (`record_list_matches`): two hundred three-field `TypedDict`s cost 7.5% fewer
   instructions on 3.12 and 3.14. What its node says of every element, its plan and
