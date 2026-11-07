@@ -332,7 +332,17 @@ fn stepped_universe() -> Vec<f64> {
         f64::MAX,
     ];
     let mut floats: Vec<f64> = (-13..=13).map(f64::from).collect();
-    floats.extend([0.5, -0.5, 1.5, 5e-324, -5e-324, 1.0f64.next_up(), -0.0]);
+    floats.extend([
+        0.5,
+        -0.5,
+        1.5,
+        -1.5,
+        -2.5,
+        5e-324,
+        -5e-324,
+        1.0f64.next_up(),
+        -0.0,
+    ]);
     for edge in edges {
         let mut below = edge;
         let mut above = edge;

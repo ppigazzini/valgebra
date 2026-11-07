@@ -1323,11 +1323,13 @@ proptest! {
         a in descr(),
         b in descr(),
         i in 0..Kind::ALL.len(),
-        j in 0..Kind::ALL.len(),
+        apart in 1..Kind::ALL.len(),
     ) {
-        prop_assume!(i != j);
         let kind_a = Kind::ALL.get(i).copied().unwrap_or(Kind::Int);
-        let kind_b = Kind::ALL.get(j).copied().unwrap_or(Kind::Str);
+        let kind_b = Kind::ALL
+            .get((i + apart) % Kind::ALL.len())
+            .copied()
+            .unwrap_or(Kind::Str);
         let (Some(x), Some(y)) = (
             a.intersect(&Descr::of_kind(kind_a)),
             b.intersect(&Descr::of_kind(kind_b)),
