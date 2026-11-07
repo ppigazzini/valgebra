@@ -11,8 +11,8 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyModule, PySet, PyString,
-    PyTuple, PyType,
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyIterator, PyList, PyModule, PySet,
+    PyString, PyTuple, PyType,
 };
 use valgebra_core::{
     ClassIx, ConstIx, Constraint, DefIx, DefShift, Guarded, OperandIx, PredIx, Schema,
@@ -1725,6 +1725,58 @@ fn constant_of(obj: &Bound<'_, PyAny>) -> Constant {
         return Constant::Bytes(Arc::from(raw.as_bytes()));
     }
     address
+}
+
+/// The items of an iterable a class or a marker supplies, refused past as many
+/// as a schema holds nodes: the frontend holds what it reads, so one that does
+/// not end would be read until memory does.
+pub(super) fn each_within_the_bound<'a, 'py>(
+    iterable: &'a Bound<'py, PyAny>,
+) -> PyResult<WithinTheBound<'a, 'py>> {
+    Ok(WithinTheBound {
+        items: iterable.try_iter()?,
+        iterable,
+        left: MAX_SCHEMA_NODES,
+    })
+}
+
+/// [`each_within_the_bound`]'s iterator: a count down, read item by item.
+pub(super) struct WithinTheBound<'a, 'py> {
+    items: Bound<'py, PyIterator>,
+    iterable: &'a Bound<'py, PyAny>,
+    left: usize,
+}
+
+impl<'py> Iterator for WithinTheBound<'_, 'py> {
+    type Item = PyResult<Bound<'py, PyAny>>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.items.next()?;
+        if self.left == 0 {
+            return Some(Err(yields_too_many(self.iterable)));
+        }
+        self.left -= 1;
+        Some(item)
+    }
+
+    /// The iterable's own hint, held to the bound, so a collect sizes its
+    /// buffer once and a hint past the bound asks for no more than it reads.
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.items.size_hint().0.min(self.left), None)
+    }
+}
+
+/// The refusal of an iterable that yields more items than a schema holds nodes.
+#[cold]
+fn yields_too_many(iterable: &Bound<'_, PyAny>) -> PyErr {
+    match summarize(iterable) {
+        Ok(shown) => PyValueError::new_err(format!(
+            "schema is too large: {shown} yields more than the limit of \
+             {MAX_SCHEMA_NODES} items"
+        )),
+        Err(err) => err,
+    }
 }
 
 /// A pool's keys, slot for slot, and the index a new constant is looked up in.

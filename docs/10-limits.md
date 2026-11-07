@@ -58,7 +58,11 @@ written by the developer and is trusted.
       schema's size with each, and the frontend refuses at the step after the
       one that passes the bound rather than building the rest. It counts what
       it holds, and a part a fold drops -- a member a union absorbs into `Any`
-      -- still counts toward the union that dropped it.
+      -- still counts toward the union that dropped it. What a marker or a class
+      yields is read the same way, item by item: a grouped marker's constraints,
+      a protocol's members, a named tuple's fields and a `TypedDict`'s required
+      keys are refused past 100,000 items, so one that never ends is refused
+      rather than read until memory ends.
 
   A real schema stays far under all three. Structural recursion belongs in
   [`recursive`](06-recursion.md), whose back edge does not count toward the depth.

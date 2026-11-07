@@ -21,19 +21,21 @@ schema's declared size.
 
 from __future__ import annotations
 
+import itertools
 import json
 import subprocess
 import sys
 import textwrap
 import time
 import types
-from typing import TYPE_CHECKING, Annotated, Literal, TypedDict
+from typing import TYPE_CHECKING, Annotated, Literal, Protocol, TypedDict
 
+import annotated_types
 import pytest
 from annotated_types import MultipleOf
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
 from valgebra import (
     Regex,
@@ -199,6 +201,84 @@ def test_self_combination_rejects_before_exhausting_memory() -> None:
     )
     assert result.returncode == 0, f"crashed with rc={result.returncode}"
     assert "RAISED" in result.stdout, f"{result.stdout} {result.stderr}"
+
+
+class _Endless(annotated_types.GroupedMetadata):
+    """A grouped marker whose constraints never end."""
+
+    def __iter__(self) -> Iterator[object]:
+        return itertools.repeat(annotated_types.Ge(0))
+
+
+class _Protocol(Protocol):
+    x: int
+
+
+def _endless_protocol() -> object:
+    _Protocol.__protocol_attrs__ = itertools.repeat("x")  # ty: ignore[unresolved-attribute]
+    return _Protocol
+
+
+def _endless_fields() -> object:
+    class Pair(tuple):  # noqa: SLOT001 -- a named tuple's own shape
+        _fields = itertools.repeat("a")
+        __annotations__ = {"a": int}
+
+    return Pair
+
+
+def _endless_required_keys() -> object:
+    class Keys(TypedDict):
+        a: int
+
+    Keys.__required_keys__ = itertools.repeat("b")  # ty: ignore[invalid-assignment]
+    return Keys
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        lambda: Annotated[int, _Endless()],
+        _endless_protocol,
+        _endless_fields,
+        _endless_required_keys,
+    ],
+    ids=[
+        "a marker group",
+        "a protocol's members",
+        "a named tuple's fields",
+        "a TypedDict's required keys",
+    ],
+)
+def test_an_iterable_that_never_ends_is_refused_at_the_node_bound(
+    spelling: Callable[[], object],
+) -> None:
+    """What a marker or a class yields is read as far as a schema holds nodes.
+
+    The frontend holds what it reads, so a group, a protocol's member list, a
+    named tuple's fields or a `TypedDict`'s required keys that never end were
+    read until memory ended, or, asked by `in` for a name they never yield,
+    never answered.
+    """
+    if spelling is _endless_protocol and sys.version_info < (3, 12):
+        pytest.skip("protocol members are read from the class body below 3.12")
+    with pytest.raises(ValueError, match="schema is too large"):
+        Validator(spelling())
+
+
+def test_a_marker_group_at_the_node_bound_builds_and_one_past_is_refused() -> None:
+    """A group of as many markers as a schema holds nodes is read whole."""
+
+    class Group(annotated_types.GroupedMetadata):
+        def __init__(self, count: int) -> None:
+            self.count = count
+
+        def __iter__(self) -> Iterator[object]:
+            return itertools.repeat(annotated_types.Ge(0), self.count)
+
+    assert Validator(Annotated[int, Group(MAX_SCHEMA_NODES)]).is_valid(0)
+    with pytest.raises(ValueError, match="schema is too large"):
+        Validator(Annotated[int, Group(MAX_SCHEMA_NODES + 1)])
 
 
 def test_chained_definitions_reject_before_overflowing_render() -> None:

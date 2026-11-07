@@ -45,6 +45,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: each key of a parsed object is its own value to the walk's memo
 - fix: a value sharing a sub-object answers as its copy past the walk's bounds
 - fix: the module loads in the main interpreter of a process, once
+- fix: what a marker or a class yields is read within the node bound
 
 -->
 
@@ -194,6 +195,11 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **What a marker or a class yields is read within the node bound.** A grouped marker whose
+  constraints never end was read until memory ended and the process aborted, with no Python
+  exception, and so were a protocol's members and a named tuple's `_fields` given an iterable
+  that does not end; a `TypedDict` whose `__required_keys__` never ends never returned. Each raises `ValueError: schema is too large` past 100,000 items.
 
 - **The module loads in the main interpreter of a process, once.** A legacy subinterpreter,
   which is what `mod_wsgi` runs an application group in, loaded it, and every interpreter after

@@ -20,7 +20,7 @@ use valgebra_core::{
     carries_length, carries_pattern,
 };
 
-use super::{Pool, build_schema, not_implemented};
+use super::{Pool, build_schema, each_within_the_bound, not_implemented};
 use crate::validator::Validator;
 
 /// `numbers.Number`, the register a remainder's comparison and an order bound's
@@ -1093,7 +1093,7 @@ fn parse_grouped<'py>(
             summarize(marker)?
         )));
     }
-    for inner in marker.try_iter()? {
+    for inner in each_within_the_bound(marker)? {
         parse_constraint_within(&inner?, out, sets, lits, depth + 1)?;
     }
     Ok(())

@@ -162,6 +162,47 @@ fn built(py: Python<'_>, expression: &str) -> PyResult<String> {
     render(py, &schema, pool.items(), &defs)
 }
 
+/// What a class or a marker yields is read item by item within the node
+/// bound: one item past it is refused, the bound itself is read whole, and the
+/// length hint a collect sizes its buffer by is the iterable's, held to the
+/// bound.
+#[test]
+fn an_iterable_is_read_within_the_node_bound() {
+    Python::attach(|py| {
+        let range = |count: usize| {
+            py.eval(
+                &CString::new(format!("range({count})")).expect("no nul"),
+                None,
+                None,
+            )
+            .expect("a range")
+        };
+        let at = range(MAX_SCHEMA_NODES);
+        let read: PyResult<Vec<_>> = each_within_the_bound(&at).expect("an iterable").collect();
+        assert_eq!(
+            read.expect("the bound is read whole").len(),
+            MAX_SCHEMA_NODES
+        );
+        let past = range(MAX_SCHEMA_NODES + 1);
+        let read: PyResult<Vec<_>> = each_within_the_bound(&past).expect("an iterable").collect();
+        assert!(read.is_err(), "one item past the bound is refused");
+        let five = range(5);
+        assert_eq!(
+            each_within_the_bound(&five)
+                .expect("an iterable")
+                .size_hint(),
+            (5, None)
+        );
+        let wide = range(MAX_SCHEMA_NODES + 10);
+        assert_eq!(
+            each_within_the_bound(&wide)
+                .expect("an iterable")
+                .size_hint(),
+            (MAX_SCHEMA_NODES, None)
+        );
+    });
+}
+
 /// Two aliases spelled alike name one definition, so a union of them is one
 /// member, as a union of one schema with itself is.
 #[test]

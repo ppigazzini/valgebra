@@ -21,8 +21,8 @@ use valgebra_core::{Attribute, Field, MapClause, Schema, SeqKind, SeqShape};
 
 use super::generics::{MAX_QUALIFIER_DEPTH, is_field_qualifier};
 use super::{
-    ClassScope, MAX_BUILD_DEPTH, Pool, build_schema, forms, is_extension, loaded_modules,
-    not_implemented,
+    ClassScope, MAX_BUILD_DEPTH, Pool, build_schema, each_within_the_bound, forms, is_extension,
+    loaded_modules, not_implemented,
 };
 use crate::errors::{summarize, unless_fatal};
 
@@ -295,8 +295,7 @@ pub(super) fn protocol_members<'py>(
             .bind(py)
             .call1((ty,))?,
     };
-    let mut names = names
-        .try_iter()?
+    let mut names = each_within_the_bound(&names)?
         .map(|name| Ok(name?.cast_into::<PyString>()?))
         .collect::<PyResult<Vec<_>>>()?;
     names.sort_by_cached_key(ToString::to_string);
@@ -973,7 +972,7 @@ fn declarers<'py>(
             let Some(own) = own_body(&class)? else {
                 continue;
             };
-            for name in own.try_iter()? {
+            for name in each_within_the_bound(&own)? {
                 let name = name?;
                 if !found.contains(&name)? {
                     found.set_item(name, &class)?;
@@ -1331,7 +1330,19 @@ pub(super) fn build_typed_dict<'py>(
 ) -> PyResult<Schema> {
     let _open = ClassScope::enter(ty, applied)?;
     let hints = bound_hints(ty, applied)?;
+    // CPython writes a `frozenset`, which answers `in` itself. Anything else
+    // is read once, within the bound: `in` asks an iterable for a name it does
+    // not hold to its end, and one that does not end never answers.
     let required = ty.getattr(intern!(ty.py(), "__required_keys__"))?;
+    let required = if required.is_exact_instance_of::<PyFrozenSet>() {
+        required
+    } else {
+        PyFrozenSet::new(
+            ty.py(),
+            each_within_the_bound(&required)?.collect::<PyResult<Vec<_>>>()?,
+        )?
+        .into_any()
+    };
     let mut fields = Vec::with_capacity(hints.len());
     for (name, hint) in hints.iter() {
         let (stated, read) = qualified_required(&hint)?;
@@ -1670,11 +1681,7 @@ pub(super) fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Boun
         })?;
         let fields = match fields_as_declared(ty, reading)? {
             Some(fields) => fields,
-            None => reading
-                .fields
-                .bind(py)
-                .call1((ty,))?
-                .try_iter()?
+            None => each_within_the_bound(&reading.fields.bind(py).call1((ty,))?)?
                 .collect::<PyResult<_>>()?,
         };
         return fields
@@ -1682,7 +1689,7 @@ pub(super) fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Boun
             .map(|field| field.getattr(intern!(py, "name")))
             .collect();
     }
-    ty.getattr(intern!(py, "_fields"))?.try_iter()?.collect()
+    each_within_the_bound(&ty.getattr(intern!(py, "_fields"))?)?.collect()
 }
 
 /// A dataclass's fields as `dataclasses.fields(ty)` returns them, or `None`
