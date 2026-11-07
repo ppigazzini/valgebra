@@ -25,10 +25,16 @@ answer of its own, or a repair to a change not yet released.
 - fix: a build pays for a product of two automata by what it holds
 - feat: the complement of a set proved empty is every value
 - feat: a refinement only the sets read holds a value a refutation stands on
+- feat: a set of one member and a mapping of its required fields hold a value
 
 -->
 
 ### Added
+
+- **A set of one member and a mapping of its required fields hold a value.**
+  `Annotated[set[tuple[int]], MinLen(1)]`, `Annotated[{"a": int}, Len(1, 1)]` and
+  `Annotated[dict[bool, int], MaxLen(1)]` are `not_subset` of `nothing`, where they stayed
+  `undecided`, and `Annotated[{"a?": int}, MinLen(0)]` of `{"a": int}`, on `{}`.
 
 - **A refinement only the sets read holds a value a refutation stands on.**
   `recursive(lambda t: union(Annotated[str, Regex("a")], tuple[t]))` is `not_subset` of `str`, by

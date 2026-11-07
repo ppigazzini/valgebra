@@ -13984,3 +13984,85 @@ mod a_member_of_a_meet {
         );
     }
 }
+
+/// What a length bound leaves of a set of one member and of a mapping's required
+/// fields.
+mod one_member {
+    use super::*;
+
+    fn at_least(base: Schema, least: usize) -> Schema {
+        Schema::refine(base, vec![Constraint::MinLen(least)])
+    }
+
+    fn holding(schema: &Schema) -> Relation {
+        schema.subtype_relation_under(&Schema::Nothing, &Pure, &[])
+    }
+
+    fn set_of(element: Schema) -> Schema {
+        Schema::set(element)
+    }
+
+    /// One member asks nothing to be apart: the element's own value is the set's,
+    /// where it can hash or a subclass of its kind can.
+    #[test]
+    fn a_set_of_one_member_holds_a_value_of_its_element() {
+        let word = at_least(Schema::Str, 1);
+        assert_eq!(a_value_can_hash_and_holds(word), Relation::Fails);
+        let item = Schema::tuple(SeqShape::fixed(vec![Schema::Int]));
+        assert_eq!(a_value_can_hash_and_holds(item), Relation::Fails);
+        let record = Schema::keyed_map(vec![field("a", Schema::Int, true)], Vec::new());
+        assert_eq!(a_value_can_hash_and_holds(record), Relation::Fails);
+    }
+
+    fn a_value_can_hash_and_holds(element: Schema) -> Relation {
+        holding(&at_least(set_of(element), 1))
+    }
+
+    /// A union of what can hash, the verdict's value being any branch's, and so a
+    /// union holding a class declines.
+    #[test]
+    fn a_set_of_one_member_reads_a_union_of_what_can_hash() {
+        let pair = |item: Schema| Schema::tuple(SeqShape::fixed(vec![item]));
+        let either = Schema::union([pair(Schema::Int), pair(Schema::Str)]);
+        assert_eq!(a_value_can_hash_and_holds(either), Relation::Fails);
+        let with_a_class = Schema::union([pair(Schema::Int), Schema::Instance(ClassIx::new(0))]);
+        assert_ne!(a_value_can_hash_and_holds(with_a_class), Relation::Fails);
+    }
+
+    /// A class's values need not hash.
+    #[test]
+    fn a_set_of_a_class_is_not_read_by_one_value() {
+        let class = Schema::Instance(ClassIx::new(0));
+        assert_ne!(holding(&at_least(set_of(class), 1)), Relation::Fails);
+    }
+
+    fn field(name: &str, schema: Schema, required: bool) -> Field {
+        Field {
+            name: name.into(),
+            schema,
+            required,
+        }
+    }
+
+    /// The value holding the required fields alone, under bounds admitting that many.
+    #[test]
+    fn a_mapping_under_bounds_admitting_its_required_fields_holds_them() {
+        let optional = Schema::keyed_map(vec![field("a", Schema::Int, false)], Vec::new());
+        assert_eq!(holding(&at_least(optional.clone(), 0)), Relation::Fails);
+        let required = Schema::keyed_map(vec![field("a", Schema::Int, true)], Vec::new());
+        let exactly = Schema::refine(required, vec![Constraint::MinLen(1), Constraint::MaxLen(1)]);
+        assert_eq!(holding(&exactly), Relation::Fails);
+        // A maximum past the required fields leaves them the value.
+        let at_most = Schema::refine(optional.clone(), vec![Constraint::MaxLen(1)]);
+        assert_eq!(holding(&at_most), Relation::Fails);
+        // Past the required fields the bound asks for more than this reads.
+        assert_ne!(holding(&at_least(optional, 1)), Relation::Fails);
+        // A required field with no reading of a value leaves the mapping open.
+        let opaque = Schema::refine(
+            Schema::ANYTHING,
+            vec![Constraint::Predicate(PredIx::new(0))],
+        );
+        let unread = Schema::keyed_map(vec![field("a", opaque, true)], Vec::new());
+        assert_ne!(holding(&at_least(unread, 1)), Relation::Fails);
+    }
+}

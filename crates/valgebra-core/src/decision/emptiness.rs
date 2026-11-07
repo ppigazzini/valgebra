@@ -1624,9 +1624,17 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
             let _crossing = super::goal_tests::goals::crossing();
             element.verdict_rec(cx)
         }
-        Some(element) => distinct_members(element, least, cx.oracle),
+        Some(element) => distinct_members(element, least, cx.oracle).or_else(|| {
+            if least == 1 && a_value_of_it_can_hash(element) {
+                #[cfg(test)]
+                let _crossing = super::goal_tests::goals::crossing();
+                element.verdict_rec(cx)
+            } else {
+                Verdict::Unknown
+            }
+        }),
         None if base.every_length_from(cx).is_some() => Verdict::Inhabited,
-        None => Verdict::Unknown,
+        None => a_mapping_of_its_required_fields(base, constraints, cx),
     };
     // A value of the least length is the witness, and one longer than every
     // interpreter builds is none: `Annotated[list[int], MinLen(2**60 + 1)]`
@@ -1704,6 +1712,59 @@ fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations
 /// rather than about the container.
 fn repeats_a_member(base: &Schema) -> bool {
     matches!(base, Schema::Seq { .. })
+}
+
+/// Whether a value of this schema, where it holds one, is one a set can hold.
+///
+/// A kind's values hash or have a subclass that does: `class L(list): __hash__ =
+/// object.__hash__` is a list. A class need not: `slice` hashes on no interpreter
+/// before 3.12 and takes no subclass, so `set[slice]` under `MinLen(1)` holds
+/// nothing there. A meet is what every member says, and a union where every branch
+/// does, since the value its verdict reads may be any branch's.
+fn a_value_of_it_can_hash(schema: &Schema) -> bool {
+    match schema {
+        Schema::Anything(_)
+        | Schema::Bool
+        | Schema::Int
+        | Schema::Float
+        | Schema::Str
+        | Schema::Bytes
+        | Schema::NoneType
+        | Schema::Seq { .. }
+        | Schema::Coll { .. }
+        | Schema::KeyedMap { .. } => true,
+        Schema::Refine { base, .. } => a_value_of_it_can_hash(base),
+        Schema::Union(members) | Schema::Intersection(members) => {
+            members.iter().all(a_value_of_it_can_hash)
+        }
+        _ => false,
+    }
+}
+
+/// `Inhabited` where a mapping's value holding its required fields and nothing else
+/// has a length the bounds admit and each of those fields holds a value.
+fn a_mapping_of_its_required_fields(
+    base: &Schema,
+    constraints: &Constraints,
+    cx: &mut Cx<'_>,
+) -> Verdict {
+    let Schema::KeyedMap { fields, .. } = base else {
+        return Verdict::Unknown;
+    };
+    let mut required = fields.iter().filter(|field| field.required);
+    let count = required.clone().count();
+    if count < shortest(constraints.iter())
+        || longest(constraints.iter()).is_some_and(|most| most < count)
+    {
+        return Verdict::Unknown;
+    }
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
+    if required.all(|field| field.schema.verdict_rec(cx) == Verdict::Inhabited) {
+        Verdict::Inhabited
+    } else {
+        Verdict::Unknown
+    }
 }
 
 /// Whether a set of `wanted` members of this schema exists.

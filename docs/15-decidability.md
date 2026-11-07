@@ -444,10 +444,17 @@ answers `"undecided"`.
   `Annotated[set[int], MaxLen(1)]`, on `{1, 2}`, and `subset` of
   `Annotated[set[Literal[1, 2]], MaxLen(2)]`. Literals are counted apart within
   one kind, since `1 == True` across two, and an element the rules cannot count
-  declines. A dict's keys are a record's fields, so a closed record's length
+  declines, but for one member, where its own value is the set's, a value that
+  hashes or has a subclass that does: `Annotated[set[tuple[int]], MinLen(1)]` is
+  `not_subset` of `nothing`, on `{(0,)}`, and a set of a class declines, `slice`
+  taking no subclass and hashing on no interpreter before 3.12. A dict's keys are
+  a record's fields, so a closed record's length
   runs from its required fields to all of them: `{"a": int}` is `subset` of
   `Annotated[dict[str, int], Len(1, 1)]`, and `{"a": int, "b": int}`
-  `not_subset` of `Annotated[dict[str, int], MaxLen(1)]`. A mapping holds no
+  `not_subset` of `Annotated[dict[str, int], MaxLen(1)]`. A mapping under bounds
+  that admit its required fields holds the value with those alone, so
+  `Annotated[{"a?": int}, MinLen(0)]` is `not_subset` of `nothing` and of
+  `{"a": int}`, on `{}`. A mapping holds no
   more keys than its fields and those each clause's key type holds apart, so
   `dict[bool, int]` and `dict[Literal["a", "b"], int]` are `subset` of
   `Annotated[dict, MaxLen(2)]`. A set or a dict
