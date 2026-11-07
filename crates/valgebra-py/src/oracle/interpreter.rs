@@ -1561,10 +1561,11 @@ fn two_classes_whose_slots_add_a_slot_lay_down_layouts_that_conflict() {
             assert!(!empty.disjoint_from(&a) && !pointers.disjoint_from(&a));
             assert!(!empty.lays_down_a_layout() && !pointers.lays_down_a_layout());
             // And a slotted class over no builtin holds values of no kind, where
-            // a plain one declines.
+            // a plain one declines, but for `bool`, which takes no subclass.
             for kind in Kind::ALL {
                 assert_eq!(oracle.class_admits_kind(ClassIx::new(0), kind), Some(false));
-                assert_eq!(oracle.class_admits_kind(ClassIx::new(4), kind), None);
+                let plain = (kind == Kind::Bool).then_some(false);
+                assert_eq!(oracle.class_admits_kind(ClassIx::new(4), kind), plain);
             }
         });
     });

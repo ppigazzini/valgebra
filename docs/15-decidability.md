@@ -171,6 +171,10 @@ answers `"undecided"`.
 
   Each stays an `isinstance` atom, which is sound for every enumeration and
   merely less complete.
+- **A class against `bool`.** `bool` takes no subclass, so a boolean is an instance of a
+  class only through `bool`'s own order, `int` and `object`, and `intersection(K, bool)`
+  is empty for a class with a plain metaclass. A metaclass of its own or a registered
+  virtual subclass answers otherwise, and declines.
 - **Zero under a float step.** Zero is a multiple of every float step a build admits,
   so `Annotated[int, MultipleOf(0.5)]` is `not_subset` of `nothing` and of `str`, on `0`.
   A step of another kind declines here: a `float` subclass's `__rmod__` answers the

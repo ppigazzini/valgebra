@@ -1,3 +1,4 @@
+import abc
 import collections
 import dataclasses
 import datetime as dt
@@ -2154,3 +2155,34 @@ def test_a_named_tuple_writing_its_own_fields_holds_the_positions_it_stores() ->
     assert Validator(written).is_valid(platform.uname())
     assert Validator(written).relation_to(stored) == "subset"
     assert not intersection(written, stored).is_empty()
+
+
+def test_a_class_holds_no_boolean_but_through_the_order_of_bool() -> None:
+    """`bool` takes no subclass, so its values' classes are the ones it names."""
+
+    class Plain:
+        pass
+
+    class Other:
+        pass
+
+    class Anything(type):
+        def __instancecheck__(cls, instance: object) -> bool:
+            return True
+
+    class Hooked(metaclass=Anything):
+        pass
+
+    class Registered(abc.ABC):  # noqa: B024 - no method a registered class would owe
+        pass
+
+    Registered.register(bool)
+    meet = intersection(Plain, bool)
+    assert meet.is_empty()
+    assert meet.relation_to(nothing) == "subset"
+    assert intersection(bool, Plain).relation_to(intersection(bool, Other)) == "subset"
+    for held in (int, object, bool):
+        assert intersection(held, bool).relation_to(nothing) == "not_subset", held
+    for hooked in (Hooked, Registered):
+        assert not intersection(hooked, bool).is_empty(), hooked
+        assert intersection(hooked, bool).is_valid(True), hooked

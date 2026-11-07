@@ -194,6 +194,11 @@ ROWS: dict[str, Row] = {
     "An enumeration against the union of its members": Decides(
         _Color, Literal[_Color.RED, _Color.GREEN], "subset"
     ),
+    "A class against `bool`.": Decides(
+        intersection(_Color, bool),
+        nothing,
+        "subset",
+    ),
     "Zero under a float step.": Decides(
         Annotated[int, at.MultipleOf(0.8125)],
         str,
