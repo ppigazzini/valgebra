@@ -14,6 +14,7 @@
 use std::ops::ControlFlow;
 
 use jiter::JsonValue;
+use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyBaseException;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple};
@@ -693,24 +694,49 @@ impl Expected<'_> {
 /// constant and run the rich comparison at the boundary, folding an ordinary
 /// error to a non-match. A pool constant that is unavailable is a non-member,
 /// recorded as nothing.
+///
+/// The operator is the comparison's own argument, so the four bounds are one
+/// reading, and what a failure names is read off it where one is recorded.
 fn order_bound(
     value: &Bound<'_, PyAny>,
     index: OperandIx,
-    compare: impl Fn(&Bound<'_, PyAny>, &Bound<'_, PyAny>) -> PyResult<bool>,
-    code: Code,
-    symbol: &'static str,
+    op: CompareOp,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let py = value.py();
     let Some(bound) = operand_at(frame.ctx, index, py) else {
         return false;
     };
-    let ok = decided(compare(value, bound), py, &frame.ctx);
+    let answer = value
+        .rich_compare(bound, op)
+        .and_then(|answer| answer.is_truthy());
+    let ok = decided(answer, py, &frame.ctx);
     // Borrowed from the pool for as long as the walk's context lives, so a
     // passing check -- every check, in fast mode -- takes no reference to the
     // bound; a free-threaded interpreter would make that an atomic on one
     // counter every thread sharing the validator touches.
-    explained(ok, code, || Expected::Order(symbol, bound), value, frame)
+    if !ok && frame.ctx.mode.explains() {
+        order_refused(op, bound, value, frame);
+    }
+    ok
+}
+
+/// Record that `value` fails the order bound `op` makes with `bound`.
+#[cold]
+#[inline(never)]
+fn order_refused(
+    op: CompareOp,
+    bound: &Bound<'_, PyAny>,
+    value: &Bound<'_, PyAny>,
+    frame: &mut Frame<'_, '_>,
+) {
+    let (code, symbol) = match op {
+        CompareOp::Ge => (GREATER_THAN_EQUAL, ">="),
+        CompareOp::Gt => (GREATER_THAN, ">"),
+        CompareOp::Le => (LESS_THAN_EQUAL, "<="),
+        _ => (LESS_THAN, "<"),
+    };
+    explained(false, code, || Expected::Order(symbol, bound), value, frame);
 }
 
 /// Whether `value` (already a base member, materialized once) satisfies one
@@ -729,12 +755,10 @@ fn check_constraint(
 ) -> bool {
     let py = value.py();
     match constraint {
-        Constraint::Ge(i) => {
-            order_bound(value, *i, |v, b| v.ge(b), GREATER_THAN_EQUAL, ">=", frame)
-        }
-        Constraint::Gt(i) => order_bound(value, *i, |v, b| v.gt(b), GREATER_THAN, ">", frame),
-        Constraint::Le(i) => order_bound(value, *i, |v, b| v.le(b), LESS_THAN_EQUAL, "<=", frame),
-        Constraint::Lt(i) => order_bound(value, *i, |v, b| v.lt(b), LESS_THAN, "<", frame),
+        Constraint::Ge(i) => order_bound(value, *i, CompareOp::Ge, frame),
+        Constraint::Gt(i) => order_bound(value, *i, CompareOp::Gt, frame),
+        Constraint::Le(i) => order_bound(value, *i, CompareOp::Le, frame),
+        Constraint::Lt(i) => order_bound(value, *i, CompareOp::Lt, frame),
         Constraint::MinLen(n) => {
             let len = stored_len(value, &frame.ctx);
             let ok = decided(len.map(|len| len >= *n), py, &frame.ctx);
