@@ -61,12 +61,14 @@ Stable Rust (edition 2024, MSRV 1.88) and `uv` must be on PATH.
 
 ## Build Health Gate
 
-A change is not done until every command exits 0. Trust exit codes, not log
-text — a process can print progress and then fail. If a gate cannot run, say so
-and list what was checked instead. The list is the one `CONTRIBUTING.md`
-carries under [The gate](CONTRIBUTING.md#the-gate), which owns it: a command
-added there belongs here in the same change, and `tests/test_build_surfaces.py`
-holds the two fences equal.
+A change is not done until every command exits 0 on the GitHub CI lanes, which do
+the heavy lifting: a push runs them, and a local run is the important subset of
+them, below. Trust exit codes, not log text — a process can print progress and
+then fail. If a gate cannot run, say so and list what was checked instead. The
+list is the one `CONTRIBUTING.md` carries under
+[The gate](CONTRIBUTING.md#the-gate), which owns it: a command added there
+belongs here in the same change, and `tests/test_build_surfaces.py` holds the two
+fences equal.
 
 ```bash
 cargo fmt --check
@@ -88,7 +90,7 @@ uv run --no-sync pytest
 **Every `uv run` carries `--no-sync`**, and [The gate](CONTRIBUTING.md#the-gate)
 says why. Sync deliberately -- `uv sync --locked` -- and build after it.
 
-**Locally, run the tests in scope, never the whole suite.** While a change is
+**Locally, run the important subset, never the whole suite.** While a change is
 made, `pytest` runs the files that test what it touches -- the suite of the
 changed module, the ledgers that read a changed file, the doc-example checkers
 for a changed example -- and `cargo test` the corpus or the named tests that
@@ -102,31 +104,46 @@ run only fast tests: `cargo test -p <crate> --lib -- <filter>` on one
 interpreter, and the pytest files that hold the change. The heavy instruments
 -- a PGO wheel build or a timed comparison, `scripts/perf_gate.py`, a mutation
 sweep, coverage, the corpora across interpreters -- run once, on the final
-code, and only the one the change needs: the gate for a hot-path change, a
-`cargo mutants -F <fn>` sweep for new logic. A question about generated code
-is answered from its assembly or one cachegrind count, not a gate run per
-variant. The full suite, coverage and whole-file sweeps are CI's.
+code, and only the one the change needs: the instruction gate for a hot-path
+change, a mutant planted by hand against the named tests for new logic. A
+question about generated code is answered from its assembly or one cachegrind
+count, not a gate run per variant.
 
-Those are the fast ones, and they run in **your** clone. Before pushing, run the
-merge gate's own steps in a clone shaped like the runner's:
+**Work on one interpreter locally, the one `.venv` holds.** Another is for fixing
+a lane that failed on it, and only that lane's failed command runs there.
+
+**Before a push, run what a lane fails on in seconds,** on the tip, after the last
+commit, in `ci.yml`'s own spelling, since a narrower one is not the same check:
 
 ```bash
-uv run --no-sync python scripts/gate.py           # the runnable steps, shallow clone, no tags
-uv run --no-sync python scripts/gate.py --list    # what it runs, and what needs a runner
+cargo fmt --all --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo clippy --locked --all-targets -- -D warnings
+cargo clippy --locked --lib --all-features -- -D clippy::indexing_slicing -D clippy::unwrap_used -D clippy::expect_used
+RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps
+RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --document-private-items
+uv run --no-sync python scripts/docs_lint.py
+uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
+uv run --no-sync ty check
+uv run --no-sync pytest -n 8 -m "repository and not interpreter"
 ```
 
-It reads the commands out of `.github/workflows/ci.yml` rather than restating
-them, and every step is either run or named with the reason it cannot be. The
-difference is not academic: a local clone carries tags and a checkout does not,
-so a check reading `git describe` answers one way here and another on a runner.
+Beside them run the changed code's own tests, and after a change under `decision`
+or `descr` the core's, `cargo test -p valgebra-core --lib`, and
+`scripts/metamorphic_gate.py --against` a recording of the last release's wheel,
+which times a decision against that release before a push does.
+`tests/test_theory_ledger.py` and `tests/test_citation_ledger.py` read the working
+notes, which no runner holds, so the run above is the only one of their directions
+that read them.
 
-It also builds the **floor** interpreter `ci.yml` names, beside the one you
-invoked it with, and runs the product suite there -- the suite is written on
-the newest release the tree supports and read on the oldest, so a typing member
-the floor does not have fails at collection and takes every job on that
-interpreter with it. That is a `uv venv` and a second build the first time, and
-cached after; `uv` not being on `PATH` names it in the closing line rather than
-failing the run.
+**Do not run `scripts/gate.py`, the whole suite, a whole-window sweep, coverage or
+the suites across interpreters locally.** They are the lanes', and the push runs
+them. A green `gate.py` says nothing of what it excuses, the free-threaded
+interpreters, the bench lane, the wheels and the sweeps among them, and it costs
+forty minutes. Push, and read the lanes. Stop anything local that was gating a
+push once that push is made. A red lane is repaired by running the one command
+that failed, as `ci.yml` spells it, and reading the rest off the run.
+`scripts/gate.py --list` answers which steps a lane holds.
 
 
 ## Layout
