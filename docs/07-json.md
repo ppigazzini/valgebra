@@ -208,6 +208,10 @@ refusal, reported by the walk's own depth guard.
 
 ## Performance
 
+A document is parsed in Rust, and a parse that memory cannot be found for ends
+the process rather than raising `MemoryError`: bound a document's size before
+handing it over ([limits](10-limits.md#what-the-bounds-do-not-bound)).
+
 `is_valid_json` parses with jiter and validates the parsed JSON value **in
 place**: no intermediate Python objects are built for the structure it walks, so
 membership of a large array or a deep document is decided in Rust. A comparison

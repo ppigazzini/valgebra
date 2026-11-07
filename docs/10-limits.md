@@ -238,6 +238,29 @@ decision steps. None caps time, and four costs grow inside them:
   to serve the shapes above, which a service bounds by what it accepts: a
   document's size, a decoder without aliases, a schema it wrote.
 
+Nor does any bound cap memory, and where memory runs out a call does not always
+raise `MemoryError`:
+
+- **Python's allocator refusing inside the extension raises `PanicException`.**
+  Where valgebra builds a Python object -- a report's strings, a parsed
+  document's values, a relation's constants -- and the interpreter cannot give
+  it memory, the binding layer reads the refusal as a panic, which reaches the
+  caller as `pyo3_runtime.PanicException`. It derives from `BaseException`, so
+  neither `except MemoryError` nor `except Exception` catches it; where even
+  that exception cannot be built, the process ends. No answer moves: a refusal
+  ends the call it meets.
+- **A JSON document is parsed in Rust, and a parse given no memory ends the
+  process.** `is_valid_json` holds the parsed tree, about sixteen times the
+  text for an array of numbers and thirty-nine times for an array of small
+  objects, and `load` and `validate_json` build their Python values beside it;
+  a Rust allocation that fails aborts, where `json.loads` raises `MemoryError`.
+  pydantic's `validate_json` ends the process or panics on the same documents
+  under the same caps. Bound a document's
+  size before handing it to valgebra, as a service bounds what it accepts.
+- **A report grows with the value.** `validate` collects every failure, so a
+  refused value of a million elements builds a million violations;
+  `fail_fast=True` collects one.
+
 ## Rejection is clean, not catastrophic
 
 ```python
