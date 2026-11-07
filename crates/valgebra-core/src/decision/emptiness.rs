@@ -1752,17 +1752,27 @@ fn one_refinement_of_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Verdict
 }
 
 /// `Empty` where two sequences of a meet meet in nothing at a position each of their
-/// values has: a value of both holds an item of both there. The positions the two
-/// prefixes name are the ones every value reaches, a shorter prefix's tail reading the
-/// rest. A position past a fixed shape's end is the arity's, which `disjoint_with`
-/// reads. So a list of an `int` and a `None` is outside `μt. list[t]`, whose every item
-/// is a list.
+/// values has: a value of both holds an item of both there. A value holds the items
+/// its prefix names and the least its bound asks of it, so the positions read are those
+/// of the longest of them, a shorter prefix's tail reading the rest, and past every
+/// prefix one reading of the two tails stands for all of them, since a bound may ask
+/// for more items than a value holds. A position past a fixed shape's end is the
+/// arity's, which `disjoint_with` reads. So a list of an `int` and a `None`, and a list
+/// of at least one `int`, are outside `μt. list[t]`, whose every item is a list.
 pub(super) fn sequences_meeting_in_nothing(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
     let mut sequences = members.iter().filter_map(|member| match member {
-        Schema::Seq { container, shape } => Some((container, shape)),
+        Schema::Seq { container, shape } => Some((container, shape, 0)),
+        Schema::Refine { base, constraints } => match &**base {
+            Schema::Seq { container, shape } => {
+                Some((container, shape, shortest(constraints.iter())))
+            }
+            _ => None,
+        },
         _ => None,
     });
-    let (Some((mine, a)), Some((theirs, b))) = (sequences.next(), sequences.next()) else {
+    let (Some((mine, a, my_least)), Some((theirs, b, their_least))) =
+        (sequences.next(), sequences.next())
+    else {
         return Verdict::Unknown;
     };
     if mine != theirs {
@@ -1777,7 +1787,9 @@ pub(super) fn sequences_meeting_in_nothing(members: &[Schema], cx: &mut Cx<'_>) 
     };
     #[cfg(test)]
     let _crossing = super::goal_tests::goals::crossing();
-    for position in 0..a.prefix.len().max(b.prefix.len()) {
+    let named = a.prefix.len().max(b.prefix.len());
+    let reached = named.max(my_least).max(their_least);
+    for position in 0..reached.min(named + 1) {
         let (Some(x), Some(y)) = (at(a, position), at(b, position)) else {
             continue;
         };

@@ -14175,6 +14175,63 @@ mod an_empty_position {
     /// A position both hold of every value meets in nothing: each item of `μt.
     /// list[t]` is a list, which `int` is not. A list that may be empty shares `[]`
     /// with it, and a meet at a position past one prefix reads the other's tail.
+    /// A bound names the positions a value holds as a prefix does, on either side,
+    /// and past every prefix the two tails are read once, however many it asks for.
+    #[test]
+    fn a_bound_names_the_positions_its_values_hold() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let least = |item, n| Schema::refine(list_of(item), vec![Constraint::MinLen(n)]);
+        let most = |item, n| Schema::refine(list_of(item), vec![Constraint::MaxLen(n)]);
+        for pair in [
+            [least(Schema::Int, 1), list_of(Schema::Str)],
+            [list_of(Schema::Int), least(Schema::Str, 1)],
+            [least(Schema::Int, 1), most(Schema::Str, 3)],
+            [most(Schema::Int, 3), least(Schema::Str, 1)],
+            [least(Schema::Int, crate::ir::LONGEST), list_of(Schema::Str)],
+        ] {
+            assert_eq!(
+                sequences_meeting_in_nothing(&pair, &mut cx),
+                Verdict::Empty,
+                "{pair:?}"
+            );
+        }
+        for pair in [
+            [most(Schema::Int, 3), list_of(Schema::Str)],
+            [least(Schema::Int, 0), list_of(Schema::Str)],
+            [most(Schema::Int, 1), most(Schema::Str, 3)],
+            [least(Schema::Int, crate::ir::LONGEST), list_of(Schema::Int)],
+        ] {
+            assert_eq!(
+                sequences_meeting_in_nothing(&pair, &mut cx),
+                Verdict::Unknown,
+                "{pair:?}"
+            );
+        }
+    }
+
+    /// A bound reaches a tail past a prefix, and only as far as it asks: the first
+    /// item of `(int, *str)` is an `int`, and the second is what a list of `int` holds
+    /// no value of, which one item does not reach.
+    #[test]
+    fn a_bound_reaches_a_tail_past_a_prefix() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let mixed = Schema::list(SeqShape {
+            prefix: vec![Schema::Int].into(),
+            tail: Some(Arc::new(Schema::Str)),
+        });
+        let least = |n| Schema::refine(list_of(Schema::Int), vec![Constraint::MinLen(n)]);
+        assert_eq!(
+            sequences_meeting_in_nothing(&[mixed.clone(), least(2)], &mut cx),
+            Verdict::Empty
+        );
+        assert_eq!(
+            sequences_meeting_in_nothing(&[mixed, least(1)], &mut cx),
+            Verdict::Unknown
+        );
+    }
+
     #[test]
     fn two_sequences_meet_in_nothing_at_a_position_both_hold() {
         let at = Schema::Ref(DefIx::new(0));

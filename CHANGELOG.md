@@ -37,6 +37,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refusal names a refined branch's bounds and each clause reading a key
 - fix: a dict's entries are read from its storage on PyPy
 - feat: a meet of refinements of one base is read as the one they are
+- feat: a sequence's length bound names the positions its values hold
 
 -->
 
@@ -68,7 +69,9 @@ answer of its own, or a repair to a change not yet released.
 
 - **Two sequences meet in nothing at a position each of their values has.** `[int, None]` is
   `subset` of the complement of `recursive(lambda t: list[t])`, and `intersection([int, None], R)`
-  is empty, where the first stayed `undecided` and the second read `False`.
+  is empty, where the first stayed `undecided` and the second read `False`. A length bound names
+  those positions: `Annotated[list[int], MinLen(1)]` is `subset` of that complement, and of the
+  complement of `list[str]`.
 
 - **A position or a clause holding no value is read as what it leaves.** `list[N]`, for an `N` with
   no finite value such as `recursive(lambda t: tuple[t])`, is `subset` of `Annotated[list[int],
