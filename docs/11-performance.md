@@ -1361,6 +1361,11 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
 - **Forcing the emptiness entry into its callers**: `#[inline]` on `verdict_rec`
   or `empty_and_region` changes no count, and `#[inline(always)]` moves the call
   one frame down and reads the relation matrix 0.06% dearer.
+- **A list of dataclasses reading its record's names once**, rather than once an
+  element: `--binding-object-walk` reads 0.67% cheaper, and drawn apart from the
+  record's check, what is left of that check is inlined into the walk's every node,
+  which reads a list nested twenty-five deep 8% to 12% dearer in cycles at one count.
+
 - **A tagged union's test at the first branch walked**, rather than before the
   scan: a union of scalars reads 0.37% cheaper, and a recursive schema 0.83%
   dearer and a union of literals 0.18% dearer, for the same two tests.
