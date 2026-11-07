@@ -12,7 +12,8 @@ use valgebra_core::{
 };
 
 use super::record::{
-    SMALL_OBJECT, Undeclared, keyed_map_matches_json, resolves_through_the_plan, scan_dict,
+    RecordReading, SMALL_OBJECT, Undeclared, keyed_map_matches_json, resolves_through_the_plan,
+    scan_dict,
 };
 use super::sequence::scan_list;
 use super::*;
@@ -3373,8 +3374,9 @@ fn the_json_record_path_agrees_at(width: usize) {
                 state: &state,
                 mode: WalkMode::Fast,
             };
-            assert!(keyed_map_matches_json(fields, defaults, py, &good, ctx));
-            assert!(!keyed_map_matches_json(fields, defaults, py, &bad, ctx));
+            let reading = RecordReading::of(fields, defaults, &ctx);
+            assert!(keyed_map_matches_json(&reading, py, &good, ctx));
+            assert!(!keyed_map_matches_json(&reading, py, &bad, ctx));
         }
         // The plan really was absent for the second pass, so the two answers
         // came from the two readings rather than from one of them twice.
