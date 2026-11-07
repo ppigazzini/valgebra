@@ -261,6 +261,13 @@ ROWS: dict[str, Row] = {
     "A length bound over a base that takes any length.": Decides(
         Annotated[str, at.MinLen(1)], complement(Literal[""]), "subset"
     ),
+    "A meet of refinements of one base.": Decides(
+        intersection(
+            Annotated[dict, at.MaxLen(2)], Annotated[dict, at.MinLen(2), at.MaxLen(3)]
+        ),
+        nothing,
+        "not_subset",
+    ),
     "A Boolean term of length bounds over one base.": Decides(
         Annotated[str, at.MaxLen(1000)],
         union(Annotated[str, at.MaxLen(64)], Annotated[str, at.MinLen(65)]),

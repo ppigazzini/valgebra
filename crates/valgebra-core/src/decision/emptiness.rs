@@ -820,7 +820,8 @@ fn intersection_verdict(meet: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> (
         // steps: the narrowing has spent its share already, and a distribution
         // that declines on all the rest leaves the readings after it none to
         // decide with.
-        Verdict::Unknown => the_empty_container_in_every_member(members)
+        Verdict::Unknown => one_refinement_of_its_members(members, cx)
+            .or_else(|| the_empty_container_in_every_member(members))
             .or_else(|| sequences_meeting_in_nothing(members, cx))
             .or_else(|| a_meet_read_by_its_constants(members, cx.oracle, cx.defs))
             .or_else(|| {
@@ -1572,8 +1573,12 @@ pub(super) fn class_with_attributes(members: &[Schema]) -> Option<(ClassIx, &[At
 /// A refinement of a union is the union of its branches refined
 /// [FCB08, Def. 4.1], each cut down a value at a time [JV20, §3.2]. So it
 /// holds a value where a branch under the constraints does, and none where
-/// none does.
+/// none does. A branch that is a refinement itself is one refinement with what
+/// narrows it, `⟦b⟧ ∩ ⟦c1⟧ ∩ ⟦c2⟧`, as [`Schema::refine`] folds one written so.
 fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>) -> Verdict {
+    if matches!(base, Schema::Refine { .. }) {
+        return Schema::refine(base.clone(), constraints.to_vec()).verdict_rec(cx);
+    }
     let density = density_of([base]);
     if base.is_empty_rec(cx)
         || bounds_unsatisfiable(constraints.iter(), cx.oracle, density)
@@ -1728,6 +1733,29 @@ fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations
 /// rather than about the container.
 fn repeats_a_member(base: &Schema) -> bool {
     matches!(base, Schema::Seq { .. })
+}
+
+/// What a meet of refinements of one base is as one refinement of it,
+/// `⟦b⟧ ∩ ⟦c1⟧ ∩ ⟦c2⟧` [JV20, §3.2], whose bounds a reading of a refinement reads
+/// together: `Annotated[int, Ge(5)]` met with `Annotated[int, Le(5)]` holds 5.
+///
+/// A reading rather than a fold: a meet keeps its members, which a rule reads one
+/// at a time, as `A <= (A & ~B) | (A & B)` reads the `A` in each branch.
+fn one_refinement_of_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
+    let [first @ Schema::Refine { base, .. }, others @ ..] = members else {
+        return Verdict::Unknown;
+    };
+    let mut constraints = Vec::new();
+    for member in others {
+        match member {
+            Schema::Refine {
+                base: theirs,
+                constraints: more,
+            } if theirs == base => constraints.extend(more.iter().cloned()),
+            _ => return Verdict::Unknown,
+        }
+    }
+    Schema::refine(first.clone(), constraints).verdict_rec(cx)
 }
 
 /// `Empty` where two sequences of a meet meet in nothing at a position each of their

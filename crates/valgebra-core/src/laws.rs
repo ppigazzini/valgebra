@@ -9630,6 +9630,42 @@ proptest! {
     }
 }
 
+proptest! {
+    /// A meet of two refinements of one base holds what the one refinement holding
+    /// their constraints holds, `⟦b⟧ ∩ ⟦c1⟧ ∩ ⟦c2⟧` [JV20, §3.2], wherever that one is
+    /// read, over bases whose lengths no interval alone reads.
+    #[test]
+    fn a_meet_of_refinements_of_one_base_reads_as_the_one_they_are(
+        base in prop_oneof![
+            Just(Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause { key: Schema::Str, value: Schema::Int }],
+            )),
+            Just(Schema::set(Schema::Int)),
+            Just(Schema::set(Schema::Bool)),
+        ],
+        left in proptest::collection::vec(a_length_bound(), 1..3),
+        right in proptest::collection::vec(a_length_bound(), 1..3),
+    ) {
+        let meet = Schema::meet([
+            Schema::refine(base.clone(), left.clone()),
+            Schema::refine(base.clone(), right.clone()),
+        ]);
+        let one = Schema::refine(base, [left, right].concat());
+        let read = one.verdict_under(&NoLeafRelations);
+        if read != Verdict::Unknown {
+            prop_assert_eq!(meet.verdict_under(&NoLeafRelations), read, "{:?}", one);
+        }
+    }
+}
+
+fn a_length_bound() -> impl Strategy<Value = Constraint> {
+    prop_oneof![
+        (0usize..5).prop_map(Constraint::MinLen),
+        (0usize..5).prop_map(Constraint::MaxLen),
+    ]
+}
+
 // THEORY: the-domain-is-one-model-per-interpreter
 /// The line itself, for a list of integers: refuted below a list of at most
 /// `REACHED - 1` items on one of `REACHED`, which every interpreter builds, and
