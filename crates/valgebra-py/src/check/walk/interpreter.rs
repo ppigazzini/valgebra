@@ -3484,8 +3484,17 @@ fn the_scalar_loop_and_the_walk_admit_the_same_values() {
                     walked, looped,
                     "the walk and the scalar loop disagree about {schema:?} and {value:?}"
                 );
+                assert_eq!(
+                    root_scalar(schema, value),
+                    Some(walked),
+                    "the walk and the root's test disagree about {schema:?} and {value:?}"
+                );
             }
         }
+        // A schema the walk descends into is the walk's, at the root as anywhere.
+        let none = py.None().into_bound(py);
+        let list = Schema::list(SeqShape::homogeneous(Schema::Int));
+        assert_eq!(root_scalar(&list, &none), None);
         // And the other direction: a schema the loop calls a scalar is one the
         // walk answers without descending, so nothing that needs a descent may
         // be named here.

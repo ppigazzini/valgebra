@@ -313,13 +313,14 @@ entry names; it re-reads neither.
 ### The cheapest door, and where the floor is
 
 `x in v` is `v.is_valid(x)` through the container protocol, and it is the
-cheaper call: **19 ns against 26 ns** for a scalar on the machine above, the
+cheaper call: **13 ns against 20 ns** for a scalar on the machine above, the
 best of fifteen `timeit` repeats of a million calls, because the interpreter
 reaches a container slot directly and a method by its call protocol. Neither
 number is the check. `Validator(anything).is_valid(1)` -- the schema that
-answers `True` without looking -- costs 23 ns, so the *walk* for an `int` is
-about 3 ns and everything else is the boundary a Python call crosses. For reference on the same run,
-`isinstance(1, int)` is 14 ns and a call to an empty one-argument Python function
+answers `True` without looking -- costs 20 ns too, since a validator of one scalar
+kind is its type test and enters no walk, so what is left is the boundary a Python
+call crosses. For reference on the same run,
+`isinstance(1, int)` is 13 ns and a call to an empty one-argument Python function
 is 18 ns.
 
 Read that as the floor it is: a per-call check cannot be much cheaper than a
@@ -698,6 +699,13 @@ program that builds validators per request, and to no validation call.
   (`check_literal`): a check against one `Literal` costs 2.4% fewer
   instructions on CPython 3.14 and 4.1% fewer on 3.14t, where PyO3 reaches a
   reference count through a call into the interpreter.
+- **A validator of one scalar kind is its type test.** A schema that is one kind at
+  the root is answered before the walk's state and context are built
+  (`root_scalar` in `check/walk/scalar.rs`): a walk that has not begun holds no
+  signal and every level, so nothing around the test can refuse. `is_valid` on an
+  `int` reads 22% fewer instructions on the profiled CPython 3.15 wheel, the
+  interpreter's own call included, `validate` of a value that belongs takes the same
+  road, and every other schema pays a load and a comparison.
 - **A refinement borrows its operand and renders nothing on a pass.** The bound
   is read out of the pool as a borrow for the whole check, and the value from
   the walk, so a passing check writes no reference count; a scalar base that
