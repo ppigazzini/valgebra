@@ -15,11 +15,13 @@ LEDGER: every relation the metamorphic gate holds can be driven to fail
 
 from __future__ import annotations
 
+import json
+import re
 from typing import TYPE_CHECKING
 
 import pytest
 
-from _tree import load_script
+from _tree import ROOT, load_script
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -222,3 +224,17 @@ def test_the_corpus_asks_both_answers_of_both_relations() -> None:
     ):
         answers = set(recorded.values())
         assert wanted <= answers, f"the {name} corpus only ever answers {answers}"
+
+
+def test_the_reference_is_the_last_release() -> None:
+    """A reference recorded from an older wheel holds a push to answers no user has.
+
+    The cut's own commit has no wheel to record from, so the release before it stands
+    until the published wheel is read: the top two sections are the two it may be.
+    """
+    reference = json.loads(
+        (ROOT / "scripts" / "metamorphic_reference.json").read_text()
+    )
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+    released = re.findall(r"^## \[(\d+\.\d+\.\d+)\]", changelog, re.MULTILINE)
+    assert reference["version"] in released[:2], (reference["version"], released[:2])

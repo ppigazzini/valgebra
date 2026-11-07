@@ -4660,6 +4660,18 @@ PLANTS = (
         trips=("test_the_generator_draws_a_reference_wider_than_its_table",),
     ),
     Plant(
+        # The reference left on a release the changelog is past.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_reference.json", "CHANGELOG.md"),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_reference.json",
+            '"version": "0.',
+            '"version": "9.',
+        ),
+        trips=("test_the_reference_is_the_last_release",),
+    ),
+    Plant(
         # A raise the reference shared read as one this build introduced.
         "tests/test_metamorphic_gate.py",
         ("scripts/metamorphic_gate.py",),
