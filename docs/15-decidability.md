@@ -593,7 +593,11 @@ answers `"undecided"`.
   `list[str]` below it is refuted by a rule.
 - **Inclusion in a complement.** `A` is below `~B` exactly when `A` and `B` share
   no value, so the relation is decided wherever emptiness decides disjointness:
-  `list[int]` is below `~int`, and `dict[str, int]` below `~str`. This is the
+  `list[int]` is below `~int`, and `dict[str, int]` below `~str`. Two sequences
+  share no value where a position every value of both holds meets in nothing, so
+  `[int, None]` is below the complement of `recursive(lambda t: list[t])`, whose
+  every item is a list, and a list that may be empty shares `[]` and is refuted.
+  This is the
   semantic-subtyping reduction applied where no structural rule can help — a
   complement has no shape on the right to recurse into.
 - **Recursion.** Equirecursive schemas compare at their greatest fixpoint; the

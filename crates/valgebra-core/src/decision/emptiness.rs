@@ -821,6 +821,7 @@ fn intersection_verdict(meet: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> (
         // that declines on all the rest leaves the readings after it none to
         // decide with.
         Verdict::Unknown => the_empty_container_in_every_member(members)
+            .or_else(|| sequences_meeting_in_nothing(members, cx))
             .or_else(|| a_meet_read_by_its_constants(members, cx.oracle, cx.defs))
             .or_else(|| {
                 if members
@@ -1712,6 +1713,43 @@ fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations
 /// rather than about the container.
 fn repeats_a_member(base: &Schema) -> bool {
     matches!(base, Schema::Seq { .. })
+}
+
+/// `Empty` where two sequences of a meet meet in nothing at a position each of their
+/// values has: a value of both holds an item of both there. The positions the two
+/// prefixes name are the ones every value reaches, a shorter prefix's tail reading the
+/// rest. A position past a fixed shape's end is the arity's, which `disjoint_with`
+/// reads. So a list of an `int` and a `None` is outside `μt. list[t]`, whose every item
+/// is a list.
+pub(super) fn sequences_meeting_in_nothing(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
+    let mut sequences = members.iter().filter_map(|member| match member {
+        Schema::Seq { container, shape } => Some((container, shape)),
+        _ => None,
+    });
+    let (Some((mine, a)), Some((theirs, b))) = (sequences.next(), sequences.next()) else {
+        return Verdict::Unknown;
+    };
+    if mine != theirs {
+        return Verdict::Unknown;
+    }
+    let at = |shape: &crate::ir::SeqShape, position: usize| {
+        shape
+            .prefix
+            .get(position)
+            .or(shape.tail.as_deref())
+            .cloned()
+    };
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
+    for position in 0..a.prefix.len().max(b.prefix.len()) {
+        let (Some(x), Some(y)) = (at(a, position), at(b, position)) else {
+            continue;
+        };
+        if Schema::meet_within([x, y], cx.defs).is_empty_rec(cx) {
+            return Verdict::Empty;
+        }
+    }
+    Verdict::Unknown
 }
 
 /// Whether a value of this schema, where it holds one, is one a set can hold.

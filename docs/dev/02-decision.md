@@ -1169,7 +1169,10 @@ more on `--decision-matrix`.
 with no finite value holds `[]` alone (`holds_its_prefix_alone_within`), and a clause with
 no value carries no entry [Cas23, fn. 11], where a set reading cuts `t` to a top and finds a
 value. Asked in the last asking alone, since a position rarely holds none and the verdict
-costs a goal's steps.
+costs a goal's steps. `sequences_meeting_in_nothing` reads the other half in an emptiness
+question of any asking: two sequences meet in nothing where a position each of their values
+has does, 1,568 answers over the drawn families, for a meet the widened reading stops one
+unfolding short of.
 
 **A mapping keyed by a class or a shape reads no single entry, refused.**
 `dict[K, str]` below `{}` holds `{K(): ""}`, which the supertype refuses, and declines. Its

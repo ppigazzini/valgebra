@@ -28,10 +28,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a set of one member and a mapping of its required fields hold a value
 - feat: a mapping's own lengths refuse a length its subject holds
 - feat: a position or a clause holding no value is read as what it leaves
+- feat: two sequences meet in nothing at a position each of their values has
 
 -->
 
 ### Added
+
+- **Two sequences meet in nothing at a position each of their values has.** `[int, None]` is
+  `subset` of the complement of `recursive(lambda t: list[t])`, and `intersection([int, None], R)`
+  is empty, where the first stayed `undecided` and the second read `False`.
 
 - **A position or a clause holding no value is read as what it leaves.** `list[N]`, for an `N` with
   no finite value such as `recursive(lambda t: tuple[t])`, is `subset` of `Annotated[list[int],

@@ -3443,15 +3443,13 @@ fn the_shallow_reading_answers_for_a_form_and_declines_the_rest() {
 /// inhabited by the empty list and says nothing about its element.
 #[test]
 fn a_refutation_about_a_part_with_no_value_is_not_one() {
-    // A part that is empty, and that the rules cannot prove empty: two
-    // sequences of one position each whose positions share no value. No rule
-    // reads a meet of two shapes for the values it holds, so proving it empty
-    // takes the descriptor -- which is what makes this the case the guard is
-    // for.
-    let empty = Schema::meet([
-        Schema::tuple(SeqShape::fixed([Schema::Int])),
-        Schema::tuple(SeqShape::fixed([Schema::Str])),
-    ]);
+    // A part that is empty, and that the rules cannot prove empty: two patterns
+    // sharing no word. No rule reads a meet of two patterns for the words it
+    // holds, so proving it empty takes the descriptor -- which is what makes this
+    // the case the guard is for.
+    let pattern =
+        |text: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(text.to_owned())]);
+    let empty = Schema::meet([pattern("a"), pattern("b")]);
     let narrow = closed(vec![field("f", empty.clone(), true)]);
     let wide = closed(vec![
         field("f", empty.clone(), true),
@@ -3506,13 +3504,12 @@ fn a_refutation_about_a_part_with_no_value_is_not_one() {
 
     // Further down, where neither decider reaches the answer: the rules
     // decline, as above, and the sets decline too -- a record inside lists
-    // three deep is past the containers the set representation builds.
+    // four deep is past the containers the set representation builds.
     // The pair is unproven, which the relation is allowed to be; what it may
     // not be is refuted.
     let deeper = |record: &Schema| {
-        Schema::list(SeqShape::homogeneous(Schema::list(SeqShape::homogeneous(
-            closed(vec![field("k", record.clone(), true)]),
-        ))))
+        let inner = closed(vec![field("k", record.clone(), true)]);
+        (0..4).fold(inner, |inner, _| Schema::list(SeqShape::homogeneous(inner)))
     };
     let budget = Budget::new(DECISION_BUDGET);
     assert_eq!(
@@ -14091,8 +14088,10 @@ mod one_member {
     }
 }
 
-/// What a position or a clause holding no value leaves of a container.
+/// What a position or a clause holding no value leaves of a container, and what two
+/// sequences hold where a position they share meets in nothing.
 mod an_empty_position {
+    use super::emptiness::sequences_meeting_in_nothing;
     use super::*;
 
     /// `μt. tuple[t]`, which no finite value is in.
@@ -14170,6 +14169,41 @@ mod an_empty_position {
         assert_eq!(
             clause(Schema::Int).subtype_relation_under(&closed, &Pure, &defs),
             Relation::Fails
+        );
+    }
+
+    /// A position both hold of every value meets in nothing: each item of `μt.
+    /// list[t]` is a list, which `int` is not. A list that may be empty shares `[]`
+    /// with it, and a meet at a position past one prefix reads the other's tail.
+    #[test]
+    fn two_sequences_meet_in_nothing_at_a_position_both_hold() {
+        let at = Schema::Ref(DefIx::new(0));
+        let defs = [list_of(at.clone())];
+        let fixed = Schema::list(SeqShape::fixed(vec![Schema::Int, Schema::NoneType]));
+        assert_eq!(
+            fixed.subtype_relation_under(&at.clone().complement(), &Pure, &defs),
+            Relation::Holds
+        );
+        assert_ne!(
+            list_of(Schema::Int).subtype_relation_under(&at.clone().complement(), &Pure, &defs),
+            Relation::Holds
+        );
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        let ints = list_of(Schema::Int);
+        assert_eq!(
+            sequences_meeting_in_nothing(&[fixed.clone(), list_of(Schema::Str)], &mut cx),
+            Verdict::Empty
+        );
+        assert_eq!(
+            sequences_meeting_in_nothing(&[fixed, ints.clone()], &mut cx),
+            Verdict::Empty,
+            "the second position holds a None in one and an int in the other"
+        );
+        let two = Schema::list(SeqShape::fixed(vec![Schema::Int, Schema::Int]));
+        assert_eq!(
+            sequences_meeting_in_nothing(&[two, ints], &mut cx),
+            Verdict::Unknown
         );
     }
 }
