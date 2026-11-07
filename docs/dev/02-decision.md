@@ -1925,6 +1925,16 @@ fuzzer's spelling, a refinement carrying no constraint, and
 `the_complement_of_an_empty_pattern_bounds_a_complement_that_does_not_lower` in
 `laws.rs` draws the family.
 
+**A field's name is read as a word of a clause narrowed by a language**
+(`holds_the_name_as_a_word`), in the last asking, under the assumption
+[`docs/14-soundness.md`](../14-soundness.md) states of a `str` key. The sets answer this of one
+mapping whole, and a reference in the way stopped them, so the rule asks them of the one
+name and the one key. It moved 0 answers over the drawn families, since none draws a record
+below a recursion over narrowed keys, which is what `properties` beside `patternProperties`
+translates to. A clause it reads makes a witness impossible, so the first unproved field ends
+the reading: asked of them all, a record of 1,024 optional fields below a recursion over 16
+languages declined in 95 ms against 3.9 ms, and stopped there it takes 7.6 ms.
+
 **A meet of refinements of one base is read as the one they are**
 (`one_refinement_of_its_members`): first in the readings a meet left undecided hands
 on, and only where every member is a refinement of that base, so a meet beside anything

@@ -355,6 +355,24 @@ def test_a_field_holds_a_key_whose_text_is_outside_the_language() -> None:
     assert record.relation_to(narrowed) != "subset"
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "a field's name is read as a word of a language, and a key equal to the "
+        "name can hold another text"
+    ),
+)
+def test_a_field_holds_such_a_key_below_a_recursion_over_the_language() -> None:
+    """The same case, with a reference between the record and the clause."""
+    record = Validator({"a": int})
+    narrowed = recursive(lambda t: union(int, {Annotated[str, Regex("a")]: t}))
+    value = {_Folded("A"): 1}
+
+    assert record.is_valid(value), "the name reads the hash and the `==`"
+    assert not narrowed.is_valid(value), "and the pattern reads the text"
+    assert record.relation_to(narrowed) != "subset"
+
+
 def test_a_key_keeping_the_hash_of_its_text_stands_against_no_proof() -> None:
     """What the assumption holds of: a subclass with nothing of its own."""
 
