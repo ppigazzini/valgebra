@@ -35,6 +35,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a mapping's clauses are read beside a table and over a language of keys
 - fix: a refinement of a refinement and equal constants past 64 bits are one
 - fix: a refusal names a refined branch's bounds and each clause reading a key
+- fix: a dict's entries are read from its storage on PyPy
 
 -->
 
@@ -135,11 +136,11 @@ answer of its own, or a repair to a change not yet released.
   between `properties` and `patternProperties`, over keys JSON gives none of these for; the
   soundness page states the assumption, and known-unsound tests pin both cases.
 
-- **What the walk assumes of a dict's storage is stated.** PyPy's `PyDict_Next` answers each
-  value with a lookup of its key, so a dict holding two keys that reach one name through a slot
-  a deleted key left reads one value for both on PyPy, and `{str: int}` admits `{Plain("a"): "s",
-  Folded("A"): 1}` there, which CPython refuses on `"s"`. The soundness page states the
-  assumption and a known-unsound test pins it.
+- **A dict's entries are read from its storage on PyPy.** PyPy's `PyDict_Next` answers each value
+  with a lookup of its key, so a dict holding two keys that reach one name through a slot a deleted
+  key left read one value for both, and `{str: int}` admitted `{Plain("a"): "s", Folded("A"): 1}`,
+  which CPython refuses on `"s"`. The answer was wrong on every PyPy wheel, 0.0.1 through 0.0.24.
+  The scan reads `dict.items`.
 
 - **A required field is paid for by the entry its name finds.** A dict can hold two
   keys that reach one name, since `str`'s `==` and a subclass's own need not agree: with
