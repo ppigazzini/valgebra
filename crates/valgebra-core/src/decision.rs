@@ -1040,7 +1040,8 @@ impl Schema {
         cx: &mut Cx<'_>,
         by_branch: bool,
     ) -> Relation {
-        self.decided_by_parts(other, cx, by_branch)
+        self.a_plain_value_outside_a_table(other, cx)
+            .or_else(|| self.decided_by_parts(other, cx, by_branch))
             .or_else(|| {
                 if by_branch {
                     self.decided_as_respelled(other, cx)
@@ -1063,6 +1064,39 @@ impl Schema {
                 }
             })
             .or_else(|| self.below_by_emptiness(other, cx))
+    }
+
+    /// `Fails` where a subject of a builtin kind holds a value and every constant of a
+    /// table is of another exact type. A literal denotes `{x | type(x) is type(c) and x
+    /// == c}`, and a value of a kind is a plain one wherever it holds any: `[]` for a
+    /// list of anything, `2` for an integer at or past `2`, equal to whatever subclass
+    /// the set also holds. So `list[str]` is outside `Literal[Color.RED]`, and `bool`
+    /// outside `Literal[2**63]`, where the sets read no such constant and a class is
+    /// not asked: a member of an `IntEnum` is an `int`, and shares no plain one.
+    #[inline(never)]
+    fn a_plain_value_outside_a_table(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        if !matches!(other, Schema::Literal(_) | Schema::Union(_)) {
+            return Relation::Unknown;
+        }
+        let Some(kind) = self.type_tag() else {
+            return Relation::Unknown;
+        };
+        let Some(constants) = literals::literal_constants(other) else {
+            return Relation::Unknown;
+        };
+        // A constant the bindings decline may be of any kind, the subject's
+        // among them: only one kinded apart, or of no kind, is beside it.
+        if constants
+            .iter()
+            .any(|constant| match cx.oracle.literal_kind(*constant) {
+                Some(of) => of == kind,
+                None => !cx.oracle.literal_of_no_kind(*constant),
+            })
+            || self.verdict_rec(cx) != Verdict::Inhabited
+        {
+            return Relation::Unknown;
+        }
+        Relation::Fails
     }
 
     /// The rules asked once more, a goal they decline read by the sets where no

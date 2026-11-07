@@ -14207,3 +14207,112 @@ mod an_empty_position {
         );
     }
 }
+
+/// A subject of a builtin kind against a table of constants, a literal pinning its
+/// constant's exact type.
+mod a_plain_value {
+    use super::*;
+
+    /// A table: a word, a second word, a constant of no builtin kind and an `int`.
+    pub(super) struct Table;
+
+    pub(super) const WORD: ConstIx = ConstIx::new(0);
+    const MEMBER: ConstIx = ConstIx::new(2);
+    const BIG: ConstIx = ConstIx::new(3);
+
+    impl Constants for Table {
+        fn constant(&self, index: ConstIx) -> Option<Operand> {
+            match index.get() {
+                0 => Some(Operand::Word(b"a".to_vec(), Kind::Str)),
+                1 => Some(Operand::Word(b"b".to_vec(), Kind::Str)),
+                _ => None,
+            }
+        }
+    }
+
+    impl LeafRelations for Table {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+
+        fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
+            match constant.get() {
+                0 | 1 => Some(Kind::Str),
+                3 => Some(Kind::Int),
+                _ => None,
+            }
+        }
+        fn literal_of_no_kind(&self, constant: ConstIx) -> bool {
+            constant == MEMBER
+        }
+    }
+
+    fn read(subject: &Schema, other: &Schema) -> Relation {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Table, &[], &budget);
+        subject.a_plain_value_outside_a_table(other, &mut cx)
+    }
+
+    /// A constant the oracle declines may be of any kind, the subject's among
+    /// them, so it refutes nothing: `None` is not outside a table of one, which
+    /// is below `Literal[None]` where the constant is `None`.
+    #[test]
+    fn a_constant_the_oracle_declines_refutes_nothing() {
+        let table = Schema::Literal(ConstIx::new(0));
+        assert_ne!(
+            Schema::NoneType.subtype_relation_under(&table, &NoLeafRelations, &[]),
+            Relation::Fails
+        );
+    }
+
+    fn table(constants: &[ConstIx]) -> Schema {
+        Schema::Union(
+            constants
+                .iter()
+                .map(|constant| Schema::Literal(*constant))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    }
+
+    /// A plain value is of its exact type, which no constant here is.
+    #[test]
+    fn a_value_of_a_kind_no_constant_is_of_is_outside() {
+        let list = Schema::list(SeqShape::homogeneous(Schema::Str));
+        assert_eq!(read(&list, &Schema::Literal(MEMBER)), Relation::Fails);
+        assert_eq!(
+            read(&Schema::Str, &Schema::Literal(MEMBER)),
+            Relation::Fails
+        );
+        assert_eq!(read(&Schema::Bool, &Schema::Literal(BIG)), Relation::Fails);
+        assert_eq!(read(&Schema::Str, &table(&[MEMBER, BIG])), Relation::Fails);
+    }
+
+    /// One constant of the subject's exact type leaves the value's equality to read.
+    #[test]
+    fn a_constant_of_the_subjects_kind_says_nothing() {
+        assert_eq!(
+            read(&Schema::Str, &Schema::Literal(WORD)),
+            Relation::Unknown
+        );
+        assert_eq!(
+            read(&Schema::Str, &table(&[MEMBER, WORD])),
+            Relation::Unknown
+        );
+        assert_eq!(read(&Schema::Int, &Schema::Literal(BIG)), Relation::Unknown);
+    }
+
+    /// A subject with no value refutes nothing, and neither a class nor another
+    /// shape of supertype is read.
+    #[test]
+    fn a_subject_with_no_value_or_no_kind_is_not_read() {
+        let none = Schema::refine(
+            Schema::Str,
+            vec![Constraint::MinLen(2), Constraint::MaxLen(1)],
+        );
+        assert_eq!(read(&none, &Schema::Literal(MEMBER)), Relation::Unknown);
+        let class = Schema::Instance(ClassIx::new(0));
+        assert_eq!(read(&class, &Schema::Literal(MEMBER)), Relation::Unknown);
+        assert_eq!(read(&Schema::Str, &Schema::Int), Relation::Unknown);
+    }
+}

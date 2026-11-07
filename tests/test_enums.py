@@ -18,8 +18,9 @@ is read as its members again fails here rather than in a caller's data.
 from __future__ import annotations
 
 import enum
-from typing import Literal, Protocol, runtime_checkable
+from typing import Annotated, Literal, Protocol, runtime_checkable
 
+import annotated_types as at
 import pytest
 
 from valgebra import Validator, complement, intersection, nothing, union
@@ -320,3 +321,41 @@ def test_a_meet_read_as_the_enumeration_refutes_on_a_member() -> None:
         assert meet.relation_to(supertype) == "not_subset", meet
     assert intersection(Paint, union(str, Paint)).is_valid(Paint.RED)
     assert not Validator(Carrying).is_valid(Paint.RED)
+
+
+class _Plain(enum.Enum):
+    RED = 1
+
+
+class _Number(enum.IntEnum):
+    TWO = 2
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        bool,
+        Annotated[int, at.Ge(2)],
+        Annotated[str, at.MinLen(1)],
+        tuple[()],
+        tuple[int],
+        list[str],
+        set[str],
+        {"a": int},
+        dict,
+    ],
+)
+def test_a_plain_value_of_a_kind_is_outside_a_table_of_another_exact_type(
+    subject: object,
+) -> None:
+    """A literal pins the type, so the constant need not be a value the sets read."""
+    assert Validator(subject).relation_to(Literal[_Plain.RED]) == "not_subset"
+    assert Validator(subject).relation_to(Literal[_Plain.RED, b"x"]) == "not_subset"
+
+
+def test_a_member_equal_to_a_plain_value_pins_another_type() -> None:
+    """An `IntEnum` member equals a plain integer, and is refuted on that integer."""
+    two = Annotated[int, at.Ge(2), at.Le(2)]
+    assert Validator(two).relation_to(Literal[_Number.TWO]) == "not_subset"
+    assert not Validator(Literal[_Number.TWO]).is_valid(2)
+    assert Validator(bool).relation_to(Literal[9223372036854775808]) == "not_subset"

@@ -182,6 +182,16 @@ pub trait LeafRelations: Constants {
         None
     }
 
+    /// Whether the pooled constant behind a [`Schema::Literal`] is of no kind:
+    /// its exact type is none of the kinds' types, so its literal holds no
+    /// plain value of any kind. `false` where the bindings decline, as
+    /// [`literal_kind`](Self::literal_kind)'s `None` is: a constant declined
+    /// may be of any kind, and a reading taking it for none would refute a
+    /// value its literal holds.
+    fn literal_of_no_kind(&self, _constant: ConstIx) -> bool {
+        false
+    }
+
     /// The kind of the pooled value behind a refinement operand, or `None` when
     /// the bindings decline to kind it.
     ///

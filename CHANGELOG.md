@@ -29,10 +29,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a mapping's own lengths refuse a length its subject holds
 - feat: a position or a clause holding no value is read as what it leaves
 - feat: two sequences meet in nothing at a position each of their values has
+- feat: a plain value of a kind is outside a table of another exact type
 
 -->
 
 ### Added
+
+- **A plain value of a kind is outside a table of another exact type.** `list[str]`, `bool` and
+  `Annotated[int, Ge(2)]` are `not_subset` of `Literal[Color.RED]`, and `bool` of `Literal[2**63]`,
+  where they stayed `undecided`. A literal pins its constant's type.
 
 - **Two sequences meet in nothing at a position each of their values has.** `[int, None]` is
   `subset` of the complement of `recursive(lambda t: list[t])`, and `intersection([int, None], R)`

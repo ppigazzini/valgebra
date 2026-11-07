@@ -170,6 +170,40 @@ fn a_literal_reports_the_kind_its_value_has() {
 }
 
 #[test]
+fn a_literal_of_no_kind_has_neither_a_scalar_nor_a_container_type() {
+    // `literal_of_no_kind` is the positive fact `literal_kind`'s `None` does
+    // not state: a scalar and a container are each of a kind, so neither
+    // is of none, while a class or a plain instance is.
+    Python::attach(|py| {
+        let values = [
+            "7",
+            "(1,)",
+            "[1]",
+            "{1: 2}",
+            "{1}",
+            "frozenset({1})",
+            "int",
+            "object()",
+        ]
+        .into_iter()
+        .map(|source| built(py, source).unbind())
+        .collect();
+        asking(py, values, |oracle| {
+            let of_no_kind = |slot| oracle.literal_of_no_kind(ConstIx::new(slot));
+            assert!(!of_no_kind(0), "an int is of its kind");
+            // One container of each type, so each type's own test is read.
+            for (slot, container) in [(1, "tuple"), (2, "list"), (3, "dict"), (4, "set")] {
+                assert!(!of_no_kind(slot), "a {container} is of its kind");
+            }
+            assert!(!of_no_kind(5), "a frozenset is of its kind");
+            assert!(of_no_kind(6), "a class is of no kind");
+            assert!(of_no_kind(7), "a plain instance is of no kind");
+            assert!(!of_no_kind(8), "a slot past the pool states nothing");
+        });
+    });
+}
+
+#[test]
 fn an_operand_reports_the_kind_its_value_has() {
     // `operand_kind` reads a bound or a step as `literal_kind` reads a
     // constant, and at any size: an `int` past the machine word is an `int`,

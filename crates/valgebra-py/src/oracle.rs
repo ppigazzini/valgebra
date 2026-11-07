@@ -1791,6 +1791,22 @@ impl LeafRelations for PoolRelations<'_, '_> {
         kind_of(self.literals.get(constant.get())?.bind(self.py))
     }
 
+    /// A constant of no kind is one whose exact type is none of the kinds'
+    /// builtin types, which [`kind_of`] answers for the scalars and a
+    /// container's own type answers for the rest.
+    fn literal_of_no_kind(&self, constant: ConstIx) -> bool {
+        self.literals.get(constant.get()).is_some_and(|value| {
+            let value = value.bind(self.py);
+            let ty = value.get_type();
+            kind_of(value).is_none()
+                && !(ty.is(PyTuple::type_object(self.py))
+                    || ty.is(PyList::type_object(self.py))
+                    || ty.is(PyDict::type_object(self.py))
+                    || ty.is(PySet::type_object(self.py))
+                    || ty.is(PyFrozenSet::type_object(self.py)))
+        })
+    }
+
     /// Whether the two constants' literals share no value: constants of two
     /// exact types, or of one type and unequal under an equality this oracle
     /// trusts. A literal is its constant's class under `==` within the type,

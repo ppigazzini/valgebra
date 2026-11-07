@@ -702,6 +702,10 @@ corpus of its own driving every question below
   word is an `int`, which the pooled operand cannot carry;
 - `literal_kind` — which kind does this constant's value have, which is what
   puts a `Literal` on a kind's line at all;
+- `literal_of_no_kind` — is this constant of no kind, its exact type none of the
+  kinds' types. Asked beside `literal_kind`, whose `None` is a decline: a constant
+  declined may be of any kind, and only one positively of none is outside every
+  kind's plain values;
 - `atom_denotes_a_set` — does this atom denote a set the order can read. A class
   whose metaclass computes `isinstance` or `issubclass` answers membership by
   running code, and no snapshot of the class order predicts what that code says,
@@ -1164,6 +1168,13 @@ its steps and lost 44 answers in 1,119 gained, and at this figure 3 in 1,127. Ov
 answers it loses none. `holds_parts` stays as it is for a refinement over a constructor:
 reading those too moved `Annotated[list[B3], Len(1, 1)]` below `nothing` and read 22.8%
 more on `--decision-matrix`.
+
+**A plain value of a kind is outside a table of another exact type.** A literal pins
+`type(x)`, so `list[str]` is outside `Literal[Color.RED]` on `[]`, and `bool` outside
+`Literal[2**63]` on `True`, where the sets read no such constant
+(`a_plain_value_outside_a_table`). A subject of a builtin kind holds a plain value
+wherever it holds any, the subclass a set may also hold being equal to one. A class
+subject is not read: a member of an `IntEnum` is an `int`, and shares no plain one.
 
 **A position or a clause holding no value is read in the last asking.** `list[t]` for a `t`
 with no finite value holds `[]` alone (`holds_its_prefix_alone_within`), and a clause with
