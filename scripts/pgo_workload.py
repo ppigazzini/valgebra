@@ -84,6 +84,7 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "binding-pattern": ("_lists_with_readers",),
     "binding-deep": ("_containers",),
     "binding-refined": ("_lists_with_readers",),
+    "binding-refined-float": ("_lists_with_readers",),
     "binding-mapping": ("_mappings",),
     "binding-record-list": ("_containers",),
     "binding-nullable": ("_lists_with_readers",),
@@ -152,10 +153,6 @@ UNTRAINED: dict[str, str] = {
         "A union of records read up to the node ceiling, joined in rounds: no "
         "union `_relations` asks is wide enough to reach a second round's join."
     ),
-    "binding-refined-float": (
-        "A list of floats under an order bound, read by the loop of the float "
-        "kind: no call here validates one."
-    ),
     "binding-narrowed-key": (
         "A mapping whose key is narrowed by a pattern, read by the scan that "
         "matches each key's text: no call here validates one."
@@ -200,7 +197,7 @@ class _AtLeast:
 
     __module__ = "annotated_types"
 
-    def __init__(self, ge: int) -> None:
+    def __init__(self, ge: float) -> None:
         self.ge = ge
 
 
@@ -258,6 +255,14 @@ def _lists_with_readers() -> None:
     _explain(bounded.validate, [list(range(24)), [0, -1]], 500)
     worded = Validator(list[Annotated[str, Regex("[a-z]+")]])
     _run(worded.is_valid, [["ab", "cd"] * 12, ["ab", "1"]], 8000)
+    # A list of floats takes a loop of its own beside the integers' range, and
+    # its bound is the two floats compared. Untrained, the loop and the
+    # comparison are calls: a thousand floats read 53.6% fewer instructions than
+    # through the rich comparison on 3.15, against 69% here. A light weight, since
+    # at 2,000 rounds the list nested twenty-five deep reads 6% to 9% more cycles
+    # at one count, its path's instructions the same and its layout another.
+    measures = Validator(list[Annotated[float, _AtLeast(0.0)]])
+    _run(measures.is_valid, [[1.5, 2.5] * 12, [1.5, -1.0]], 500)
 
 
 def _records() -> None:
