@@ -833,6 +833,11 @@ program that builds validators per request, and to no validation call.
   alone, and a key is resolved the way Python resolves one -- a `str` subclass,
   or a key of another type, is the field exactly where indexing the dict finds
   it, in this reading and in the scan beside it.
+- **A field is read beside its key.** The record's declared fields and its plan's
+  interned keys are one length, so the loop steps both, with no bound test and no
+  `Option` a field (`keyed_map_asks_for_its_keys`): a fifty-field record reads 8%
+  fewer instructions on the profiled CPython 3.15 wheel, and 2.2% on the build
+  without a profile (`--binding-record`).
 - **The probe is the floor for this shape.** Profiled under callgrind on CPython
   3.12, fifty probes of a fifty-field record are about 143 instructions each and
   64% of the accepting call. Iterating the dict once and resolving each key by
