@@ -1026,7 +1026,8 @@ jobs:
               --binding-recursive --binding-json-reject --binding-json-union \
               --binding-json-open --binding-json-bounded --binding-json-deep \
               --binding-deep \
-              --binding-refined --binding-mapping --binding-mapping-lists \
+              --binding-refined --binding-refined-float \
+              --binding-mapping --binding-mapping-lists \
               --binding-narrowed-key \
               --binding-record-list --binding-nullable --binding-set \
               --against "$BASE"

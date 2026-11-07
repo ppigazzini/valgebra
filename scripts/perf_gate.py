@@ -43,7 +43,7 @@ Three workloads, and the shapes each is read in:
   of tagged records (`--decision-unions`), which read what a join holds.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  thirty-one shapes: the membership walk (`--binding`), the call boundary
+  thirty-two shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
@@ -54,7 +54,8 @@ Three workloads, and the shapes each is read in:
   (`--binding-subclass`), matching a string against a compiled pattern
   (`--binding-pattern`), walking a value against a recursive schema
   (`--binding-recursive`), walking a value nested twenty-five deep
-  (`--binding-deep`), walking refined elements (`--binding-refined`),
+  (`--binding-deep`), walking refined elements (`--binding-refined`), walking
+  refined floats (`--binding-refined-float`),
   walking elements of a union of scalars (`--binding-nullable`), walking a set
   (`--binding-set`), parsing and walking a JSON document (`--binding-json`),
   the same document rejected halfway (`--binding-json-reject`), a document of
@@ -491,6 +492,7 @@ MODES = {
     "binding-json-deep": ("binding_workload", "binding JSON recursive document"),
     "binding-deep": ("binding_workload", "binding deep nesting walk"),
     "binding-refined": ("binding_workload", "binding refined element walk"),
+    "binding-refined-float": ("binding_workload", "binding refined float walk"),
     "binding-mapping": ("binding_workload", "binding mapping walk"),
     "binding-mapping-lists": ("binding_workload", "binding mapping of lists walk"),
     "binding-narrowed-key": ("binding_workload", "binding narrowed key walk"),
@@ -546,6 +548,7 @@ BINDING_ITERATIONS = {
     "binding-json-deep": (1_000, 300),
     "binding-deep": (50_000, 15_000),
     "binding-refined": (20_000, 5_000),
+    "binding-refined-float": (20_000, 5_000),
     "binding-mapping": (20_000, 5_000),
     "binding-mapping-lists": (20_000, 5_000),
     "binding-narrowed-key": (20_000, 5_000),
@@ -584,6 +587,7 @@ BINDING_SHAPES = {
     "binding-json-deep": "json-deep",
     "binding-deep": "deep",
     "binding-refined": "refined",
+    "binding-refined-float": "refined-float",
     "binding-mapping": "mapping",
     "binding-mapping-lists": "mapping-lists",
     "binding-narrowed-key": "narrowed-key",

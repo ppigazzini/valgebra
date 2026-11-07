@@ -264,6 +264,10 @@ pub enum BindingShape {
     /// refined values, where every element reads its bound. Every other walk
     /// shape checks a kind and nothing more.
     Refined,
+    /// Sixty-four floats against `list[Annotated[float, Ge(1000.0)]]`: what
+    /// [`Refined`](BindingShape::Refined) reads of an integer, read of a float,
+    /// whose bound takes a reading of its own at every check.
+    RefinedFloat,
     /// A `dict[str, int]` of sixty-four entries: a mapping, read entry by entry
     /// through its clause. Every record shape names its keys and asks the dict
     /// for each; a mapping declares none, so each entry is iterated and asked
@@ -331,6 +335,7 @@ impl BindingShape {
             "mapping" => BindingShape::Mapping,
             "mapping-lists" => BindingShape::MappingLists,
             "narrowed-key" => BindingShape::NarrowedKey,
+            "refined-float" => BindingShape::RefinedFloat,
             "record-list" => BindingShape::RecordList,
             "nullable" => BindingShape::Nullable,
             "set" => BindingShape::Set,
@@ -792,6 +797,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         BindingShape::JsonDeep => json_deep_walk(py, iters),
         BindingShape::Deep => spelled_walk(py, iters, DEEP),
         BindingShape::Refined => spelled_walk(py, iters, REFINED),
+        BindingShape::RefinedFloat => spelled_walk(py, iters, REFINED_FLOAT),
         BindingShape::Mapping => spelled_walk(py, iters, MAPPING),
         BindingShape::MappingLists => spelled_walk(py, iters, MAPPING_LISTS),
         BindingShape::NarrowedKey => spelled_walk(py, iters, NARROWED_KEY),
@@ -1022,6 +1028,15 @@ const REFINED: &str = "from typing import Annotated\n\
      Ge.__module__ = 'annotated_types'\n\
      SPELLING = list[Annotated[int, Ge(1000)]]\n\
      VALUE = list(range(1000, 1064))\n";
+
+/// The values of [`REFINED`] as floats, under a bound of a float.
+const REFINED_FLOAT: &str = "from typing import Annotated\n\
+     class Ge:\n\
+     \x20   def __init__(self, ge):\n\
+     \x20       self.ge = ge\n\
+     Ge.__module__ = 'annotated_types'\n\
+     SPELLING = list[Annotated[float, Ge(1000.0)]]\n\
+     VALUE = [float(i) for i in range(1000, 1064)]\n";
 
 /// Sixty-four string keys, each holding an integer.
 const MAPPING: &str = "SPELLING = dict[str, int]\n\

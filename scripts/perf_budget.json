@@ -120,5 +120,8 @@
   "binding_record_list_workload_checksum": 16005977,
   "binding_record_list_workload_irefs": 807449968,
   "binding_object_walk_workload_checksum": 106000769,
-  "binding_object_walk_workload_irefs": 193620031
+  "binding_object_walk_workload_irefs": 193620031,
+  "_binding_refined_float_comment": "Sixty-four floats against `list[Annotated[float, Ge(1000.0)]]`, walked per iteration: an order bound over a float, which reads the value and the operand where an integer's reading raises past a machine word.",
+  "binding_refined_float_workload_checksum": 8001025,
+  "binding_refined_float_workload_irefs": 254685056
 }

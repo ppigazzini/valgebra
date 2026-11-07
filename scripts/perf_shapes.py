@@ -87,7 +87,7 @@ class _AtLeast:
 
     __module__ = "annotated_types"
 
-    def __init__(self, ge: int) -> None:
+    def __init__(self, ge: float) -> None:
         self.ge = ge
 
 
@@ -157,6 +157,20 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
         "refined": lambda: (
             v(list[Annotated[int, _AtLeast(0)]]).is_valid,
             list(range(1000)),
+        ),
+        "refined_float": lambda: (
+            v(list[Annotated[float, _AtLeast(0.0)]]).is_valid,
+            [float(i) for i in range(1000)],
+        ),
+        "refined_fields": lambda: (
+            v(
+                {
+                    "x": Annotated[float, _AtLeast(0.0)],
+                    "y": Annotated[float, _AtLeast(0)],
+                    "z": Annotated[int, _AtLeast(0)],
+                }
+            ).is_valid,
+            {"x": 1.5, "y": 2.5, "z": 3},
         ),
         "pattern": lambda: (
             v(list[Annotated[str, vg.Regex(r"[0-9a-f]{8}")]]).is_valid,

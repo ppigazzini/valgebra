@@ -29,8 +29,8 @@ fn main() {
              annotated, explain, explain-accept, open, subclass, json, \
              pattern, object, object-walk, recursive, json-reject, json-union, \
              json-open, \
-             json-bounded, json-deep, deep, refined, protocol, mapping, \
-             narrowed-key, nullable, set"
+             json-bounded, json-deep, deep, refined, refined-float, protocol, \
+             mapping, narrowed-key, nullable, set"
         );
         std::process::exit(2);
     };

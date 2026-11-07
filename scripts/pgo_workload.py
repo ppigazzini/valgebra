@@ -152,6 +152,10 @@ UNTRAINED: dict[str, str] = {
         "A union of records read up to the node ceiling, joined in rounds: no "
         "union `_relations` asks is wide enough to reach a second round's join."
     ),
+    "binding-refined-float": (
+        "A list of floats under an order bound, read by the loop of the float "
+        "kind: no call here validates one."
+    ),
     "binding-narrowed-key": (
         "A mapping whose key is narrowed by a pattern, read by the scan that "
         "matches each key's text: no call here validates one."
