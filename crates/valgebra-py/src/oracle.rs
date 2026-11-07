@@ -1632,6 +1632,15 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // refuted here.
         match own {
             Some(own) => Some(own == kind || matches!((own, kind), (Kind::Int, Kind::Bool))),
+            // `bool` takes no subclass, so `True` is an instance of a class only
+            // through `bool`'s own order, which holds `int` and `object`, and a
+            // metaclass of its own may answer otherwise.
+            None if kind == Kind::Bool
+                && !class.is(self.py.get_type::<PyAny>())
+                && class.get_type().is(self.py.get_type::<PyType>()) =>
+            {
+                Some(false)
+            }
             None => solid.map(|_| false),
         }
     }

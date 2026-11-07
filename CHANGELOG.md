@@ -31,10 +31,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: two sequences meet in nothing at a position each of their values has
 - feat: a plain value of a kind is outside a table of another exact type
 - feat: a float refinement and a float step over the integers hold a value
+- feat: a class holds no boolean but through the order of bool
 
 -->
 
 ### Added
+
+- **A class holds no boolean but through the order of `bool`.** `bool` takes no subclass, so
+  `intersection(K, bool)` is empty and `subset` of `nothing` for a class with a plain metaclass,
+  where it read `False` and `undecided`.
 
 - **A float refinement and a float step over the integers hold a value.**
   `Annotated[set[Annotated[float, Ge(0)]], MinLen(1)]` and `Annotated[int, MultipleOf(0.5)]` are
