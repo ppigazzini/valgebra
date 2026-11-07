@@ -398,7 +398,7 @@ enum Op {
 /// the same values may compare unequal. Every law over a descriptor that can
 /// hold one is therefore checked against the values, and the laws checked by
 /// equality are the ones over the components that compare as sets.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Descr {
     /// One union of lines per kind, indexed by that kind's position in
     /// [`Kind::ALL`].
@@ -412,6 +412,26 @@ pub struct Descr {
     /// of `int` holds every non-int value, not merely the ones this partition
     /// names.
     other: Lines,
+}
+
+/// Field by field, a descriptor being equal to itself at its own address: a product
+/// sorts what it keeps, and its atoms hold their fields by handle, so most of what a
+/// comparison reaches is one allocation read on both sides.
+impl Ord for Descr {
+    fn cmp(&self, other: &Descr) -> core::cmp::Ordering {
+        if core::ptr::eq(self, other) {
+            return core::cmp::Ordering::Equal;
+        }
+        self.kinds
+            .cmp(&other.kinds)
+            .then_with(|| self.other.cmp(&other.other))
+    }
+}
+
+impl PartialOrd for Descr {
+    fn partial_cmp(&self, other: &Descr) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 /// A set of the parts of the universe a descriptor holds a slot for: one bit
