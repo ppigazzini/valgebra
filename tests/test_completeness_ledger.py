@@ -332,6 +332,18 @@ _DECIDED = [
     ),
     pytest.param("subtype", bool, int, id="bool<=int"),
     pytest.param(
+        "refutes",
+        intersection(str, Literal["a", "b"]),
+        intersection(str, Literal["c", "d"]),
+        id="str&table!<=str&other-table",
+    ),
+    pytest.param(
+        "subtype",
+        intersection(str, Literal["a", "b"]),
+        intersection(str, Literal["a", "b", "c"]),
+        id="str&table<=str&wider-table",
+    ),
+    pytest.param(
         "subtype",
         tuple[bool, _NESTED_LISTS_OR_EMPTY],  # ty: ignore[invalid-type-form]
         tuple[Annotated[int, at.Lt(8)], _NESTED_LISTS_OR_EMPTY],  # ty: ignore[invalid-type-form]

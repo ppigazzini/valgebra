@@ -13689,3 +13689,61 @@ mod a_supertype_with_no_value {
         );
     }
 }
+
+/// A table of constants beside what holds them answers as the table.
+mod a_table_in_a_meet {
+    use super::*;
+
+    fn lit(at: usize) -> Schema {
+        Schema::Literal(ConstIx::new(at))
+    }
+
+    /// Constants 0 and 2 are integers and 1 a string, and two apart are unequal.
+    struct Words;
+    impl Constants for Words {}
+    impl LeafRelations for Words {
+        fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+            match (sub, sup) {
+                (Schema::Literal(at), Schema::Int) => Some(at.get() != 1),
+                (Schema::Literal(at), Schema::Str) => Some(at.get() == 1),
+                (Schema::Literal(at), Schema::Literal(other)) => Some(at == other),
+                _ => None,
+            }
+        }
+        fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+            Some(left != right)
+        }
+    }
+
+    fn read(meet: &[Schema], other: &Schema) -> Relation {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Words, &[], &budget);
+        a_table_read_as_the_meet(meet, other, &mut cx)
+    }
+
+    #[test]
+    fn the_tables_own_answer_is_the_meets() {
+        let (ints, one) = (Schema::union([lit(0), lit(2)]), lit(0));
+        let wider = Schema::union([lit(0), lit(2), lit(1)]);
+        assert_eq!(read(&[Schema::Int, one.clone()], &wider), Relation::Holds);
+        assert_eq!(read(&[Schema::Int, one], &lit(2)), Relation::Fails);
+        assert_eq!(read(&[ints.clone(), Schema::Int], &wider), Relation::Holds);
+        assert_eq!(read(&[ints, Schema::Int], &lit(2)), Relation::Fails);
+    }
+
+    #[test]
+    fn a_member_not_holding_the_table_leaves_the_meet_unread() {
+        // The string `1` is no integer, so the meet is smaller than the table.
+        assert_eq!(read(&[Schema::Int, lit(1)], &lit(1)), Relation::Unknown);
+    }
+
+    #[test]
+    fn a_meet_holding_no_table_is_not_read() {
+        assert_eq!(
+            read(&[Schema::Int, Schema::Str], &lit(0)),
+            Relation::Unknown
+        );
+        let mixed = Schema::union([lit(0), Schema::Str]);
+        assert_eq!(read(&[Schema::Int, mixed], &lit(0)), Relation::Unknown);
+    }
+}

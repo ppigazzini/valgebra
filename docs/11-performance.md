@@ -1114,6 +1114,12 @@ as a list against a length-bounded list of the same element.
   JSON Schema containment suite read 37% fewer instructions on a release build,
   `--decision-sets` 29.82% fewer and `--decision-lengths` 66.37%, and what a
   relation keeps of its allowance decides a few a dearer reading declines.
+- **A table of constants beside its kind is the table.** A translation from JSON Schema
+  writes an `enum` of strings as `str` met with the literals, and the relation between
+  two read as a product of the automata of their words: 60 words against 400 took
+  79 ms, where the two tables' own relation takes 0.2. A meet whose other members hold
+  each constant is read as the table, in 1.6 ms, and a meet holding none pays a test a
+  member.
 - **A supertype proved empty needs no difference.** `int` below a recursive attribute
   record with no value read for up to a second, on the second reading's unfoldings, for
   a question `is_empty` answers at once. The relation reads the supertype's emptiness

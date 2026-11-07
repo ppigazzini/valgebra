@@ -20,10 +20,17 @@ answer of its own, or a repair to a change not yet released.
 - feat: a sequence or a mapping of one item outside every branch refutes
 - feat: a goal the rules decline is read by the sets, past what stopped the pair
 - feat: a supertype proved empty is the bottom
+- feat: a table of constants beside what holds them is the table
 
 -->
 
 ### Added
+
+- **A table of constants beside what holds them is the table.** `intersection(str,
+  Literal["a", "b"])` answers as `Literal["a", "b"]` does, the spelling a translation of an
+  `enum` of strings writes. A relation between two of 60 and 400 words read 79 ms on 0.0.24
+  and 3.5 ms on 0.0.23, for an answer it reads in 1.6 ms, and a thousand drawn pairs that
+  stayed `undecided` decide.
 
 - **A supertype proved empty is the bottom.** A schema `is_empty` proves holds no value, so
   what is below it is what is below `nothing`: `str` is `not_subset` of a protocol whose `y` is

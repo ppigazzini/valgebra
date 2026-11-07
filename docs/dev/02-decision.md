@@ -1121,6 +1121,12 @@ under a second, with the 2,046 elements the state bound allows.
 `test_a_step_table_beneath_a_length_bound_keeps_to_the_memory_it_may_have` the
 answer under a limit of a gibibyte.
 
+**A table of constants beside what holds them is the table.** `A ∩ B` is `A` where
+`A ⊆ B`, so a meet holding a literal or a union of them, whose other members hold
+each constant, answers as the table does (`a_table_read_as_the_meet`), a refutation
+with it. It is asked at the end of the meet arm, past every placement, since a
+member below the supertype needs no reading.
+
 **A supertype proved empty is read before the sets read the difference.** The second
 reading of a difference over a recursive attribute record reads 2^k unfoldings under a
 cut that reaches every kind, and the shapes that reached seconds hold no value, which

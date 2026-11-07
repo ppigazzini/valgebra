@@ -280,6 +280,32 @@ pub(super) fn descending<T>(budget: &Budget, refused: T, descent: impl FnOnce() 
     answer
 }
 
+/// A meet holding a table of constants, read as the table where the other
+/// members hold each constant: `A ∩ B` is `A` where `A ⊆ B`, so the table's own
+/// answer is the meet's, a refutation with it. A translation from JSON Schema
+/// writes an `enum` of strings as `str` met with the table, and the two tables'
+/// own relation is a comparison where the meets' is a product of their words'
+/// automata. `Unknown` where no member is a table, which is one test a member.
+#[inline(never)]
+fn a_table_read_as_the_meet(members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+    let is_a_table = |member: &Schema| match member {
+        Schema::Literal(_) => true,
+        Schema::Union(inner) => inner.iter().all(|m| matches!(m, Schema::Literal(_))),
+        _ => false,
+    };
+    let Some(table) = members.iter().find(|member| is_a_table(member)) else {
+        return Relation::Unknown;
+    };
+    if members
+        .iter()
+        .all(|member| core::ptr::eq(member, table) || table.is_subtype_rec(member, cx).holds())
+    {
+        table.is_subtype_rec(other, cx)
+    } else {
+        Relation::Unknown
+    }
+}
+
 /// Whether `sub ⊆ sup` holds by membership alone: the subject is a branch of a
 /// union supertype [BBC+26, (anyOf-r)], or the supertype is a member of a meet
 /// subject.
@@ -2147,7 +2173,7 @@ impl Schema {
                 return merged;
             }
         }
-        placed
+        a_table_read_as_the_meet(members, other, cx).or_else(|| placed)
     }
 
     /// The structural subtyping decision: the lattice, recursion, and
