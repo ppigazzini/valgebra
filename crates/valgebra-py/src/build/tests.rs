@@ -2,6 +2,61 @@ use super::*;
 use pyo3::exceptions::PyTypeError;
 use valgebra_core::SeqShape;
 
+/// The reading of a builtin alias off its attributes answers what the typing
+/// introspection answers, on every form it takes, and takes no other form.
+#[test]
+fn a_builtin_alias_reads_as_the_typing_introspection_reads_it() {
+    Python::attach(|py| {
+        let forms = forms(py).expect("the forms resolve");
+        let module = PyModule::from_code(
+            py,
+            c"import collections.abc, typing\n\
+              class Mine:\n\
+              \x20   __class_getitem__ = classmethod(__import__('types').GenericAlias)\n\
+              \x20   __metadata__ = (1,)\n\
+              TAKEN = [list[int], list[list[int]], dict[str, int], tuple[int, str],\n\
+              \x20        tuple[int, ...], tuple[()], set[int], frozenset[str],\n\
+              \x20        int | str, int | None, list[int] | dict[str, int],\n\
+              \x20        *tuple[int, ...]]\n\
+              LEFT = [typing.List[int], typing.Dict[str, int],\n\
+              \x20       typing.Annotated[int, 1], typing.Literal[1], Mine[int],\n\
+              \x20       collections.abc.Callable[[int], str], type[int],\n\
+              \x20       collections.abc.Sequence[int], typing.Any, int, 1, 'x', None]\n",
+            c"builtin_aliases.py",
+            c"builtin_aliases",
+        )
+        .expect("the corpus compiles");
+        let taken = module.getattr("TAKEN").expect("the corpus");
+        for form in taken.try_iter().expect("a list") {
+            let form = form.expect("an element");
+            let (origin, args) = builtin_alias(&form, forms)
+                .expect("the form reads")
+                .expect("the form is a builtin alias");
+            let asked = forms.get_origin.bind(py).call1((&form,)).expect("asked");
+            assert!(origin.is(&asked), "{form:?} has another origin");
+            let listed = forms.get_args.bind(py).call1((&form,)).expect("asked");
+            assert!(
+                args.eq(&listed).expect("two tuples compare"),
+                "{form:?} has other arguments"
+            );
+            assert!(
+                form.getattr_opt("__metadata__").expect("asked").is_none(),
+                "{form:?} carries metadata"
+            );
+        }
+        let left = module.getattr("LEFT").expect("the corpus");
+        for form in left.try_iter().expect("a list") {
+            let form = form.expect("an element");
+            assert!(
+                builtin_alias(&form, forms)
+                    .expect("the form reads")
+                    .is_none(),
+                "{form:?} is read as a builtin alias"
+            );
+        }
+    });
+}
+
 #[test]
 fn intern_deduplicates_by_identity() {
     Python::attach(|py| {

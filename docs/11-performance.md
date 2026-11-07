@@ -577,6 +577,13 @@ program that builds validators per request, and to no validation call.
   `typing_extensions` builds on any release, asks it once per class for the
   sentinel that says no `extra_items` were given, and importing `sys` to ask
   is 12% of compiling a three-field one.
+- **An alias of a builtin container, and a union written with `|`, are read off the
+  object** (`builtin_alias` in `crates/valgebra-py/src/build.rs`). `typing.get_origin`
+  and `typing.get_args` read the same two attributes for them through three Python
+  calls, after an attribute no such form carries is asked and answered by an
+  `AttributeError` raised, formatted and cleared: compiling
+  `int | str | list[int] | dict[str, int] | None` reads 68% fewer instructions on the
+  profiled CPython 3.15 wheel, and a test holds the two readings to one answer.
 - **A class is asked whether it is a dataclass by its attribute**
   (`is_dataclass` in `build/classes.rs`). `dataclasses.is_dataclass` is
   `hasattr(cls, "__dataclass_fields__")` once its argument is a class, on every

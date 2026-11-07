@@ -251,28 +251,41 @@ symmetry:
    (`place_definitions` in `build.rs`), and the rest are appended. Both after
    the type branch, because a record's fields are types and a type
    is answered there for a flag test.
-8. `Annotated[T, ...]` — the refinement metadata.
-9. Anything with a typing origin — `list[int]`, `dict[K, V]`, `tuple[...]`,
-   `X | Y`, `Literal`.
-10. PEP 695 aliases, `NewType`, native list and dict literals. An alias's value
+8. **An alias of a builtin container, and a union written with `|`** — read off
+   the object's `__origin__` and `__args__` (`builtin_alias` in `build.rs`).
+9. `Annotated[T, ...]` — the refinement metadata.
+10. Anything with a typing origin — `typing.List[int]`, `Literal`, an alias of a
+    class of the program's.
+11. PEP 695 aliases, `NewType`, native list and dict literals. An alias's value
     and a `NewType`'s supertype are type *arguments*, read as a parametrized
     form's are (`build_type_argument` in `build/generics.rs`): a string there
     is a forward reference and refused, where read as a constant
     `NewType("N", "int")` would be the literal `'int'`.
-11. Anything else — a literal of itself, except a forward reference, an
+12. Anything else — a literal of itself, except a forward reference, an
     `InitVar`, `TypedDict` or `NamedTuple` itself, a typing construct, and a
     callable that is no class, each refused by name (`build_unrecognized` in
     `build.rs`).
 
 Moving a branch earlier is a behavior change, not a refactor. `Any` above the
-type branch is the sharp one. Steps 6 and 7 are the moves that are not, and the
+type branch is the sharp one. Steps 6, 7 and 8 are the moves that are not, and the
 argument is what makes them safe: an exact builtin scalar's type carries no
 `__metadata__` or `__supertype__`, `get_origin` answers `None` for it, and it is
 no container and no special form, so every arm before the fallthrough lets it
 through; a validator has no subclass and matches no arm before its own. Taken
 last, each pays an attribute read, a call into `typing` and a dozen tests
 first, which measures at three quarters of compiling a two-thousand-constant
-`Literal` and two thirds of a `union` of five hundred validators.
+`Literal` and two thirds of a `union` of five hundred validators. An exact
+`types.GenericAlias` hands `__metadata__` on to its origin, and a builtin container
+is a static type no assignment reaches, as `types.UnionType` is, so neither form
+carries that name; `typing.get_origin` and `typing.get_args` have no other branch
+for them than the two attributes, and rewrite the arguments only of an alias of
+`collections.abc.Callable`, which is no builtin container. An alias of any other
+origin may hand `__metadata__` to a class of the program's, and takes the steps
+below. Taken after them, step 8 pays an `AttributeError` raised, formatted and
+cleared, and three Python calls, which measures at two thirds of compiling
+`int | str | list[int] | dict[str, int] | None`.
+`a_builtin_alias_reads_as_the_typing_introspection_reads_it` holds the two
+readings to one answer.
 `an_exact_builtin_scalar_is_its_own_constant`
 holds the first reading to exactly the five types.
 
@@ -495,7 +508,7 @@ import of `sys` there is 12% of compiling a three-field one, and of one built by
 
 ## What a parametrized form says
 
-Dispatch step 9 takes anything with a typing origin, and reads the origin
+Dispatch steps 8 and 10 take anything with a typing origin, and read the origin
 before the arguments. The origins are compared by identity against the forms
 resolved once, at the first build — `typing` is imported once, not once per
 node — and a form this frontend does not know is a refusal rather than a guess.
