@@ -112,6 +112,13 @@ answer of its own, or a repair to a change not yet released.
   pair 0.0.24 lost and 0.0.23 answered. Each branch holds `[]`, so none drops out of the union,
   and no set is built.
 
+### Changed
+
+- **A note in 0.0.24 was wrong: it lost answers it gave.** Its section says of a relation's reading
+  that "No answer it gave moves." Four pairs 0.0.23 decided read `undecided` on 0.0.24, among them
+  `list[bool]` below `list[list[dict]] | list[list[dict[str, int]]]`, a list of an item outside every
+  branch. The note stands where it was published, and this release decides all four again.
+
 ### Security
 
 - **What a relation over a float's bound or a step assumes of a subclass is stated.** A step met
@@ -132,8 +139,8 @@ answer of its own, or a repair to a change not yet released.
   keys that reach one name, since `str`'s `==` and a subclass's own need not agree: with
   `Plain` a `str` subclass and `Folded` one comparing by its folded case, `{Plain("a"): 1,
   Folded("A"): 2}` has no key `b`, and `{"a": int, "b": int, str: int}` admitted it, as
-  `{"a": int, "b": nothing, bytes: int}` did while proved empty. The answer was wrong on every
-  release read, 0.0.20 through 0.0.24. Every reading of a record reads a name as the dict
+  `{"a": int, "b": nothing, bytes: int}` did while proved empty. The answer was wrong on 0.0.19
+  through 0.0.24, every published wheel read. Every reading of a record reads a name as the dict
   answers it, and the other entry as a key no field declares, so `{"a": int, str: str}` admits
   `{Plain("a"): 1, Folded("A"): "s"}`, and `{"a": object}` refuses a dict holding both keys by
   naming the extra key, where it named a mutation of a value nothing moved.
