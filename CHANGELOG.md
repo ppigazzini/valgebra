@@ -17,8 +17,17 @@ answer of its own, or a repair to a change not yet released.
 - fix: a required field is paid for by the entry its name finds
 - fix: a build pays for a step's table by what it holds
 - fix: a named tuple holds the positions its class stores
+- feat: a sequence or a mapping of one item outside every branch refutes
 
 -->
+
+### Added
+
+- **A sequence or a mapping is refuted below a union on a value of one item.** `list[bytes]`
+  is `not_subset` of `J | list[J]`, the shape of a field holding a document or a list of them,
+  on `[b""]`, and `list[bool]` of `list[list[dict]] | list[list[dict[str, int]]]` on `[True]`, a
+  pair 0.0.24 lost and 0.0.23 answered. Each branch holds `[]`, so none drops out of the union,
+  and no set is built.
 
 ### Security
 

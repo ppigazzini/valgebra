@@ -971,6 +971,11 @@ These are the readings that refute, each with the value it stands on:
   built as that kind's builtin is outside the class, and outside the inner
   schema because its kind is not that one — and `bool` is the kind it may not
   name against `~int`, every boolean being an integer.
+- `one_item_outside` — the subject is a sequence or a mapping below a union, and an
+  item it holds lies outside what every branch holds at one position. `[v]` is then
+  outside each branch, where every branch holds `[]` and so none is dropped. What a
+  branch holds is read wide, so the reading refutes alone: `[1, "s"]` is in
+  `list[int | str]` and neither of `list[int]` and `list[str]`.
 - `shorter_than` — the supertype carries a length bound and the subject is a
   bare sequence shape, which holds the empty sequence that the bound leaves out.
   Read as a bare shape on purpose: a constraint on the subject may exclude the

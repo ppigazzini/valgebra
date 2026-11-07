@@ -598,8 +598,9 @@ answers `"undecided"`.
   one unfolding holds it with the subject's reference taken as nothing and the
   supertype's as everything: a protocol whose `x` is `recursive(lambda t: [t])`
   is not below `int`, which an object whose `x` is `[]` is outside. A value a
-  second unfolding would place is not named: `list[str]` is `undecided` against
-  `recursive(lambda t: union(Validator([]), [t]))`, which `["a"]` is outside.
+  second unfolding would place is named where it is a sequence or a mapping of one
+  item: `list[str]` is `not_subset` of `recursive(lambda t: union(Validator([]),
+  [t]))` on `["a"]`. Past that it is not named.
 - **A meet with a recursive reference.** A reference denotes its definition,
   so a meet with one is the definition met with the rest, and a definition that
   is a union is the union of its branches each met with the rest. The meet of
@@ -1451,6 +1452,12 @@ branch contains it, is decided by the set representation's symbolic automaton
 regular-expression-types inclusion — a repeated heterogeneous group, such as
 `int` and `str` alternating to any length — because the sequence node carries
 the linear prefix-and-tail form, so no schema valgebra builds takes that shape.
+
+Below a union holding a recursion, where the set representation's unfolding reads
+no answer, a sequence or a mapping is refuted on a value of one item: `list[bytes]`
+is `not_subset` of `J | list[J]`, for the JSON value `J`, on `[b""]`. The item below
+the union of what the branches hold at one position decides nothing, since
+`[1, "s"]` is in `list[int | str]` and in neither of `list[int]` and `list[str]`.
 
 ## Undecidable at runtime
 

@@ -13310,3 +13310,165 @@ fn a_value_no_cut_reaches_refutes_without_a_second_reading() {
     );
     assert_eq!(pairs_read_by_the_sets() - before, 1);
 }
+
+/// A value of one item is what refutes a sequence or a mapping below a union every
+/// branch of which holds its empty value.
+mod one_item {
+    use super::*;
+
+    fn list_of(item: Schema) -> Schema {
+        Schema::list(SeqShape::homogeneous(item))
+    }
+
+    fn map_of(key: Schema, value: Schema) -> Schema {
+        Schema::keyed_map(Vec::new(), vec![MapClause { key, value }])
+    }
+
+    fn refutes(subject: &Schema, members: &[Schema], defs: &[Schema]) -> bool {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, defs, &budget);
+        readings::one_item_outside(subject, members, &mut cx)
+    }
+
+    #[test]
+    fn an_item_outside_every_branch_refutes() {
+        let branches = [list_of(Schema::Str), list_of(Schema::Bytes)];
+        assert!(refutes(&list_of(Schema::Int), &branches, &[]));
+        let pair = Schema::union(branches);
+        assert_eq!(
+            list_of(Schema::Int).subtype_relation_under(&pair, &NoLeafRelations, &[]),
+            Relation::Fails
+        );
+    }
+
+    #[test]
+    fn an_item_inside_a_branch_refutes_nothing() {
+        let branches = [list_of(Schema::Str), list_of(Schema::Int)];
+        assert!(!refutes(&list_of(Schema::Int), &branches, &[]));
+        // Below the union of the two, and in neither on `[1, "s"]`: not this reading's.
+        let either = Schema::union([Schema::Int, Schema::Str]);
+        assert!(!refutes(&list_of(either), &branches, &[]));
+    }
+
+    #[test]
+    fn a_position_past_the_first_holds_no_item_of_one() {
+        let two = Schema::list(SeqShape::fixed([Schema::Int, Schema::Int]));
+        let empty = Schema::list(SeqShape::fixed([]));
+        assert!(refutes(&list_of(Schema::Int), &[two, empty], &[]));
+        let first = Schema::list(SeqShape::fixed([Schema::Int]));
+        assert!(!refutes(&list_of(Schema::Int), &[first], &[]));
+    }
+
+    #[test]
+    fn a_subject_holding_no_value_of_one_item_is_not_read() {
+        let two = Schema::list(SeqShape::fixed([Schema::Int, Schema::Int]));
+        assert!(!refutes(&two, &[list_of(Schema::Str)], &[]));
+        let first = Schema::list(SeqShape::fixed([Schema::Int]));
+        assert!(refutes(&first, &[list_of(Schema::Str)], &[]));
+    }
+
+    #[test]
+    fn a_container_of_another_kind_holds_no_such_value() {
+        let tuples = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+        assert!(refutes(
+            &list_of(Schema::Int),
+            &[tuples, list_of(Schema::Str)],
+            &[]
+        ));
+    }
+
+    #[test]
+    fn a_refinement_is_read_as_its_base() {
+        let bounded = Schema::refine(list_of(Schema::Str), vec![Constraint::MinLen(1)]);
+        assert!(refutes(&list_of(Schema::Int), &[bounded], &[]));
+        let of_ints = Schema::refine(list_of(Schema::Int), vec![Constraint::MinLen(1)]);
+        assert!(!refutes(&list_of(Schema::Int), &[of_ints], &[]));
+    }
+
+    #[test]
+    fn a_reference_is_read_through_its_definition_once() {
+        let defs = [Schema::union([
+            Schema::Str,
+            list_of(Schema::Ref(DefIx::new(0))),
+        ])];
+        let reference = Schema::Ref(DefIx::new(0));
+        assert!(refutes(
+            &list_of(Schema::Int),
+            &[reference.clone(), list_of(Schema::Bytes)],
+            &defs
+        ));
+        assert!(!refutes(
+            &list_of(Schema::Str),
+            core::slice::from_ref(&reference),
+            &defs
+        ));
+        // One no definition resolves holds what nothing here can read.
+        assert!(!refutes(&list_of(Schema::Int), &[reference], &[]));
+    }
+
+    #[test]
+    fn a_branch_neither_reading_places_declines() {
+        let unread = list_of(Schema::Str).complement();
+        assert!(!refutes(
+            &list_of(Schema::Int),
+            &[unread, list_of(Schema::Str)],
+            &[]
+        ));
+    }
+
+    /// A branch is read as its base, a refinement holding no value its base does not.
+    /// A maximum leaves it the empty list, so it is no branch the kinds drop.
+    #[test]
+    fn a_refined_branch_is_read_as_its_base() {
+        let bounded = Schema::refine(list_of(Schema::Str), vec![Constraint::MaxLen(3)]);
+        assert!(refutes(
+            &list_of(Schema::Int),
+            std::slice::from_ref(&bounded),
+            &[]
+        ));
+        assert!(!refutes(&list_of(Schema::Str), &[bounded], &[]));
+    }
+
+    /// A subject with a field holds that field in every value, so its one entry is
+    /// not the value this reads, however its clause compares.
+    #[test]
+    fn a_mapping_with_a_field_is_not_read_at_one_entry() {
+        let with_a_field = Schema::keyed_map(
+            vec![Field {
+                name: "a".into(),
+                schema: Schema::Int,
+                required: true,
+            }],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        assert!(!refutes(
+            &with_a_field,
+            &[map_of(Schema::Str, Schema::Str)],
+            &[]
+        ));
+    }
+
+    #[test]
+    fn a_mapping_is_read_at_one_entry_under_a_key_it_can_hold() {
+        let strings = map_of(Schema::Str, Schema::Str);
+        let bytes = map_of(Schema::Int, Schema::Bytes);
+        let subject = map_of(Schema::Str, Schema::Int);
+        assert!(refutes(&subject, &[strings.clone(), bytes.clone()], &[]));
+        // A field holds what it holds under its one name, which is read wide.
+        let with_a_field = Schema::keyed_map(
+            vec![Field {
+                name: "a".into(),
+                schema: Schema::Int,
+                required: false,
+            }],
+            Vec::new(),
+        );
+        assert!(!refutes(&subject, &[with_a_field], &[]));
+        // A key of no kind with no end of them may be one a dict cannot hold.
+        let unhashable = map_of(list_of(Schema::Int), Schema::Int);
+        assert!(!refutes(&unhashable, &[strings], &[]));
+    }
+}

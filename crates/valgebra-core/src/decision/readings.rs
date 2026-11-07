@@ -993,6 +993,87 @@ pub(super) fn spills_a_kind_into(subject: &Schema, other: &Schema, cx: &Cx<'_>) 
     whole != 0 && whole & !other.kinds_possibly_held(cx.oracle, cx.defs) != 0
 }
 
+/// Whether a sequence of one item, or a mapping of one entry, the subject holds
+/// lies outside every branch of a union.
+///
+/// `a ⊆ b` is `a ∧ ¬b = ∅` [FCB08, §4.1], so one value refutes it, and no branch
+/// can name this one: `list[int]` is refuted below `list[str]` on `[0]` and below
+/// `list[bytes]` on `[0]`, each branch holds `[]`, and so none drops out of the
+/// union for sharing no value. But `[v]` lies in a branch of its container only where
+/// `v` lies in what that branch holds at one position, so a `v` outside all of
+/// those is outside the union. What a branch holds is read wide, a refinement as its
+/// base and a map as every value it holds under any key, which keeps a value
+/// outside them outside the branch; a reference is read through its definition once,
+/// since a branch holding itself adds nothing to what the others hold at one
+/// position. A branch no sequence or map of the subject's can be in is asked the
+/// cheap disjointness, and one neither reading places declines.
+///
+/// A refutation and no proof: `[1, "s"]` is in `list[int | str]` and neither of
+/// `list[int]` and `list[str]`, so an item below the union of the items says
+/// nothing. The value is the cheap check [BBC+26, §6, p. 8] with no set built.
+#[inline(never)]
+pub(super) fn one_item_outside(subject: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> bool {
+    let item = match subject {
+        Schema::Seq { shape, .. } => match (&shape.prefix[..], shape.tail.as_deref()) {
+            ([first], _) => first,
+            ([], Some(tail)) => tail,
+            _ => return false,
+        },
+        Schema::KeyedMap { fields, defaults } if fields.is_empty() => {
+            let [clause] = &defaults[..] else {
+                return false;
+            };
+            // A key of a kind with no end of them is one a dict can hold, where
+            // a class may set `__hash__` to `None`.
+            if ![Kind::Str, Kind::Bytes, Kind::Int]
+                .iter()
+                .any(|kind| clause.key.holds_every_value_of(*kind, cx.oracle))
+            {
+                return false;
+            }
+            &clause.value
+        }
+        _ => return false,
+    };
+    let mut held = Vec::new();
+    let mut read = Vec::new();
+    let mut pending: Vec<&Schema> = members.iter().collect();
+    while let Some(branch) = pending.pop() {
+        match (subject, branch) {
+            (
+                Schema::Seq {
+                    container: mine, ..
+                },
+                Schema::Seq { container, shape },
+            ) if mine == container => match (&shape.prefix[..], shape.tail.as_deref()) {
+                ([first], _) => held.push(first.clone()),
+                ([], Some(tail)) => held.push(tail.clone()),
+                _ => {}
+            },
+            (Schema::KeyedMap { .. }, Schema::KeyedMap { fields, defaults }) => {
+                held.extend(fields.iter().map(|field| field.schema.clone()));
+                held.extend(defaults.iter().map(|clause| clause.value.clone()));
+            }
+            (_, Schema::Refine { base, .. }) => pending.push(base),
+            (_, Schema::Union(inner)) => pending.extend(inner.iter()),
+            (_, Schema::Ref(at)) => {
+                if !read.contains(at) {
+                    read.push(*at);
+                    let Some(definition) = cx.defs.get(at.get()) else {
+                        return false;
+                    };
+                    pending.push(definition);
+                }
+            }
+            (_, other) if subject.disjoint_with(other, cx.oracle) => {}
+            _ => return false,
+        }
+    }
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
+    item.is_subtype_rec(&Schema::union(held), cx) == Relation::Fails
+}
+
 /// A set of kinds, one bit per place in [`Kind::ALL`].
 pub(super) type Kinds = u16;
 

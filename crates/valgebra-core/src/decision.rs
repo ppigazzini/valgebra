@@ -1794,11 +1794,14 @@ impl Schema {
             if split != Relation::Unknown {
                 return split;
             }
+            if readings::one_item_outside(self, members, cx) {
+                return Relation::Fails;
+            }
         }
         // A branch the subject shares no value with decides nothing about the
         // inclusion: `A ⊆ X ∪ Y` with `A ∩ X = ∅` is `A ⊆ Y`. Dropping such a
         // branch is what lets a *refutation* out -- the rules refute against a
-        // single supertype and have no arm that refutes against a union, so
+        // single supertype, and a union but for one item, so
         // without it a chain of records beside a `None` branch is undecided
         // where the record branch alone refutes.
         //

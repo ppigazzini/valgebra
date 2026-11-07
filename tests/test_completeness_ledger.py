@@ -331,6 +331,19 @@ _DECIDED = [
         id="protocol-of-a-fixpoint<=int-is-refuted",
     ),
     pytest.param("subtype", bool, int, id="bool<=int"),
+    pytest.param("refutes", list[bytes], union(_JSON, [_JSON]), id="[bytes]!<=J|[J]"),
+    pytest.param(
+        "refutes",
+        list[bool],
+        union(list[list[dict]], list[list[dict[str, int]]]),
+        id="[bool]!<=[[dict]]|[[dict[str,int]]]",
+    ),
+    pytest.param(
+        "refutes",
+        dict[str, bytes],
+        union({str: _JSON}, {"a?": int}),
+        id="dict[str,bytes]!<=dict[str,J]|{a?:int}",
+    ),
     # Two hundred guarded fields are past the set representation's node bound as
     # a pair, and each field is a few nodes: a field refuted refutes the record,
     # and every field proved proves it.
@@ -1771,13 +1784,12 @@ def _missed(why: str) -> pytest.MarkDecorator:
 _LEDGERED: list[object] = [
     # One unfolding reads the supertype's reference as everything, so a list of
     # anything is inside it there, and the value that parts the pair is one
-    # level down.
+    # level down, which a list of one item names.
     pytest.param(
         "refutes",
         list[str],
         _NESTED_LISTS_OR_EMPTY,
         id="list[str]<=nested-lists-needs-a-second-unfolding",
-        marks=_missed("a value a second unfolding would place is not named"),
     ),
     # Past the depth a build descends, a scalar is read by its kind's regions,
     # intervals over the reals that round no integer bound: the open range is

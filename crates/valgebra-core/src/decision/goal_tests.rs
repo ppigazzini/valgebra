@@ -574,7 +574,7 @@ fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -
 /// drawn from.
 ///
 /// A rule asks a pair of the children of the pair it was asked, or unfolds a
-/// reference into the definition `subterms` holds, except in four places. The
+/// reference into the definition `subterms` holds, except in five places. The
 /// product rule meets a component with the complement of a branch's
 /// component, one conjunct per narrowing, so what it asks is a meet of
 /// subterms and of their complements. The union rule asks the subject against
@@ -584,9 +584,11 @@ fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -
 /// names members of two subterms, and a rule may keep one whole. A pair every
 /// decider declined against a complement is asked as the meet of the subject
 /// and the inner set below the bottom, and as the inner set below the
-/// subject's complement. And a complement or a meet folds to a bound, the top
-/// or the bottom. Each of the four is a subset or a sign of the subterms, so
-/// the closure is finite because they are.
+/// subject's complement. A sequence or a mapping below a union asks its item
+/// against the union of what the branches hold at one position, which are
+/// children of the branches ([`readings::one_item_outside`]). And a complement or a
+/// meet folds to a bound, the top or the bottom. Each of the five is a subset or a
+/// sign of the subterms, so the closure is finite because they are.
 fn in_closure(term: &Schema, subterms: &[Schema]) -> bool {
     let signed = |t: &Schema| {
         subterms.contains(t) || matches!(t, Schema::Complement(inner) if subterms.contains(inner))
@@ -595,13 +597,16 @@ fn in_closure(term: &Schema, subterms: &[Schema]) -> bool {
         _ if signed(term) => true,
         Schema::Nothing | Schema::Anything(_) => true,
         Schema::Intersection(members) => members.iter().all(signed),
-        Schema::Union(members) => subterms.iter().any(|union| match union {
-            Schema::Union(theirs) => {
-                let read = members_at_every_depth(theirs);
-                members.iter().all(|m| read.contains(&m))
-            }
-            _ => false,
-        }),
+        Schema::Union(members) => {
+            members.iter().all(|member| subterms.contains(member))
+                || subterms.iter().any(|union| match union {
+                    Schema::Union(theirs) => {
+                        let read = members_at_every_depth(theirs);
+                        members.iter().all(|m| read.contains(&m))
+                    }
+                    _ => false,
+                })
+        }
         _ => false,
     }
 }
