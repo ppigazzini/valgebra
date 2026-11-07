@@ -90,12 +90,19 @@ impl<'py> Value<'_, 'py> {
         }
     }
 
-    /// A process-unique identity for the recursion guard. A JSON value is a
-    /// finite tree, so its node address is stable for the walk and never repeats
-    /// on a path; the guard's length still bounds recursion depth.
+    /// The value's identity, which the trail and the memo key a definition's
+    /// walk by: a Python object's address, and a parsed node's address in the
+    /// tree, which is stable for the walk and never repeats on a path.
+    ///
+    /// A string is its text's address. A key of an object is no node of the
+    /// tree: the walk reads it through a node built where it is asked, at one
+    /// stack address for every key, so keyed by that node one key would find
+    /// another key's answer. A string's text is the document's, or the copy the
+    /// parse made of it, and is one text wherever it is read.
     pub(crate) fn id(&self) -> usize {
         match self {
             Value::Py(v) => v.as_ptr() as usize,
+            Value::Json(_, JsonValue::Str(text)) => text.as_ptr() as usize,
             Value::Json(_, v) => std::ptr::from_ref::<JsonValue<'_>>(v) as usize,
         }
     }

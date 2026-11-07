@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use jiter::JsonValue;
 use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
 use valgebra_core::{Constraint, DefIx, MapClause, PredIx, SeqShape};
 
@@ -1167,5 +1168,62 @@ fn a_report_holding_a_violation_walks_a_shared_definition_once_per_level() {
             deep <= 2 * shallow + 16,
             "{shallow} entries at 6, {deep} at 12"
         );
+    });
+}
+
+/// Each key of a parsed object is its own value to the memo. The walk reads a
+/// key through a node built where it is asked, at one stack address for every
+/// key, so a memo keyed by that node answered `"0"` with what it kept for
+/// `"b"`. `K = Annotated[str, Regex("b+")] | tuple[K, ...]`, read by both
+/// clauses of `{K: int, ~K: str}`: the second clause's walk of `K` is kept.
+#[test]
+fn each_key_of_a_parsed_object_is_its_own_value() {
+    Python::attach(|py| {
+        let words = Schema::Refine {
+            base: Arc::new(Schema::Str),
+            constraints: vec![Constraint::Regex("b+".into())].into(),
+        };
+        let defs = vec![union_of(vec![
+            words,
+            Schema::tuple(SeqShape::homogeneous(reference())),
+        ])];
+        let schema = Schema::KeyedMap {
+            fields: Vec::new().into(),
+            defaults: vec![
+                MapClause {
+                    key: reference(),
+                    value: Schema::Int,
+                },
+                MapClause {
+                    key: reference().complement(),
+                    value: Schema::Str,
+                },
+            ]
+            .into(),
+        };
+        let index = build_index(py, &schema, &defs, &[]);
+        for (source, admitted) in [
+            (r#"{"b": 0, "0": 0}"#, false),
+            (r#"{"0": 0, "b": 0}"#, false),
+            (r#"{"b": 0, "0": "x"}"#, true),
+            (r#"{"0": "x", "b": 0}"#, true),
+        ] {
+            let parsed = JsonValue::parse(source.as_bytes(), false).expect("the JSON parses");
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &[],
+                defs: &defs,
+                index: &index,
+                state: &state,
+                mode: WalkMode::Fast,
+            };
+            let found = member(
+                &schema,
+                &Value::Json(py, &parsed),
+                &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
+            );
+            assert_eq!(found, admitted, "{source}");
+            assert!(state.memo.in_use(), "{source}: the memo was not armed");
+        }
     });
 }

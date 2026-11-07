@@ -799,7 +799,7 @@ them metamorphic relations rather than invariants that happen to hold.
 
 SOURCE: §13.8 "**Metamorphic testing.**"
 
-HELD-BY: test_json_walk_matches_the_object_walk, test_is_valid_agrees_with_validate
+HELD-BY: test_json_walk_matches_the_object_walk, test_is_valid_agrees_with_validate, test_each_key_of_a_document_is_read_as_its_own_value
 
 The two are cited for different things. The 1998 report states the approach;
 neither "metamorphic relation" nor "necessary property" occurs in it. The

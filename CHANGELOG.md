@@ -42,6 +42,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: two attribute records share no value where a shared attribute holds none
 - feat: the complement of a table holds a plain value of another kind
 - feat: a field's name is read as a word of a clause narrowed by a language
+- fix: each key of a parsed object is its own value to the walk's memo
 
 -->
 
@@ -191,6 +192,13 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **Each key of a parsed object is its own value to the walk's memo.** `is_valid_json` answered
+  one key of an object with the answer kept for another, where two members of a schema read a
+  recursive key language: `{K: int, complement(K): str}`, for `K = recursive(lambda k:
+  union(Annotated[str, Regex("b+")], [k]))`, admitted `{"b": 0, "0": 0}` and refused
+  `{"b": 0, "0": "x"}`, against `is_valid` of `json.loads` and against `validate_json` on the
+  same text. The memo keys a string by its text.
 
 - **A refusal names a refined branch's bounds and each clause reading a key.**
   `union(Annotated[int, Ge(10)], Annotated[int, Lt(0)])` read `5` as `expected one of: int, int`,

@@ -22,6 +22,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
+    Regex,
     ValidationError,
     Validator,
     anything,
@@ -264,6 +265,38 @@ def test_json_walk_matches_the_object_walk(spec: object, value: object) -> None:
     schema = Validator(spec)
     doc = json.dumps(value)
     assert schema.is_valid_json(doc) == schema.is_valid(json.loads(doc))
+
+
+# A key language with a recursive definition, read by two members of one
+# schema: two clauses, an opened record's clause beside the free one, and two
+# mappings in a union. The walk keeps the second member's answer for the
+# definition at the key, and each key of an object is its own value.
+_KEY_WORDS = recursive(lambda k: union(Annotated[str, Regex("b+")], [k]))
+_TWO_READERS = (
+    Validator({_KEY_WORDS: int, complement(_KEY_WORDS): str}),
+    Validator({_KEY_WORDS: int}).open(),
+    Validator(union({_KEY_WORDS: int}, {complement(_KEY_WORDS): str})),
+)
+
+
+# THEORY: metamorphic-testing
+@given(
+    entries=st.lists(
+        st.tuples(
+            st.sampled_from(["b", "bb", "0", "", "a"]), st.sampled_from([0, "x", None])
+        ),
+        min_size=2,
+        max_size=3,
+        unique_by=lambda entry: entry[0],
+    ),
+    reader=st.sampled_from(_TWO_READERS),
+)
+def test_each_key_of_a_document_is_read_as_its_own_value(
+    entries: list[tuple[str, object]], reader: Validator
+) -> None:
+    for ordered in (entries, entries[::-1]):
+        doc = json.dumps(dict(ordered))
+        assert reader.is_valid_json(doc) == reader.is_valid(json.loads(doc)), doc
 
 
 def test_fixed_and_variadic_sequences_reject_wrong_json_shapes() -> None:

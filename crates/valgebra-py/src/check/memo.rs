@@ -38,7 +38,9 @@
 //!   `__hash__` -- can replace an element of a list at the same length, which
 //!   no size check sees. Freed, the element's address could be a later
 //!   value's, which the memo would answer for. A parsed document frees nothing
-//!   while it is walked.
+//!   while it is walked, and a string of it is keyed by its text, since an
+//!   object's key is read through a node built where it is asked
+//!   ([`Value::id`]).
 //!
 //! Remembering costs a hash insert and a reference a walk, so it runs only
 //! where it can be found again: in the walk of a member after the first, of a
