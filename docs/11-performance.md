@@ -1191,6 +1191,12 @@ as a list against a length-bounded list of the same element.
   of its residue, so the result is mostly one of the two lists it was made from, each
   fitted already (`refitted` in `descr/floats.rs`): `--decision-steps` reads 10.8%
   fewer instructions.
+- **A descriptor is equal to itself at its own address.** A product of two unions
+  sorts what it keeps, and its atoms hold their fields by handle, so most of what a
+  comparison reaches is one allocation read on both sides, walked to its depth
+  field by field. The order reads the address first (`Descr` in `descr/mod.rs`):
+  `--decision-unions` reads 1.12% fewer instructions, and a relation an undecided
+  meet of a recursive schema reads in 13 ms takes 6.7.
 - **A language is empty where no state accepts.** Every table a set holds is minimal
   or the complement of one, so a word reaches every state, and whether the language
   holds a word is a scan of the accepting flags (`RegularSet::is_empty` in

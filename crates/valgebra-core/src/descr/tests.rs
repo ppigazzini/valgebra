@@ -1933,3 +1933,23 @@ fn a_negated_union_of_lines_the_allowance_cannot_expand_declines() {
     let starved = budget::under(0, || negated.emptiness(whole));
     assert_eq!(starved, Verdict::Unknown, "starved gave {starved:?}");
 }
+
+/// A descriptor is equal to itself at its own address as it is to a copy, and two
+/// that differ are ordered alike either way round.
+#[test]
+fn the_order_reads_a_descriptor_at_its_address_as_its_fields_do() {
+    let read = [
+        Descr::of_kind(Kind::Int),
+        Descr::of_kind(Kind::Str),
+        Descr::nothing(),
+        Descr::of_kind(Kind::Int).complement(),
+    ];
+    for one in &read {
+        assert_eq!(one.cmp(one), core::cmp::Ordering::Equal);
+        assert_eq!(one.cmp(&one.clone()), core::cmp::Ordering::Equal);
+        for other in &read {
+            assert_eq!(one.cmp(other), other.cmp(one).reverse());
+            assert_eq!(one.cmp(other).is_eq(), one == other);
+        }
+    }
+}
