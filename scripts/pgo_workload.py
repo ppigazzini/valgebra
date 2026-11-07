@@ -135,6 +135,11 @@ UNTRAINED: dict[str, str] = {
         "read 0.5% more instructions here and in the list nested twenty-five "
         "deep."
     ),
+    "binding-memo": (
+        "A definition two list branches read at each level of a chain, whose "
+        "second reading the walk's memo answers: no call here validates a "
+        "value two members of one node read through a definition."
+    ),
     "decision-lengths": (
         "A list's length bound lowered to an automaton with a state per element "
         "and met with the element's shape: `_relations` reaches the sequence "

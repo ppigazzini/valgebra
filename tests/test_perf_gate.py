@@ -559,6 +559,7 @@ def test_the_usage_names_every_binding_shape_and_counts_them() -> None:
         30: "thirty",
         31: "thirty-one",
         32: "thirty-two",
+        33: "thirty-three",
     }
     want = words.get(len(named))
     assert want, f"no spelling for {len(named)} shapes; add one above"

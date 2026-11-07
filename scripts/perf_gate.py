@@ -43,7 +43,7 @@ Three workloads, and the shapes each is read in:
   of tagged records (`--decision-unions`), which read what a join holds.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  thirty-two shapes: the membership walk (`--binding`), the call boundary
+  thirty-three shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
@@ -53,7 +53,9 @@ Three workloads, and the shapes each is read in:
   (`--binding-narrowed-key`), walking a `tuple` subclass
   (`--binding-subclass`), matching a string against a compiled pattern
   (`--binding-pattern`), walking a value against a recursive schema
-  (`--binding-recursive`), walking a value nested twenty-five deep
+  (`--binding-recursive`), a definition two list branches read at each level,
+  which the walk's memo keeps (`--binding-memo`), walking a value nested
+  twenty-five deep
   (`--binding-deep`), walking refined elements (`--binding-refined`), walking
   refined floats (`--binding-refined-float`),
   walking elements of a union of scalars (`--binding-nullable`), walking a set
@@ -482,6 +484,7 @@ MODES = {
     "binding-json": ("binding_workload", "binding JSON document parse and walk"),
     "binding-pattern": ("binding_workload", "binding pattern refinement walk"),
     "binding-recursive": ("binding_workload", "binding recursive schema walk"),
+    "binding-memo": ("binding_workload", "binding memo walk"),
     "binding-json-reject": ("binding_workload", "binding JSON document rejected"),
     "binding-json-union": ("binding_workload", "binding JSON union of records"),
     "binding-json-open": ("binding_workload", "binding JSON records read by clause"),
@@ -541,6 +544,7 @@ BINDING_ITERATIONS = {
     "binding-json": (500, 150),
     "binding-pattern": (150_000, 50_000),
     "binding-recursive": (50_000, 15_000),
+    "binding-memo": (5_000, 1_500),
     "binding-json-reject": (500, 150),
     "binding-json-union": (500, 150),
     "binding-json-open": (500, 150),
@@ -580,6 +584,7 @@ BINDING_SHAPES = {
     "binding-json": "json",
     "binding-pattern": "pattern",
     "binding-recursive": "recursive",
+    "binding-memo": "memo",
     "binding-json-reject": "json-reject",
     "binding-json-union": "json-union",
     "binding-json-open": "json-open",

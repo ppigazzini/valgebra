@@ -1023,7 +1023,8 @@ jobs:
               --binding-subclass --binding-explain --binding-explain-accept \
               --binding-explain-list \
               --binding-open --binding-json --binding-pattern \
-              --binding-recursive --binding-json-reject --binding-json-union \
+              --binding-recursive --binding-memo \
+              --binding-json-reject --binding-json-union \
               --binding-json-open --binding-json-bounded --binding-json-deep \
               --binding-deep \
               --binding-refined --binding-refined-float \
