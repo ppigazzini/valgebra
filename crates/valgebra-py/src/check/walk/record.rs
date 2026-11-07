@@ -1514,6 +1514,16 @@ pub(super) fn keyed_map_explain(
     undeclared_explained(fields, defaults, dict, value, frame);
 }
 
+/// `value`'s refusal by every one of `schemas`, each the only reading of it: the one's
+/// own failure where there is one, and otherwise what a union of them would say.
+fn refused_by_each(schemas: &[&Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) {
+    if let [schema] = schemas {
+        member(schema, value, frame);
+        return;
+    }
+    super::refused_as_a_union(schemas.iter().copied(), value, frame);
+}
+
 /// Report each key a record does not declare and no clause of it covers: the
 /// key, and its value, against the clause where the record has one, and the
 /// key alone where it is closed.
@@ -1552,15 +1562,33 @@ fn undeclared_explained(
         if covered(defaults, &Value::Py(key), &Value::Py(val), &mut deciding) {
             return ControlFlow::Continue(());
         }
-        if let Some(clause) = defaults.first() {
-            // A clause exists but did not cover this key: surface the key and
-            // value violations against it (the homogeneous-mapping error). The
-            // two are two failures, so a mode that stops at the first reports
-            // the key alone.
+        if let [clause] = defaults {
+            // The clause did not cover this key: surface the key and value
+            // violations against it (the homogeneous-mapping error). The two are
+            // two failures, so a mode that stops at the first reports the key
+            // alone.
             frame.path.push(key_segment(key, ctx));
             member(&clause.key, &Value::Py(key), frame);
             if !ctx.mode.stops_at_first() || frame.out.is_empty() {
                 member(&clause.value, &Value::Py(val), frame);
+            }
+            frame.path.pop();
+        } else if !defaults.is_empty() {
+            // Clauses are a disjunction, so a refusal names what the ones holding
+            // the key read as a union names its branches, and a key none holds is
+            // the failure alone: a value is no question of a clause not reading it.
+            let room = ctx.room_to_descend();
+            let reading: Vec<&Schema> = defaults
+                .iter()
+                .filter(|clause| field_holds(&clause.key, &Value::Py(key), room, &mut deciding))
+                .map(|clause| &clause.value)
+                .collect();
+            frame.path.push(key_segment(key, ctx));
+            if reading.is_empty() {
+                let keys: Vec<&Schema> = defaults.iter().map(|clause| &clause.key).collect();
+                refused_by_each(&keys, &Value::Py(key), frame);
+            } else {
+                refused_by_each(&reading, &Value::Py(val), frame);
             }
             frame.path.pop();
         } else {

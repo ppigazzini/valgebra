@@ -25,7 +25,7 @@ import pytest
 
 from _reason import is_a_reason
 from _tree import ROOT
-from valgebra import ValidationError, Validator, union
+from valgebra import Regex, ValidationError, Validator, complement, union
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -426,3 +426,49 @@ def test_a_value_is_bounded_at_eighty_characters_whatever_prints_it() -> None:
     assert len(held) <= 80
     assert "..." in held
     assert held.endswith("99]")
+
+
+def _expected(schema: object, value: object) -> list[tuple[object, ...]]:
+    """Read a refusal's code, the set it names and the place, for each failure."""
+    with pytest.raises(ValidationError) as raised:
+        Validator(schema).validate(value)
+    return [(e["code"], e["expected"], e["path"]) for e in raised.value.errors]
+
+
+def test_a_refined_branch_names_its_base_and_its_bounds() -> None:
+    """`expected` names the set, so a value of the base is not called outside it."""
+    at_least = Annotated[int, at.Ge(10)]
+    below = Annotated[int, at.Lt(0)]
+    assert _expected(union(at_least, below), 5) == [
+        ("union_error", "one of: int and >= 10, int and < 0", ())
+    ]
+    assert _expected(complement(Annotated[int, at.Ge(0)]), 5) == [
+        ("unexpected_match", "not (int and >= 0)", ())
+    ]
+    assert _expected(union(int, Annotated[str, at.MinLen(2)]), "a") == [
+        ("union_error", "one of: int, str and length >= 2", ())
+    ]
+    assert _expected(union(int, str), 1.5) == [("union_error", "one of: int, str", ())]
+
+
+def test_a_key_several_clauses_hold_names_each_and_a_key_none_holds_the_key() -> None:
+    """Clauses are a disjunction, and a value is no question of one not reading it."""
+    words = {
+        Annotated[str, Regex("a.*")]: int,
+        Annotated[str, Regex(".*z")]: str,
+    }
+    assert _expected(words, {"az": 1.5}) == [
+        ("union_error", "one of: str, int", ("az",))
+    ]
+    assert _expected(words, {"a": "s"}) == [("int_type", "int", ("a",))]
+    refused = _expected(words, {"b": 1})
+    assert [row[0] for row in refused] == ["union_error"]
+    assert "'a.*'" in str(refused[0][1])
+    assert "'.*z'" in str(refused[0][1])
+    assert _expected({Literal["a"]: int, str: str}, {"a": 1.5}) == [
+        ("union_error", "one of: str, int", ("a",))
+    ]
+    assert _expected(dict[Literal["a"], int], {"b": "s"}) == [
+        ("literal_error", "the literal 'a'", ("b",)),
+        ("int_type", "int", ("b",)),
+    ]

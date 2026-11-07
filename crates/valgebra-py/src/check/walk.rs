@@ -763,9 +763,18 @@ fn push_branch_label_within(
                 out.joined = true;
             }
         },
-        // A refinement's type is its base, matching `Schema::expected`; the
-        // constraints report themselves when one of them is what failed.
-        Schema::Refine { base, .. } => push_branch_label_within(base, ctx, py, out, unfolded),
+        // A refinement's set is its base and its bounds, as it names itself alone:
+        // `int and >= 10`, where the base would call `5` no int.
+        Schema::Refine { base, constraints } => {
+            let mut parts = vec![operand_label(base, ctx, py, unfolded)];
+            parts.extend(
+                constraints
+                    .iter()
+                    .map(|constraint| scalar::constraint_label(constraint, ctx, py)),
+            );
+            out.push(parts.join(" and "));
+            out.joined = true;
+        }
         other => out.push(other.expected().to_owned()),
     }
 }
@@ -1181,20 +1190,28 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
             };
             frame.out.extend(branch.into_iter().take(reported));
         }
-        _ => {
-            let mut labels = BranchLabels::new();
-            for member in members {
-                push_branch_label(member, ctx, value.py(), &mut labels);
-            }
-            frame.out.push(Violation {
-                code: UNION_ERROR.as_str(),
-                path: frame.path.clone(),
-                expected: labels.render(),
-                value_summary: summarize_value(value, ctx),
-            });
-        }
+        _ => refused_as_a_union(members.iter(), value, frame),
     }
     false
+}
+
+/// `value`'s refusal by a union of `members`, naming each as it names itself.
+fn refused_as_a_union<'s>(
+    members: impl Iterator<Item = &'s Schema>,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) {
+    let ctx = frame.ctx;
+    let mut labels = BranchLabels::new();
+    for member in members {
+        push_branch_label(member, ctx, value.py(), &mut labels);
+    }
+    frame.out.push(Violation {
+        code: UNION_ERROR.as_str(),
+        path: frame.path.clone(),
+        expected: labels.render(),
+        value_summary: summarize_value(value, ctx),
+    });
 }
 
 /// The branches of a union that refuse `value`, in branch order, for a report

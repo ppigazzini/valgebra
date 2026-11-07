@@ -34,6 +34,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a class holds no boolean but through the order of bool
 - feat: a mapping's clauses are read beside a table and over a language of keys
 - fix: a refinement of a refinement and equal constants past 64 bits are one
+- fix: a refusal names a refined branch's bounds and each clause reading a key
 
 -->
 
@@ -146,6 +147,14 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A refusal names a refined branch's bounds and each clause reading a key.**
+  `union(Annotated[int, Ge(10)], Annotated[int, Lt(0)])` read `5` as `expected one of: int, int`,
+  and `complement(Annotated[int, Ge(0)])` as `expected not int`, in a set holding `-1`.
+  `{Literal["a"]: int, str: str}` refused `{"a": 1.5}` as `string_type`, naming one of the two
+  clauses it read, and a key no clause held was refused for its value too. The first two read
+  `one of: int and >= 10, int and < 0` and `not (int and >= 0)`, a key several clauses hold names
+  each, `one of: str, int`, and a key none holds names the keys alone.
 
 - **A refinement of a refinement and equal constants past 64 bits are one.** `typing` flattens
   `Annotated[Annotated[X, a], b]`, and a `Validator` between the two kept two nodes, so one set
