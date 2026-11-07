@@ -1107,6 +1107,15 @@ lattice holds and stopped there by the node bound, declines beside the rules in
 37 ms, where folding it takes 5.9 s. `--decision-unions` holds the count, and the
 metamorphic gate's `tagged-2048` holds the time to the last release.
 
+**A word automaton's product is paid for by what it holds, as a step's table is.**
+A product reads a table of states by byte classes, thousands of entries for a Unicode
+class, for one unit, so `tuple[Annotated[str, Regex(r"\w*")], ...]` four lists deep read
+for seconds before the depth bound declined it. `Products::of` charges a product its
+table by the figure below, and alike where the memo holds it, which saves the time and
+changes no allowance, so an answer is no function of what the thread asked before it. The
+reading of the whole then refuses early and the last asking reads the leaves: the pair
+answers in half a second. `a_product_is_charged_alike_built_or_found` holds the charge.
+
 **A step's table is paid for by what it holds.** A `MultipleOf(4096)` holds 4,096
 lists, and a union of ranges beside it holds their spans in each, so one operation
 over it reads what a whole product of small sets does, and each edge of a length

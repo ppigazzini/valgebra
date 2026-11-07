@@ -22,6 +22,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a supertype proved empty is the bottom
 - feat: a table of constants beside what holds them is the table
 - feat: a meet is read as a member below all the others
+- fix: a build pays for a product of two automata by what it holds
 
 -->
 
@@ -91,6 +92,11 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A pattern over a Unicode class beneath lists reads in under a second.** A product of two
+  automata counted as one step whatever it holds, so a `\w*` beneath four lists read 3.7 s before
+  a bound declined the pair, where 0.0.22 declined at once. A build pays for a product by its
+  table, and the pair answers in 0.5 s and is refuted, where it stayed `undecided`.
 
 - **A named tuple holds the positions its class stores.** `_fields` is an attribute any
   subclass can write, and `platform.uname_result` names a sixth, computed on demand, over five

@@ -60,21 +60,21 @@ pub(crate) fn spend() -> bool {
     })
 }
 
-/// The entries of a step's table one unit of the allowance reads: a residue, or
-/// a span one holds.
+/// The entries of a table one unit of the allowance reads: a residue or a span
+/// of a step's, a transition of a word automaton's.
 ///
-/// A table is the one leaf a build holds whose size no schema node shows: a
+/// A table is the leaf a build holds whose size no schema node shows: a
 /// `MultipleOf(4096)` holds 4,096 lists, and its period times its spans is what
-/// each operation over it reads and what an automaton's edge keeps. Charged
+/// each operation over it reads and what an automaton's edge keeps; `\w*` holds
+/// thousands of transitions, and a product of two is read whole. Charged
 /// nothing, one unit read all of that, so eight thousand of them could keep
-/// gigabytes, past which an allocation ends the process. At this figure a build
-/// reads about eight million entries, and a table under a thousand of them, which
-/// is every step a schema writes below 1,024 with a few bounds, spends what it
-/// spent uncharged.
+/// gigabytes, past which an allocation ends the process, or read for seconds. At
+/// this figure a build reads about eight million entries, and a table under a
+/// thousand of them spends what it spent uncharged.
 pub(crate) const TABLE_ENTRIES: usize = 1024;
 
-/// Charge what an operation over a step's table reads, `entries` being its
-/// residues and spans, and say whether it was there to charge.
+/// Charge what an operation over a table reads, `entries` being what it holds, and
+/// say whether it was there to charge.
 ///
 /// A table under [`TABLE_ENTRIES`] charges nothing: its operation is one the
 /// step around it has paid for. Past the allowance the charge spends what is

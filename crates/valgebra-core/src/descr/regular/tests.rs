@@ -1396,3 +1396,29 @@ fn a_counted_table_is_kept_under_the_compilers_text() {
     let again = RegularSet::at_most(500, Alphabet::Text).expect("within the bound");
     assert!(Arc::ptr_eq(&again.dfa, &first.dfa));
 }
+
+/// A product is charged by its table, and alike where the memo holds it: what a
+/// build answers is no function of what the thread asked before it. A small
+/// product charges nothing.
+#[test]
+fn a_product_is_charged_alike_built_or_found() {
+    use crate::descr::budget::{TABLE_ENTRIES, under};
+    let (word, digit) = (language(r"\w*a\w"), language(r"\w\d\w*"));
+    let units = u64::try_from(
+        word.intersect(&digit)
+            .expect("inside the state bound")
+            .dfa
+            .transitions
+            .len()
+            / TABLE_ENTRIES,
+    )
+    .expect("a table's size");
+    assert!(units > 1, "a Unicode class holds a wide table");
+    for _ in 0..2 {
+        let met = under(units - 1, || word.intersect(&digit));
+        assert_eq!(met, None, "one unit short, built or found");
+    }
+    assert!(under(units, || word.intersect(&digit)).is_some());
+    let small = under(0, || language("a*").intersect(&language("a*b?")));
+    assert_eq!(small, Some(language("a*")));
+}

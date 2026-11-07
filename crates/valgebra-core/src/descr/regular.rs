@@ -43,6 +43,7 @@ use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
 use super::automaton::{MAX_STATES, Reached, canonical_order, chain_fits, reaches};
+use super::budget;
 
 /// What `regex-automata` may spend building one pattern's table, in bytes.
 ///
@@ -1319,29 +1320,33 @@ struct Product {
 impl Products {
     /// The product of `a` and `b` under `union`, built once a pair while the
     /// memo holds it.
+    ///
+    /// Charged by its table whether built or found, so what a build answers is no
+    /// function of what the thread asked before it: the memo saves the time and
+    /// changes no allowance. A refusal past [`MAX_STATES`] charges nothing, since
+    /// it ends the reading that asked.
     fn of(a: &Arc<Dfa>, b: &Arc<Dfa>, union: bool) -> Option<Arc<Dfa>> {
         let (mine, theirs) = (Arc::as_ptr(a) as usize, Arc::as_ptr(b) as usize);
         let key = (mine.min(theirs), mine.max(theirs), union);
-        if let Some(held) =
-            PRODUCTS.with_borrow(|memo| memo.built.get(&key).map(|held| held.built.clone()))
-        {
-            return held;
-        }
-        let built = if union {
-            a.product(b, |mine, theirs| mine || theirs)
-        } else {
-            a.product(b, |mine, theirs| mine && theirs)
-        }
-        .map(Arc::new);
-        let weight = [a, b]
-            .into_iter()
-            .chain(&built)
-            .map(|table| table.bytes())
-            .sum();
-        PRODUCTS.with_borrow_mut(|memo| {
-            memo.keep(key, [Arc::clone(a), Arc::clone(b)], built.clone(), weight);
+        let held = PRODUCTS.with_borrow(|memo| memo.built.get(&key).map(|held| held.built.clone()));
+        let built = held.unwrap_or_else(|| {
+            let built = if union {
+                a.product(b, |mine, theirs| mine || theirs)
+            } else {
+                a.product(b, |mine, theirs| mine && theirs)
+            }
+            .map(Arc::new);
+            let weight = [a, b]
+                .into_iter()
+                .chain(&built)
+                .map(|table| table.bytes())
+                .sum();
+            PRODUCTS.with_borrow_mut(|memo| {
+                memo.keep(key, [Arc::clone(a), Arc::clone(b)], built.clone(), weight);
+            });
+            built
         });
-        built
+        built.filter(|table| budget::spend_on_a_table(table.transitions.len()))
     }
 
     /// Keep `built` under `key`, starting over where it would pass

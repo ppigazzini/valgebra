@@ -217,8 +217,8 @@ decision steps. None caps time, and four costs grow inside them:
   `int` against a union of thousands of literals grows with the square of their
   number before it answers undecided. What the set representation builds is held
   by size as well -- an automaton to 4,096 states, a pattern's table to the
-  bytes that takes, a `MultipleOf`'s table by the residues and spans each
-  operation over it reads -- and a length bound is refused before it is built
+  bytes that takes, a `MultipleOf`'s table and a product of two automata by the
+  entries each holds -- and a length bound is refused before it is built
   where no table of that many states could count to it, so
   `Annotated[str, MinLen(1_000_000)]` against another bound answers at once
   instead of unrolling a million copies of a code point.

@@ -265,6 +265,7 @@ ADMITTED_CYCLES: dict[frozenset[str], str] = {
             "descr/integers.rs",
             "descr/maps.rs",
             "descr/polar.rs",
+            "descr/regular.rs",
             "descr/symbolic.rs",
             "descr/values.rs",
         )
@@ -272,8 +273,8 @@ ADMITTED_CYCLES: dict[frozenset[str], str] = {
         "the constructors in ir.rs fold the complement law through oracle.rs, "
         "which reads the Schema it is asked about and the Constants a lowering "
         "is given; a lowering reads the term and builds the map atoms, whose "
-        "values, polarity union, sequence automaton and step tables spend the "
-        "Budget, which reads the WORK allowance descr/lower.rs defines"
+        "values, polarity union, sequence automaton, step tables and word products "
+        "spend the Budget, which reads the WORK allowance descr/lower.rs defines"
     ),
     frozenset(PY + name for name in ("build.rs", "validator.rs", "render.rs")): (
         "a compiled validator is itself a schema description, so the frontend "

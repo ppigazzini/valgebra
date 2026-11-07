@@ -1114,6 +1114,11 @@ as a list against a length-bounded list of the same element.
   JSON Schema containment suite read 37% fewer instructions on a release build,
   `--decision-sets` 29.82% fewer and `--decision-lengths` 66.37%, and what a
   relation keeps of its allowance decides a few a dearer reading declines.
+- **A product of two automata is charged by its table.** One unit of a build's allowance
+  bought a product of any size, thousands of entries for a Unicode class, so a pattern
+  over `\w` beneath four lists read 3.7 s before a bound declined the whole. Charged by
+  its entries, the reading of the whole refuses early, the last asking reads the leaves,
+  and the pair answers in 0.5 s, with no answer lost over the word families.
 - **A table of constants beside its kind is the table.** A translation from JSON Schema
   writes an `enum` of strings as `str` met with the literals, and the relation between
   two read as a product of the automata of their words: 60 words against 400 took
