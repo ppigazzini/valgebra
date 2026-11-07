@@ -406,3 +406,23 @@ def test_every_undriven_promise_carries_its_reason() -> None:
         assert heading not in _driven(), (
             f"{heading} is both marked and excused; drop the excuse"
         )
+
+
+def test_a_value_is_bounded_at_eighty_characters_whatever_prints_it() -> None:
+    """A subclass of a container is read by `reprlib`, which elides the middle."""
+
+    class Long(list[int]):
+        pass
+
+    def summary(value: object) -> str:
+        with pytest.raises(ValidationError) as raised:
+            Validator(None).validate(value)
+        return str(raised.value.errors[0]["value"])
+
+    plain = summary(list(range(100)))
+    assert plain.endswith("...")
+    assert len(plain) == 83
+    held = summary(Long(range(100)))
+    assert len(held) <= 80
+    assert "..." in held
+    assert held.endswith("99]")

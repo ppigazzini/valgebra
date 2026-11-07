@@ -111,7 +111,9 @@ document of a million wrong elements reaches three quarters of a gigabyte.
 Bounding the cost is the caller's, and there are two ways to do it — pass
 `fail_fast=True`, or validate the value in pieces. Each individual `value` *is*
 bounded, at eighty characters of its repr followed by `...` (`SUMMARY_CHARS`
-in `crates/valgebra-py/src/errors.rs`).
+in `crates/valgebra-py/src/errors.rs`). A subclass of `list`, `tuple`, `dict`,
+`set` or `frozenset` is printed by `reprlib`, which elides the middle, so it reads
+as its head and its tail in those eighty characters, with no `...` after them.
 
 Pass `fail_fast=True` to stop at the first failure instead:
 
