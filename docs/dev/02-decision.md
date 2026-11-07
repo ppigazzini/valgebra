@@ -1214,6 +1214,20 @@ question of any asking: two sequences meet in nothing where a position each of t
 has does, 1,568 answers over the drawn families, for a meet the widened reading stops one
 unfolding short of.
 
+**A length on the map atom, not built.** `dict` under length bounds declines 796 of 5,000
+drawn Boolean terms of two levels, from 922 before the rules read its lengths, so a length
+component would decide some of those. A map type holds no such thing [Cas23, §4.4]; each
+map atom would hold one, every operation over atoms would meet it, and the frozen mapping
+refused in [01-schema-ir.md](01-schema-ir.md) read +2% to +7% for a part of the same cost.
+No caller has reported the shape past a fuzz harness, and it is not prototyped.
+
+**A complement of a reference unfolded through its definition, refused.** `~t` under `t =
+¬(t,)` is `(t,)`, which `Schema::complement` folds, and asked that way
+`complement(T1).relation_to(tuple[T1])` proves. It moves that one row and no answer over the
+drawn families, though 1,499 declines of an earlier campaign hold such a definition: they
+decline for what the rest of those pairs ask, and the second unfolding a refutation needs
+stays the limit [15-decidability.md](../15-decidability.md) states.
+
 **A mapping keyed by a class or a shape reads no single entry, refused.**
 `dict[K, str]` below `{}` holds `{K(): ""}`, which the supertype refuses, and declines. Its
 one witness is a key that hashes, and what says so of a class is a new question on
