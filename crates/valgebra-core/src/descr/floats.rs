@@ -367,6 +367,25 @@ fn fitted(part: Part, spans: Vec<Span>) -> Vec<Span> {
     merged
 }
 
+/// [`fitted`], for what an operation made of two lists `part` holds fitted: a
+/// result that is one of them is fitted as it stands, and fitting it again finds
+/// what it holds.
+///
+/// A class of a step's table is mostly nothing or every float of its residue, and
+/// an operation on two such lists hands one of them back, so a reading of a table
+/// spends a search per end of every class on what it is already holding.
+fn refitted(part: Part, spans: Vec<Span>, mine: &[Span], theirs: &[Span]) -> Vec<Span> {
+    if spans == mine || spans == theirs {
+        debug_assert_eq!(
+            fitted(part, spans.clone()),
+            spans,
+            "a list {part:?} holds is fitted"
+        );
+        return spans;
+    }
+    fitted(part, spans)
+}
+
 /// The floats between two spans and past the outer two, in order: what a sorted
 /// list of spans leaves of the line.
 fn gaps(spans: &[Span]) -> Vec<Span> {
@@ -695,12 +714,22 @@ impl FloatSet {
             .zip(their_classes.iter())
             .zip(0..)
             .map(|((mine, theirs), residue)| {
-                fitted(Part::Residue { modulus, residue }, op(mine, theirs))
+                refitted(
+                    Part::Residue { modulus, residue },
+                    op(mine, theirs),
+                    mine,
+                    theirs,
+                )
             })
             .collect();
         let stepped = Stepped { modulus, classes };
         budget::spend_on_a_table(stepped.entries()).then(|| FloatSet {
-            spans: fitted(Part::Stepless, op(&my_spans, &their_spans)),
+            spans: refitted(
+                Part::Stepless,
+                op(&my_spans, &their_spans),
+                &my_spans,
+                &their_spans,
+            ),
             nan,
             stepped: Some(Arc::new(stepped)),
         })
