@@ -1392,7 +1392,7 @@ pub(super) struct OpenMeet;
 
 impl OpenMeet {
     /// Whether the query `budget` belongs to holds a meet open.
-    fn any_open(budget: &Budget) -> bool {
+    pub(super) fn any_open(budget: &Budget) -> bool {
         let query = std::ptr::from_ref(budget) as usize;
         OPEN_MEETS.with_borrow(|open| open.iter().any(|(owner, _)| *owner == query))
     }

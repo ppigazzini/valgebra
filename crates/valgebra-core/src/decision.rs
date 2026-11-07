@@ -280,30 +280,38 @@ pub(super) fn descending<T>(budget: &Budget, refused: T, descent: impl FnOnce() 
     answer
 }
 
-/// A meet holding a table of constants, read as the table where the other
-/// members hold each constant: `A ∩ B` is `A` where `A ⊆ B`, so the table's own
-/// answer is the meet's, a refutation with it. A translation from JSON Schema
-/// writes an `enum` of strings as `str` met with the table, and the two tables'
-/// own relation is a comparison where the meets' is a product of their words'
-/// automata. `Unknown` where no member is a table, which is one test a member.
+/// The member of a meet below all the others, which is the meet: `A ∩ B` is `A`
+/// where `A ⊆ B`.
+///
+/// A table of constants is asked in every asking: a translation from JSON Schema
+/// writes an `enum` of strings as `str` met with a table of them, whose own relation
+/// is a comparison where the meet's is a product of their words' automata. Any other
+/// member is asked where a pair everything else declined reads its leaves
+/// ([`Schema::decided_by_its_leaves`]), since each is a goal per other member, and
+/// asked of every meet they starved the readings after them of steps: an enumeration
+/// met with a union holding it is the enumeration, which reads its members.
+///
+/// A proof under a hypothesis is no fact to refute from: a goal on the trail is
+/// assumed to hold, and a reading of the meet as `A` stands on `A ⊆ B` when it names
+/// a value of `A`. So none is read with a hypothesis open, as a verdict is held
+/// only where it rests on nothing.
 #[inline(never)]
-fn a_table_read_as_the_meet(members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+fn the_member_that_is_the_meet<'m>(members: &'m [Schema], cx: &mut Cx<'_>) -> Option<&'m Schema> {
+    if !(cx.trail.is_empty() && cx.visiting.is_empty()) || emptiness::OpenMeet::any_open(cx.budget)
+    {
+        return None;
+    }
     let is_a_table = |member: &Schema| match member {
         Schema::Literal(_) => true,
         Schema::Union(inner) => inner.iter().all(|m| matches!(m, Schema::Literal(_))),
         _ => false,
     };
-    let Some(table) = members.iter().find(|member| is_a_table(member)) else {
-        return Relation::Unknown;
-    };
-    if members
-        .iter()
-        .all(|member| core::ptr::eq(member, table) || table.is_subtype_rec(member, cx).holds())
-    {
-        table.is_subtype_rec(other, cx)
-    } else {
-        Relation::Unknown
-    }
+    members.iter().find(|&candidate| {
+        (cx.reads_leaves || is_a_table(candidate))
+            && members.iter().all(|member| {
+                core::ptr::eq(member, candidate) || candidate.is_subtype_rec(member, cx).holds()
+            })
+    })
 }
 
 /// Whether `sub ⊆ sup` holds by membership alone: the subject is a branch of a
@@ -1551,9 +1559,26 @@ impl Schema {
             {
                 return answer;
             }
-            return Relation::of_mismatch(self.verdict_rec(cx));
+            let verdict = self.verdict_rec(cx);
+            if verdict == Verdict::Unknown && cx.reads_leaves {
+                return self.a_meet_read_by_its_member(cx);
+            }
+            return Relation::of_mismatch(verdict);
         }
         answer
+    }
+
+    /// A meet read as one of its members holds what that member holds, where the
+    /// meet's own reading leaves it open: a class is no value of `str | C` by the
+    /// meet's verdict, and is a value of `C`.
+    #[inline(never)]
+    fn a_meet_read_by_its_member(&self, cx: &mut Cx<'_>) -> Relation {
+        if let Schema::Intersection(members) = self
+            && let Some(member) = the_member_that_is_the_meet(members, cx)
+        {
+            return Relation::of_mismatch(member.verdict_rec(cx));
+        }
+        Relation::Unknown
     }
 
     /// Whether this schema is a complement holding every value of a kind,
@@ -2173,7 +2198,9 @@ impl Schema {
                 return merged;
             }
         }
-        a_table_read_as_the_meet(members, other, cx).or_else(|| placed)
+        the_member_that_is_the_meet(members, cx)
+            .map_or(Relation::Unknown, |member| member.is_subtype_rec(other, cx))
+            .or_else(|| placed)
     }
 
     /// The structural subtyping decision: the lattice, recursion, and

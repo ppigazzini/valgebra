@@ -21,10 +21,16 @@ answer of its own, or a repair to a change not yet released.
 - feat: a goal the rules decline is read by the sets, past what stopped the pair
 - feat: a supertype proved empty is the bottom
 - feat: a table of constants beside what holds them is the table
+- feat: a meet is read as a member below all the others
 
 -->
 
 ### Added
+
+- **A meet is read as a member below all the others.** Where the pair declined everything else,
+  `A & B` answers as `A` wherever `A` is proved below `B`. `Color & (str | Color)` is `not_subset`
+  of a protocol its members do not carry, a true refutation lost in 0.0.23, and a list of an
+  enumeration met with the class's complement reads as the list.
 
 - **A table of constants beside what holds them is the table.** `intersection(str,
   Literal["a", "b"])` answers as `Literal["a", "b"]` does, the spelling a translation of an

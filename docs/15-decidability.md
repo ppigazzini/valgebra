@@ -155,7 +155,9 @@ answers `"undecided"`.
   `Literal[Color.RED, Color.GREEN]` are one set, decided in both directions,
   and a refutation reads the members as a proof does. A meet holding the class
   is empty where the members beside it refuse every member, as `Color` met
-  with a protocol requiring an attribute no member carries is. The class is
+  with a protocol requiring an attribute no member carries is, and is the class
+  where the members beside it hold every member, so `Color & (str | Color)` answers
+  as `Color`. The class is
   still what `repr` prints and what a failure names. The four
   exclusions are each a value that would stand against the union:
 

@@ -13718,7 +13718,9 @@ mod a_table_in_a_meet {
     fn read(meet: &[Schema], other: &Schema) -> Relation {
         let budget = Budget::new(DECISION_BUDGET);
         let mut cx = Cx::new(&Words, &[], &budget);
-        a_table_read_as_the_meet(meet, other, &mut cx)
+        the_member_that_is_the_meet(meet, &mut cx).map_or(Relation::Unknown, |member| {
+            member.is_subtype_rec(other, &mut cx)
+        })
     }
 
     #[test]
@@ -13745,5 +13747,81 @@ mod a_table_in_a_meet {
         );
         let mixed = Schema::union([lit(0), Schema::Str]);
         assert_eq!(read(&[Schema::Int, mixed], &lit(0)), Relation::Unknown);
+    }
+}
+
+/// A meet is read as a member below all the others where nothing is assumed.
+mod a_member_of_a_meet {
+    use super::*;
+
+    fn lists() -> (Schema, Schema) {
+        let either = Schema::union([Schema::Int, Schema::Str]);
+        (
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::list(SeqShape::homogeneous(either)),
+        )
+    }
+
+    #[test]
+    fn a_member_past_a_table_is_read_only_where_the_query_reads_its_leaves() {
+        let (narrow, wide) = lists();
+        let members = [wide, narrow.clone()];
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        assert_eq!(the_member_that_is_the_meet(&members, &mut cx), None);
+        cx.reads_leaves = true;
+        assert_eq!(
+            the_member_that_is_the_meet(&members, &mut cx),
+            Some(&narrow)
+        );
+    }
+
+    #[test]
+    fn no_member_is_below_the_others_where_they_are_apart() {
+        let lists_of = |item| Schema::list(SeqShape::homogeneous(item));
+        let members = [lists_of(Schema::Int), lists_of(Schema::Str)];
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        cx.reads_leaves = true;
+        assert_eq!(the_member_that_is_the_meet(&members, &mut cx), None);
+    }
+
+    /// A proof resting on a hypothesis would name a value of the member as a value
+    /// of the meet: three open states each decline, with the reading right beside.
+    #[test]
+    fn no_member_is_read_with_a_hypothesis_open() {
+        let (narrow, wide) = lists();
+        let members = [wide, narrow.clone()];
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        cx.reads_leaves = true;
+        cx.trail.push((Schema::Int, Schema::Str));
+        assert_eq!(the_member_that_is_the_meet(&members, &mut cx), None);
+        cx.trail.clear();
+        cx.visiting.push(DefIx::new(0));
+        assert_eq!(the_member_that_is_the_meet(&members, &mut cx), None);
+        cx.visiting.clear();
+        assert_eq!(
+            the_member_that_is_the_meet(&members, &mut cx),
+            Some(&narrow)
+        );
+    }
+
+    /// The witness guard reads the member: a meet proved to be a member holding no
+    /// value holds none, whatever shape refuted it.
+    #[test]
+    fn a_meet_read_by_its_member_holds_what_the_member_holds() {
+        let none = Schema::list(SeqShape::fixed([Schema::Nothing]));
+        let wide = Schema::list(SeqShape::homogeneous(Schema::ANYTHING));
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        cx.reads_leaves = true;
+        let meet = Schema::Intersection(vec![wide, none].into());
+        assert_ne!(meet.a_meet_read_by_its_member(&mut cx), Relation::Fails);
+        assert_eq!(
+            Schema::Int.a_meet_read_by_its_member(&mut cx),
+            Relation::Unknown,
+            "and only a meet is read"
+        );
     }
 }

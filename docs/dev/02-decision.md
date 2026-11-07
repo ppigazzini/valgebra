@@ -1121,11 +1121,16 @@ under a second, with the 2,046 elements the state bound allows.
 `test_a_step_table_beneath_a_length_bound_keeps_to_the_memory_it_may_have` the
 answer under a limit of a gibibyte.
 
-**A table of constants beside what holds them is the table.** `A ∩ B` is `A` where
-`A ⊆ B`, so a meet holding a literal or a union of them, whose other members hold
-each constant, answers as the table does (`a_table_read_as_the_meet`), a refutation
-with it. It is asked at the end of the meet arm, past every placement, since a
-member below the supertype needs no reading.
+**A meet is read as a member below all the others.** `A ∩ B` is `A` where `A ⊆ B`, so
+that member's answer is the meet's (`the_member_that_is_the_meet`), a refutation with
+it, and what that member holds is what the witness guard reads. A table of constants
+is asked at the end of the meet arm in every asking; any other member only where a
+pair everything else declined reads its leaves, since each is a goal per other member
+and asked of every meet they starved later readings of steps. So `Color & (str |
+Color)` answers as `Color`. **A proof under a hypothesis is no fact to refute from**: a
+goal on the trail is assumed, and a member read as the meet stands on `A ⊆ B` when it
+names a value of `A`, so none is read with a hypothesis open, as a verdict is held only
+where it rests on nothing.
 
 **A supertype proved empty is read before the sets read the difference.** The second
 reading of a difference over a recursive attribute record reads 2^k unfoldings under a

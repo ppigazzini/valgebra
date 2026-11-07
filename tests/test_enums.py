@@ -300,3 +300,23 @@ def test_an_instance_made_past_the_class_is_one_of_its_members() -> None:
     assert Validator(_Color).is_valid(ghost), "the walk asks `isinstance`"
     assert not members.is_valid(ghost), "no member is the ghost"
     assert Validator(_Color).relation_to(members) != "subset"
+
+
+def test_a_meet_read_as_the_enumeration_refutes_on_a_member() -> None:
+    """A meet whose member is below the others is that member."""
+
+    class Carrying(Protocol):
+        y: int
+
+    class Paint(enum.Enum):
+        RED = 1
+        GREEN = 2
+
+    for meet, supertype in (
+        (intersection(Paint, union(str, Paint)), Carrying),
+        (intersection(Paint, complement(Carrying)), list),
+        (intersection(list[Paint], complement(Paint)), list[Carrying]),
+    ):
+        assert meet.relation_to(supertype) == "not_subset", meet
+    assert intersection(Paint, union(str, Paint)).is_valid(Paint.RED)
+    assert not Validator(Carrying).is_valid(Paint.RED)
