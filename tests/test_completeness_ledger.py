@@ -106,6 +106,14 @@ class _Color(enum.Enum):
     GREEN = 2
 
 
+class _CarriesRed(Protocol):
+    hue: Literal[_Color.RED]
+
+
+class _CarriesGreen(Protocol):
+    hue: Literal[_Color.GREEN]
+
+
 # The JSON value, which is the recursive schema a reader writes: every scalar,
 # and lists and dicts of itself. Its body names six kinds and no other, which is
 # what makes a meet with a seventh decidable once the body is unfolded.
@@ -1812,6 +1820,79 @@ def _missed(why: str) -> pytest.MarkDecorator:
 
 
 _LEDGERED: list[object] = [
+    # A meet of refinements of one base is read as the one they are, and a union's
+    # refined branch with what narrows the union.
+    pytest.param(
+        "refutes",
+        intersection(
+            Annotated[dict, at.MaxLen(2)], Annotated[dict, at.MinLen(2), at.MaxLen(3)]
+        ),
+        nothing,
+        id="refinements:two-over-one-mapping-hold-a-value",
+    ),
+    pytest.param(
+        "refutes",
+        intersection(Annotated[int, at.Le(5)], Annotated[int, at.Ge(5)]),
+        Annotated[dict, at.MinLen(3), at.MaxLen(5)],
+        id="refinements:two-bounds-hold-five",
+    ),
+    pytest.param(
+        "refutes",
+        Annotated[
+            list[
+                Annotated[
+                    union(  # ty: ignore[invalid-type-form]
+                        Annotated[list[int], at.Len(1, 1)],
+                        Annotated[list[int], at.MinLen(2)],
+                    ),
+                    at.Len(3, 3),
+                ]
+            ],
+            at.Len(1, 1),
+        ],
+        nothing,
+        id="refinements:a-refined-branch-reads-what-narrows-the-union",
+    ),
+    # A sequence's length bound names the positions its values hold.
+    pytest.param(
+        "subtype",
+        Annotated[list[int], at.MinLen(1)],
+        complement(recursive(lambda t: list[t])),  # ty: ignore[invalid-type-form]
+        id="sequence:a-bound-names-a-position-below-a-fixpoint",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[list[int], at.MinLen(1)],
+        complement(list[str]),
+        id="sequence:a-bound-names-a-position-below-a-list",
+    ),
+    # A set's own lengths refuse a length its subject holds.
+    pytest.param(
+        "refutes",
+        set[Literal[1, 2]],
+        union(set[Literal[1]], set[Literal[2]]),
+        id="set:a-length-no-branch-holds",
+    ),
+    # Two attribute records, and the complement of a table.
+    pytest.param(
+        "subtype",
+        _CarriesRed,
+        complement(_CarriesGreen),
+        id="attributes:a-shared-one-holds-no-value",
+    ),
+    pytest.param(
+        "refutes",
+        complement(Literal[_Color.RED]),
+        str,
+        id="table:its-complement-holds-a-plain-value-of-another-kind",
+    ),
+    # A field's name as a word of a clause narrowed by a language.
+    pytest.param(
+        "subtype",
+        {"a": int},
+        recursive(lambda t: union(int, {Annotated[str, at.MaxLen(1)]: t})),
+        id="name:a-word-of-a-narrowed-clause-below-a-recursion",
+    ),
     # One unfolding reads the supertype's reference as everything, so a list of
     # anything is inside it there, and the value that parts the pair is one
     # level down, which a list of one item names.
