@@ -506,7 +506,9 @@ answers `"undecided"`.
   MinLen(0)]` below `Annotated[set, MinLen(1)]`, on `set()`, and
   `Annotated[dict, MaxLen(0)]` below `{"a": int}`, on `{}`. A mapping's own lengths
   leave one out as a written bound does: `Annotated[dict, MaxLen(2)]` is `not_subset`
-  of `{}`, on `{"a": 1}`. A union is refused a length its
+  of `{}`, on `{"a": 1}`, and a set's are the values its element holds:
+  `set[Literal[1, 2]]` is `not_subset` of `set[Literal[1]] | set[Literal[2]]`, on
+  `{1, 2}`. A union is refused a length its
   branches each leave out the same way, a branch of another kind leaving out
   every length, so `Annotated[list[int], MinLen(1)]` is `not_subset` of
   `Annotated[list[int], MaxLen(1)] | Annotated[list[int], MaxLen(3000)]`, on

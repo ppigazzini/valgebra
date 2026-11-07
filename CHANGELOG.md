@@ -38,6 +38,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a dict's entries are read from its storage on PyPy
 - feat: a meet of refinements of one base is read as the one they are
 - feat: a sequence's length bound names the positions its values hold
+- feat: a set's own lengths refuse a length its subject holds
 
 -->
 
@@ -80,6 +81,10 @@ answer of its own, or a repair to a change not yet released.
 - **A mapping's own lengths refuse a length its subject holds.** `Annotated[dict, MaxLen(2)]`,
   `Annotated[dict, MinLen(1)]` and `Annotated[dict[str, int], MinLen(1)]` are `not_subset` of `{}`,
   on a dict of one key, where they stayed `undecided`.
+
+- **A set's own lengths refuse a length its subject holds.** `set[Literal[1, 2]]` is `not_subset` of
+  `set[Literal[1]] | set[Literal[2]]`, on `{1, 2}`, where it stayed `undecided`, in a millisecond at
+  256 members against seventeen.
 
 - **A set of one member and a mapping of its required fields hold a value.**
   `Annotated[set[tuple[int]], MinLen(1)]`, `Annotated[{"a": int}, Len(1, 1)]` and
