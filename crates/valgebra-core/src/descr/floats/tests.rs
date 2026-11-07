@@ -1,6 +1,6 @@
 use super::{
-    FloatSet, MAX_PERIOD, Part, STRETCHES, ceiling, fitted, gcd, inverse, normalize,
-    stepless_at_or_above, whole_at_or_above,
+    FloatSet, MAX_PERIOD, Part, STRETCHES, Span, ceiling, fitted, gcd, inverse, is_either,
+    normalize, stepless_at_or_above, whole_at_or_above,
 };
 use crate::descr::lattice_tests::Algebra;
 use proptest::prelude::*;
@@ -812,4 +812,19 @@ fn an_operation_over_a_table_charges_what_the_table_holds() {
         })
         .is_none()
     );
+}
+
+/// A result is taken as fitted where it is either list it was made from, and no
+/// other: the reading a fit is spared on, whose cost no answer shows.
+#[test]
+fn a_result_is_either_list_it_was_made_from() {
+    let span = |lo: f64, hi: f64| Span::new(lo, true, hi, true);
+    let (mine, theirs, other) = (
+        vec![span(0.0, 1.0)],
+        vec![span(2.0, 3.0)],
+        vec![span(4.0, 5.0)],
+    );
+    assert!(is_either(&mine, &mine, &theirs));
+    assert!(is_either(&theirs, &mine, &theirs));
+    assert!(!is_either(&other, &mine, &theirs));
 }

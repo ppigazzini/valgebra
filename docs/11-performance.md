@@ -1185,6 +1185,12 @@ as a list against a length-bounded list of the same element.
   for a minute, kept gigabytes, and ended a process short of memory. A descriptor
   holds its integers' and floats' tables by handle, since no operation edits one:
   `--decision-matrix` reads 0.80% fewer instructions and `--decision-sets` 1.11%.
+- **A class an operation hands back is fitted as it stands.** An operation over a
+  step's table reads each residue's spans and fits the result to that residue, a
+  search per end for a float of the class. A class is mostly nothing or every float
+  of its residue, so the result is mostly one of the two lists it was made from, each
+  fitted already (`refitted` in `descr/floats.rs`): `--decision-steps` reads 10.8%
+  fewer instructions.
 - **A language is empty where no state accepts.** Every table a set holds is minimal
   or the complement of one, so a word reaches every state, and whether the language
   holds a word is a scan of the accepting flags (`RegularSet::is_empty` in
