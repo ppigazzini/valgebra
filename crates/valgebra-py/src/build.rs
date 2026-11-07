@@ -1614,6 +1614,9 @@ enum Constant {
     NoneType,
     Bool(bool),
     Int(i64),
+    /// An `int` past the key above, by its hexadecimal digits, which take no time
+    /// a value's size does not and read no limit on a conversion's digits.
+    WideInt(Arc<str>),
     /// A float by its bits, with the one value whose bits are not its identity
     /// folded: `0.0 == -0.0`, so the two are one constant. A `nan` never reaches
     /// here -- it equals nothing, itself included, so it is keyed by address.
@@ -1639,9 +1642,23 @@ fn constant_of(obj: &Bound<'_, PyAny>) -> Constant {
         return obj.extract::<bool>().map_or(address, Constant::Bool);
     }
     if is(PyInt::type_object(py)) {
-        // An `int` wider than the key falls back to its address, which pools it
-        // once per object rather than once per value -- correct, just coarser.
-        return obj.extract::<i64>().map_or(address, Constant::Int);
+        return obj.extract::<i64>().map_or_else(
+            |_| {
+                obj.call_method1(intern!(py, "__format__"), (intern!(py, "x"),))
+                    .ok()
+                    .and_then(|digits| {
+                        digits
+                            .cast_exact::<PyString>()
+                            .ok()
+                            .and_then(|text| text.to_str().ok().map(Arc::from))
+                    })
+                    .map_or_else(
+                        || Constant::Address(obj.as_ptr() as usize),
+                        Constant::WideInt,
+                    )
+            },
+            Constant::Int,
+        );
     }
     if is(PyFloat::type_object(py)) {
         return match obj.extract::<f64>() {

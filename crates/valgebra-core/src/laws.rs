@@ -1362,6 +1362,22 @@ fn a_refinement_is_built_with_its_constraints_ordered_and_once() {
         ),
         canonical
     );
+    // A refinement of a refinement is one, read as the conjunction of the two.
+    assert_eq!(
+        Schema::refine(
+            Schema::refine(Schema::Int, vec![at_most.clone()]),
+            vec![at_least.clone()]
+        ),
+        canonical
+    );
+    assert_eq!(
+        Schema::refine(
+            Schema::refine(Schema::Int, vec![at_least.clone()]),
+            vec![at_least.clone()]
+        ),
+        Schema::refine(Schema::Int, vec![at_least.clone()]),
+        "a bound both write is one bound"
+    );
     // With no constraint there is nothing to narrow, and the base comes back.
     assert_eq!(Schema::refine(Schema::Int, Vec::new()), Schema::Int);
 }
@@ -2581,6 +2597,24 @@ proptest! {
     /// schema construction cannot read as a set, a class among its atoms,
     /// declines, which is the one exception the page states, so the draw
     /// holds no class.
+    /// A refinement of a refinement holds what the one refinement of their
+    /// constraints holds [JV20, §3.2], however the two are written apart.
+    #[test]
+    fn refining_a_refinement_is_refining_once(
+        base in set_schema(),
+        split in 0usize..=3,
+    ) {
+        let base = built(&base);
+        let all = vec![
+            Constraint::MinLen(1),
+            Constraint::MaxLen(9),
+            Constraint::Regex("a".to_owned()),
+        ];
+        let (first, second) = all.split_at(split.min(all.len()));
+        let apart = Schema::refine(Schema::refine(base.clone(), first.to_vec()), second.to_vec());
+        prop_assert_eq!(apart, Schema::refine(base.clone(), all.clone()));
+    }
+
     #[test]
     fn construction_folds_a_set_and_its_complement(a in set_schema()) {
         let a = built(&a);

@@ -33,6 +33,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a float refinement and a float step over the integers hold a value
 - feat: a class holds no boolean but through the order of bool
 - feat: a mapping's clauses are read beside a table and over a language of keys
+- fix: a refinement of a refinement and equal constants past 64 bits are one
 
 -->
 
@@ -145,6 +146,12 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A refinement of a refinement and equal constants past 64 bits are one.** `typing` flattens
+  `Annotated[Annotated[X, a], b]`, and a `Validator` between the two kept two nodes, so one set
+  relates apart under two spellings and `repr` printed what did not read back. The two are one
+  node, and two `Literal[2**63]` from two objects one constant, so `union(lit(x), complement(lit(y)))`
+  folds to `anything` as it does for `5`.
 
 - **A pattern over a Unicode class beneath lists reads in under a second.** A product of two
   automata counted as one step whatever it holds, so a `\w*` beneath four lists read 3.7 s before

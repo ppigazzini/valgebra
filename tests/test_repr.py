@@ -853,3 +853,27 @@ def test_a_union_renders_its_literals_after_the_sets_they_sit_beside() -> None:
     assert repr(Validator(union(2, 1, list[int]))) == repr(
         Validator(union(1, 2, list[int]))
     )
+
+
+def test_a_refinement_of_a_refined_validator_prints_as_one_and_reads_back() -> None:
+    """`typing` flattens `Annotated`, and a `Validator` between the two reads alike."""
+    inner: Any = Validator(Annotated[list[int], at.MinLen(1)])
+    twice = Validator(Annotated[inner, at.MaxLen(2)])
+    once = Validator(Annotated[list[int], at.MinLen(1), at.MaxLen(2)])
+    assert twice == once
+    assert hash(twice) == hash(once)
+    assert repr(twice) == repr(once)
+    assert twice.is_equivalent(once)
+    for value in ([], [0], [0, 0], [0, 0, 0]):
+        assert twice.is_valid(value) == once.is_valid(value), value
+
+
+def test_equal_constants_past_64_bits_are_one_constant() -> None:
+    """A literal is its value within its type, however wide."""
+    alias: Any = getattr(typing, "_LiteralGenericAlias")  # noqa: B009 - past the cache
+    # Two objects on CPython, and one on PyPy, where `is` reads an `int` by its value.
+    first, second = int("9223372036854775808"), int("9223372036854775808")
+    one, two = alias(Literal, (first,)), alias(Literal, (second,))
+    assert Validator(one) == Validator(two)
+    assert union(one, two) == Validator(one)
+    assert repr(union(one, complement(two))) == "anything"

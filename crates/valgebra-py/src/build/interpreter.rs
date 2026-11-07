@@ -1801,6 +1801,15 @@ fn a_constant_pools_by_value_only_where_equality_is_pythons() {
         let first = pool.intern_const(&eval("1000000"));
         let again = pool.intern_const(&eval("10 ** 6"));
         assert_eq!(first, again, "two spellings of one int");
+        // As are two of an `int` past the key's 64 bits.
+        let wide = pool.intern_const(&eval("2 ** 63"));
+        let wide_again = pool.intern_const(&eval("9223372036854775808"));
+        assert_eq!(wide, wide_again, "two spellings of a wide int");
+        assert_ne!(
+            wide,
+            pool.intern_const(&eval("2 ** 63 + 1")),
+            "and not of another"
+        );
         // The signed zeros are one constant, because they are one value.
         let zero = pool.intern_const(&eval("0.0"));
         let minus = pool.intern_const(&eval("-0.0"));
