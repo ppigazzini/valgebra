@@ -314,7 +314,10 @@ pub(crate) fn literal_matches(
     if is_the_constant(value, literal) {
         return Ok(true);
     }
-    Ok(value.get_type().is(literal.get_type()) && value.eq(literal)?)
+    // The two types' addresses, read where each value lies: asked through
+    // `get_type`, each is a handle made and dropped, a reference count written
+    // twice on a type every thread sharing the validator reads.
+    Ok(std::ptr::eq(value.get_type_ptr(), literal.get_type_ptr()) && value.eq(literal)?)
 }
 
 /// Whether `value` is the pooled `literal` object itself, of a builtin type
