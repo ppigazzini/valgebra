@@ -225,16 +225,16 @@ not have. They carry the `interpreter` marker as well, and every leg reads
 them. `test_suite_partition.py` holds that a repository check reading
 `sys.version_info`, `sys.implementation` or `sys.stdlib_module_names` carries
 it, and a plant whose every tripped check carries it runs where they do.
-`scripts/gate.py` builds the floor beside the caller's interpreter before a
-push and runs the product suite and the marked checks on it, which is what a
-leg other than the floor reads.
+`scripts/gate.py` builds the floor beside the caller's interpreter and runs the
+product suite and the marked checks on it, which is what a leg other than the
+floor reads.
 
 **And two directions no runner can read at all.** The theory ledger holds the
 tracked page to the maintainer's working notes, and the citation ledger holds a
 numbered result to the paper on the shelf; neither the notes nor the shelf is
 in the distribution, so both directions stand down in every clone but the
 author's. A check that stands down everywhere it runs is a check nobody runs,
-so `scripts/gate.py` runs those two in the working tree before a push, where
+so those two run in the working tree before a push, as `AGENTS.md` lists, where
 what they read is present. What that buys is bounded and worth saying plainly:
 the page and the notes are held together on one machine, and a green matrix
 says nothing about them.
