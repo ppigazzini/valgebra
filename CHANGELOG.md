@@ -19,10 +19,16 @@ answer of its own, or a repair to a change not yet released.
 - fix: a named tuple holds the positions its class stores
 - feat: a sequence or a mapping of one item outside every branch refutes
 - feat: a goal the rules decline is read by the sets, past what stopped the pair
+- feat: a supertype proved empty is the bottom
 
 -->
 
 ### Added
+
+- **A supertype proved empty is the bottom.** A schema `is_empty` proves holds no value, so
+  what is below it is what is below `nothing`: `str` is `not_subset` of a protocol whose `y` is
+  itself, where it stayed `undecided`. A relation of `int` against a recursive attribute record
+  with no value read for up to 9.7 s on 0.0.23 and answers at once.
 
 - **A leaf is decided beside what stops the pair.** A pattern below a pattern, a `bool` below
   a bound over `int`, and every other pair only the sets read, stayed `undecided` beside a

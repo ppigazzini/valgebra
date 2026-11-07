@@ -1114,6 +1114,10 @@ as a list against a length-bounded list of the same element.
   JSON Schema containment suite read 37% fewer instructions on a release build,
   `--decision-sets` 29.82% fewer and `--decision-lengths` 66.37%, and what a
   relation keeps of its allowance decides a few a dearer reading declines.
+- **A supertype proved empty needs no difference.** `int` below a recursive attribute
+  record with no value read for up to a second, on the second reading's unfoldings, for
+  a question `is_empty` answers at once. The relation reads the supertype's emptiness
+  first, where its shape can hold none and it holds a reference.
 - **A leaf is read by the sets last, and alone.** A goal the rules decline, with no
   reference on either side, is the sets' to answer where the pair's own reading
   stopped at a reference beside it. Asked of every such goal, it cost the relation

@@ -1121,6 +1121,13 @@ under a second, with the 2,046 elements the state bound allows.
 `test_a_step_table_beneath_a_length_bound_keeps_to_the_memory_it_may_have` the
 answer under a limit of a gibibyte.
 
+**A supertype proved empty is read before the sets read the difference.** The second
+reading of a difference over a recursive attribute record reads 2^k unfoldings under a
+cut that reaches every kind, and the shapes that reached seconds hold no value, which
+`is_empty` says at once (`below_a_supertype_with_no_value`). Asked of a reference, an
+attribute record or a keyed map holding no value by its shape and holding a reference:
+the rest are read by the sets, with nothing cut.
+
 **A goal the rules decline is read by the sets once, and last.** The set reading of
 a pair stops for the whole pair: at a cut, at what it cannot lower, past the depth.
 So `bool` below `Annotated[int, Lt(8)]` decides alone and declined beside a recursion,

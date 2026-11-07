@@ -13598,3 +13598,94 @@ mod leaves {
         assert!(difference.is_empty_with(&Pure, &defs));
     }
 }
+
+/// A supertype proved empty is the bottom, read before the sets read the difference.
+mod a_supertype_with_no_value {
+    use super::*;
+
+    /// `μt. attr{y: t}`, which no finite value is in.
+    fn definition() -> [Schema; 1] {
+        [Schema::AttrRecord {
+            fields: Arc::from([Attribute {
+                name: Arc::from("y"),
+                schema: Schema::Ref(DefIx::new(0)),
+            }]),
+        }]
+    }
+
+    #[test]
+    fn the_pair_is_the_subjects_own_emptiness() {
+        let defs = definition();
+        let none = Schema::Ref(DefIx::new(0));
+        assert_eq!(
+            Schema::Str.subtype_relation_under(&none, &Pure, &defs),
+            Relation::Fails
+        );
+        assert_eq!(
+            Schema::Nothing.subtype_relation_under(&none, &Pure, &defs),
+            Relation::Holds
+        );
+        let carrying = Schema::AttrRecord {
+            fields: Arc::from([Attribute {
+                name: Arc::from("x"),
+                schema: none,
+            }]),
+        };
+        assert_eq!(
+            Schema::Int.subtype_relation_under(&carrying, &Pure, &defs),
+            Relation::Fails,
+            "a record of a field with no value holds none"
+        );
+    }
+
+    #[test]
+    fn a_supertype_holding_a_value_or_cut_nowhere_is_not_read() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let defs = [Schema::union([
+            Schema::NoneType,
+            Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+        ])];
+        let mut cx = Cx::new(&Pure, &defs, &budget);
+        // Inhabited at `None`.
+        let holds = Schema::Ref(DefIx::new(0));
+        assert_eq!(
+            Schema::Str.below_a_supertype_with_no_value(&holds, &mut cx),
+            Relation::Unknown
+        );
+        // Empty, with no reference, and so the sets' own.
+        let cut_nowhere = Schema::AttrRecord {
+            fields: Arc::from([Attribute {
+                name: Arc::from("y"),
+                schema: Schema::Nothing,
+            }]),
+        };
+        assert_eq!(
+            Schema::Str.below_a_supertype_with_no_value(&cut_nowhere, &mut cx),
+            Relation::Unknown
+        );
+    }
+
+    /// A subject only the sets read is refuted through them, and one neither reading
+    /// places is left to the readings after this one: answered here, an undecided
+    /// subject lost a hundred answers those readings give.
+    #[test]
+    fn a_subject_read_as_neither_goes_on_to_the_readings_after() {
+        let defs = definition();
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &defs, &budget);
+        let none = Schema::Ref(DefIx::new(0));
+        let pattern = Schema::refine(Schema::Str, vec![Constraint::Regex("a".into())]);
+        assert_eq!(
+            pattern.below_a_supertype_with_no_value(&none, &mut cx),
+            Relation::Fails
+        );
+        let opaque = Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        assert_eq!(
+            opaque.below_a_supertype_with_no_value(&none, &mut cx),
+            Relation::Unknown
+        );
+    }
+}

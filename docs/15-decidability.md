@@ -1459,6 +1459,9 @@ below `tuple[Annotated[int, Lt(8)], R]`, and `{"a": Annotated[str, Regex("a")], 
 below the same record over `Regex("[ab]")`, for `R` and `J` recursive, as the two would
 be with neither beside them. Such a goal holds no reference itself.
 
+A supertype proved empty is the bottom: `str` is `not_subset` of a protocol whose `y`
+is itself, which no finite value is in, as it is of `nothing`.
+
 Below a union holding a recursion, where the set representation's unfolding reads
 no answer, a sequence or a mapping is refuted on a value of one item: `list[bytes]`
 is `not_subset` of `J | list[J]`, for the JSON value `J`, on `[b""]`. The item below
