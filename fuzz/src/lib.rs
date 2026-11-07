@@ -334,6 +334,31 @@ pub fn check_relations_in(a: &Schema, b: &Schema, defs: &[Schema], world: &World
     }
 }
 
+/// Whether a reference beneath `schema` names a definition the table does not hold,
+/// which denotes no set, so no law of sets is about it. The generator draws them,
+/// and the relations are held to run over them without a panic all the same.
+fn names_no_definition(schema: &Schema, defs: &[Schema]) -> bool {
+    let beneath = |schema: &Schema| names_no_definition(schema, defs);
+    match schema {
+        Schema::Ref(at) => at.get() >= defs.len(),
+        Schema::Union(members) | Schema::Intersection(members) => members.iter().any(beneath),
+        Schema::Complement(inner) => beneath(inner),
+        Schema::Refine { base, .. } => beneath(base),
+        Schema::Coll { element, .. } => beneath(element),
+        Schema::Seq { shape, .. } => {
+            shape.prefix.iter().any(beneath) || shape.tail.as_deref().is_some_and(beneath)
+        }
+        Schema::KeyedMap { fields, defaults } => {
+            fields.iter().any(|field| beneath(&field.schema))
+                || defaults
+                    .iter()
+                    .any(|clause| beneath(&clause.key) || beneath(&clause.value))
+        }
+        Schema::AttrRecord { fields } => fields.iter().any(|field| beneath(&field.schema)),
+        _ => false,
+    }
+}
+
 /// Sound relational invariants any subtype/equivalence/emptiness procedure must
 /// satisfy. A violation is a defect, not conservatism.
 pub fn check_relations(a: &Schema, b: &Schema, defs: &[Schema]) {
@@ -369,7 +394,8 @@ pub fn check_relations(a: &Schema, b: &Schema, defs: &[Schema]) {
             "empty {a:?} not below {b:?}: the empty set is a subset of every set"
         );
     }
-    if Schema::Complement(Arc::new(b.clone())).is_empty_under(defs) {
+    if !names_no_definition(a, defs) && Schema::Complement(Arc::new(b.clone())).is_empty_under(defs)
+    {
         assert!(
             a.is_subtype_of_under(b, &NoLeafRelations, defs),
             "{a:?} not below universal {b:?}: every set is a subset of the universe"

@@ -5405,6 +5405,28 @@ fn positions_met(members: &[Schema]) -> Option<Schema> {
     })
 }
 
+/// A record holding what it may hold as well, for a meet the empty record is refused
+/// by: its optional fields, `{"b": 1}` of `~{} & {"b?": Any}`, and an entry under a
+/// clause, `{"b": None}` of `~{} & dict[str, None]`. The oracle reads what this builds.
+fn a_record_of_every_field(schema: &Schema, fuel: usize) -> Option<Obj> {
+    let Schema::KeyedMap { fields, defaults } = schema else {
+        return None;
+    };
+    let mut entries = fields
+        .iter()
+        .map(|field| {
+            Some((
+                Key::Exact(static_name(&field.name)?),
+                a_member(&field.schema, fuel)?,
+            ))
+        })
+        .collect::<Option<Vec<(Key, Obj)>>>()?;
+    if entries.is_empty() {
+        entries.push((Key::Exact("b"), a_member(&defaults.first()?.value, fuel)?));
+    }
+    Some(Obj::Map(entries))
+}
+
 /// A value of the schema, built from the schema's own denotation.
 ///
 /// The universe's other half. The kind edges and the derived boundaries are
@@ -5481,6 +5503,11 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
             .iter()
             .filter_map(|member| a_member(member, fuel - 1))
             .chain(fields_met(members).and_then(|record| a_member(&record, fuel - 1)))
+            .chain(
+                members
+                    .iter()
+                    .filter_map(|member| a_record_of_every_field(member, fuel - 1)),
+            )
             .chain(kind_edges())
             .chain(positions_met(members).and_then(|sequence| a_member(&sequence, fuel - 1)))
             .find(|value| member_full(schema, value, &pool)),
@@ -5603,11 +5630,13 @@ fn parted(subject: &Schema, other: &Schema, left: &mut usize) -> Vec<Obj> {
         |value: &Obj| member_full(subject, value, &pool) && !member_full(other, value, &pool);
     found.retain(parts);
     if found.is_empty() {
-        // Past what the two share: the values each puts a boundary at.
+        // Past what the two share: a member of the subject, and the values each puts
+        // a boundary at.
         let mut seen = kind_edges();
         found = edges_of(subject, &mut seen);
         found.extend(edges_of(other, &mut seen));
         found.extend(seen);
+        found.extend(a_member(subject, MEMBER_FUEL));
         found.retain(parts);
     }
     deduplicated(found, CAP_PER_NODE)
