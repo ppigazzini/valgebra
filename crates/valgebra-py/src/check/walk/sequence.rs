@@ -25,7 +25,7 @@ use super::reads_its_length;
 use super::record::{RecordReading, check_attr_record, check_keyed_map};
 use super::scalar::{
     Scalar, admitted_quietly, check_refine, constraints_hold, homogeneous_scalar_union,
-    scalar_union_admits,
+    machine_range, machine_word, scalar_union_admits,
 };
 use super::{
     Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
@@ -930,7 +930,8 @@ fn refined_list_matches(
 /// its type test a constant, as [`scalar_list_matches`] has: an element's check
 /// reads the base's tags and its kind again at every element, around the one
 /// test that answers. A list of strings under a pattern reads 7.4% fewer
-/// instructions on the profiled 3.15 wheel.
+/// instructions on the profiled 3.15 wheel. Integers under order bounds a machine
+/// word holds take a reading of their own ([`machine_range_list`]).
 #[expect(
     clippy::redundant_closure_for_method_calls,
     reason = "the loop takes a test over a `Value` of any lifetime, and the \
@@ -945,7 +946,10 @@ pub(super) fn refined_scalar_list(
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
     Some(match base {
-        Schema::Int => refined_list_loop(list, |v| v.is_int(), base, constraints, value, frame),
+        Schema::Int => match machine_range(constraints, frame.ctx, value.py()) {
+            Some(range) => machine_range_list(list, range, base, constraints, value, frame),
+            None => refined_list_loop(list, |v| v.is_int(), base, constraints, value, frame),
+        },
         Schema::Float => refined_list_loop(list, |v| v.is_float(), base, constraints, value, frame),
         Schema::Str => refined_list_loop(list, |v| v.is_str(), base, constraints, value, frame),
         _ => return None,
@@ -978,6 +982,53 @@ fn refined_list_loop(
             constraints_hold(constraints, item, frame)
         } else {
             check_refine(base, constraints, &element, frame)
+        };
+        if ok {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    }
+}
+
+/// [`refined_list_loop`] over integers under bounds a machine word holds.
+///
+/// An exact `int` that fits a word is in the set exactly when it lies in the
+/// range, read without a call into the interpreter, where a comparison takes 121
+/// instructions on `CPython` 3.15: a thousand integers under one bound read 74%
+/// fewer instructions on the profiled wheel. Any other element is
+/// [`check_refine`]'s, which asks the comparisons. A value past the word raises
+/// where it is read, so the first ends the reading for the list, and a list of
+/// them pays one raise.
+#[inline(never)]
+fn machine_range_list(
+    list: &Bound<'_, PyList>,
+    (least, most): (i64, i64),
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let state = frame.ctx.state;
+    let mut in_words = true;
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        let word = if in_words {
+            machine_word(item).unwrap_or_else(|()| {
+                in_words = false;
+                None
+            })
+        } else {
+            None
+        };
+        ok &= match word {
+            Some(word) if !state.signals.fatal_seen.get() => least <= word && word <= most,
+            _ => check_refine(base, constraints, &Value::Py(item), frame),
         };
         if ok {
             ControlFlow::Continue(())

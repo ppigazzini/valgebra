@@ -817,7 +817,19 @@ on 3.12 and 3.15, 13% to 14% under `validate`, and a thousand strings under two
 length bounds 19%. A deciding walk over a base of `int`, `float` or `str` reads
 the base's kind once for the list (`refined_scalar_list`), and each kind has a
 loop of its own, whose element is its type test and then its constraints
-(`constraints_hold`). A list of records is read so too
+(`constraints_hold`). Where every constraint of an `int` is an order bound whose
+operand is an exact `int` a machine word holds, the bounds are one inclusive range
+read once for the list (`machine_range`), and an exact `int` that fits a word
+needs no comparison (`machine_range_list`): the two numbers are what the
+comparison reads, and it runs no Python on them. Any other element -- a `bool`, a
+subclass, a value of another type, one past the word -- is the element's own check,
+which asks the comparisons, and the first value past the word, whose read raises,
+ends the range for that list, so a list of them pays one raise. Read for one value,
+with no list to hold the operands across, the range would be a read per operand
+and a raise per value past the word, which `Comparing an order bound` under
+[Measured and not taken](../11-performance.md#measured-and-not-taken) counts.
+`a_list_of_bounded_integers_reads_as_the_comparisons_read_it` holds the range to
+the comparisons at every edge of the word. A list of records is read so too
 (`record_list_matches`):
 each element is its record's check, inlined into the reader, with the level
 held across the list, and the fatal-signal flag read at every element, as
