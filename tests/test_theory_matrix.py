@@ -389,7 +389,7 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         recursive(
             lambda node: union(list[node], Annotated[str, Regex("a*")])  # ty: ignore[invalid-type-form]
         ),
-        "undecided",
+        "subset",
         [[], ["a"], ["aa", "a"], [[]], "a", "", "b", ["b"]],
     ),
     # -- a protocol is the record of its members -----------------------------

@@ -426,16 +426,6 @@ ACCEPTED: dict[str, str] = {
         "hooked class would make a relation's answer depend on user code that "
         "may raise, may be slow, and may answer differently twice."
     ),
-    "list[str&Regex['a+']] <= mu X.list[X]|str&Regex['a*']": (
-        "Every list of `a+` strings belongs to the fixpoint, through "
-        "`list[a*] <= list[X] <= X`. The descriptor reads the pair through a "
-        "polarity cut: the supertype's reference becomes the bottom under one, "
-        "so the difference the reading holds is wider than the real one and its "
-        "inhabitance proves nothing. Emptiness of the widened difference still "
-        "proves the inclusion, which is why the answer is `undecided` rather "
-        "than a refutation. The route is an unfolding of the supertype past one "
-        "level before the cut, bounded by the reach the descriptor records."
-    ),
 }
 
 

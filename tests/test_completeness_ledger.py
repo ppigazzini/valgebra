@@ -331,6 +331,24 @@ _DECIDED = [
         id="protocol-of-a-fixpoint<=int-is-refuted",
     ),
     pytest.param("subtype", bool, int, id="bool<=int"),
+    pytest.param(
+        "subtype",
+        tuple[bool, _NESTED_LISTS_OR_EMPTY],  # ty: ignore[invalid-type-form]
+        tuple[Annotated[int, at.Lt(8)], _NESTED_LISTS_OR_EMPTY],  # ty: ignore[invalid-type-form]
+        id="(bool,R)<=(int<8,R)",
+    ),
+    pytest.param(
+        "subtype",
+        {"a": Annotated[str, Regex("a")], "b": _JSON},
+        {"a": Annotated[str, Regex("[ab]")], "b": _JSON},
+        id="{a:Regex,b:J}<={a:wider-Regex,b:J}",
+    ),
+    pytest.param(
+        "refutes",
+        list[int],
+        recursive(lambda t: union(Annotated[int, at.Lt(1)], [t])),
+        id="list[int]!<=mu-over-int<1",
+    ),
     pytest.param("refutes", list[bytes], union(_JSON, [_JSON]), id="[bytes]!<=J|[J]"),
     pytest.param(
         "refutes",
@@ -1793,13 +1811,12 @@ _LEDGERED: list[object] = [
     ),
     # Past the depth a build descends, a scalar is read by its kind's regions,
     # intervals over the reals that round no integer bound: the open range is
-    # the closed one over `int`, and six lists deep it is not seen to be.
+    # the closed one over `int`, and six lists deep the leaf goal is read alone.
     pytest.param(
         "subtype",
         list[list[list[list[list[list[Annotated[int, at.Gt(4), at.Lt(7)]]]]]]],
         list[list[list[list[list[list[Annotated[int, at.Ge(5), at.Le(6)]]]]]]],
         id="int(4,7)<=int[5,6]-six-lists-deep",
-        marks=_missed("a scalar past the depth is read over the reals, unrounded"),
     ),
     # The words are Unicode scalar values, and no lone surrogate is one, so a
     # bound whose constant holds one is not complemented; its meet with a

@@ -123,6 +123,12 @@ pub(crate) const RESPELLING: u32 = 4096;
 /// step-free kinds reading moved past four times the figure.
 pub(crate) const RESPELLING_AGAIN: u32 = 65_536;
 
+/// The steps a goal read by the sets is charged ([`Schema::decided_by_its_leaves`]).
+///
+/// **This bound is cost.** No step counts a lowering, so this is what holds how
+/// many of them one asking reads: sixty-four under [`RESPELLING`].
+const LEAF_READING: u32 = 64;
+
 thread_local! {
     /// The respelling allowance of the asking a question on this thread is in:
     /// [`RESPELLING`], or [`RESPELLING_AGAIN`] while [`asked_again`] asks a
@@ -998,7 +1004,76 @@ impl Schema {
                     Relation::Unknown
                 }
             })
+            .or_else(|| {
+                if by_branch {
+                    self.decided_by_its_leaves(other, cx)
+                } else {
+                    Relation::Unknown
+                }
+            })
             .or_else(|| self.below_by_emptiness(other, cx))
+    }
+
+    /// The rules asked once more, a goal they decline read by the sets where no
+    /// reference stands in the way.
+    ///
+    /// The whole pair's set reading stops at what it cannot lower or at a cut,
+    /// and it stops for all of the pair: `tuple[bool, R]` below `tuple[Annotated[int,
+    /// Lt(8)], R]` holds a reference at one position, and the leaf at the other is
+    /// a question the sets answer on their own. Both deciders are sound, so a
+    /// part's answer composes through the rules as any other does. A reference on
+    /// neither side is cut nowhere, so the reading is the set itself.
+    ///
+    /// Asked last of a pair everything else declined. A goal the rules decline
+    /// is the common case on the way to an answer another rule gives, and asked
+    /// of every such goal a lowering cost the relation matrix ninety-six times its
+    /// instructions. The rules are asked here and never reach this again, so a
+    /// query asks it a fixed number of times, under [`RESPELLING`]'s allowance.
+    #[inline(never)]
+    pub(super) fn decided_by_its_leaves(&self, other: &Schema, cx: &Cx<'_>) -> Relation {
+        if !(self.holds_parts() || other.holds_parts()) {
+            return Relation::Unknown;
+        }
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
+        let mut read = cx.within_this_query(&allowance);
+        read.reads_leaves = true;
+        self.is_subtype_rec(other, &mut read)
+    }
+
+    /// Whether a goal of this schema's can stand beneath a constructor or a
+    /// reference, under the connectives. One that cannot is a leaf itself, whose
+    /// whole pair the set reading has read.
+    fn holds_parts(&self) -> bool {
+        match self {
+            Schema::Seq { .. }
+            | Schema::Coll { .. }
+            | Schema::KeyedMap { .. }
+            | Schema::AttrRecord { .. }
+            | Schema::Ref(_) => true,
+            Schema::Union(members) | Schema::Intersection(members) => {
+                members.iter().any(Schema::holds_parts)
+            }
+            Schema::Complement(inner) => inner.holds_parts(),
+            _ => false,
+        }
+    }
+
+    /// A goal the rules declined: what the sets answer of one with no reference
+    /// on either side where the query reads its leaves, charged [`LEAF_READING`]
+    /// steps, since no step counts a lowering. A difference the sets read inhabited
+    /// holds the value a refutation stands on, so no witness is asked of it. Out of
+    /// line, as a declined goal is the path this is on: the rules' answers read one
+    /// test.
+    #[inline(never)]
+    fn a_goal_declined(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        if !cx.reads_leaves || self.has_reference() || other.has_reference() {
+            return Relation::Unknown;
+        }
+        if !spend_at_once(cx.budget, LEAF_READING) {
+            a_bound_is_met();
+            return Relation::Unknown;
+        }
+        self.descriptor_contained_in(other, cx.oracle, cx.defs)
     }
 
     /// The two lattice bounds read once more, each under an emptiness query of its
@@ -1451,6 +1526,9 @@ impl Schema {
         #[cfg(test)]
         goal_tests::goals::record(self, other);
         let answer = self.subtype_by_rules(other, cx);
+        if answer == Relation::Unknown {
+            return self.a_goal_declined(other, cx);
+        }
         self.witnessed(answer, cx)
     }
 
@@ -2769,6 +2847,9 @@ pub(super) struct Cx<'a> {
     /// The number this query's set readings are memoized under, given at the
     /// first one; zero until then ([`Readings`]).
     query: Cell<u64>,
+    /// Whether a goal the rules decline is read by the sets, where no reference
+    /// stands in the way ([`Schema::decided_by_its_leaves`]).
+    reads_leaves: bool,
 }
 
 /// What [`HELD`] keeps of the rules' answers at a query's root: the query's
@@ -2884,6 +2965,7 @@ impl<'a> Cx<'a> {
             trail: Vec::new(),
             visiting: Vec::new(),
             query: Cell::new(0),
+            reads_leaves: false,
         }
     }
 

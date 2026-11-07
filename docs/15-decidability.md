@@ -1049,10 +1049,10 @@ the shape. What is left below is what the descriptor cannot hold.
     bounds is the containers it starts: a scalar past it is read by its kind's
     regions, and a cut reference is one, so `str & ~(str & json)` is proved as
     `str & ~json` is. The regions are intervals over the reals, so an integer
-    bound past the depth is not rounded: `Annotated[int, Gt(4), Lt(7)]` is
-    `subset` of `Annotated[int, Ge(5), Le(6)]` five lists deep and declines six
-    deep, where the closed range is still proved below the open one. A
-    container past the depth is not built: beside the members a proof needs,
+    bound past the depth is not rounded in a reading of the pair whole; a goal
+    with no reference on either side is read alone where everything else declined,
+    so `Annotated[int, Gt(4), Lt(7)]` is `subset` of `Annotated[int, Ge(5), Le(6)]`
+    at any depth. A container past the depth is not built: beside the members a proof needs,
     its member is left out of the reading and the proof stands, as a
     [predicate](#undecidable-at-runtime) is, and where it is the member the
     proof needs, the relation declines.
@@ -1452,6 +1452,12 @@ branch contains it, is decided by the set representation's symbolic automaton
 regular-expression-types inclusion — a repeated heterogeneous group, such as
 `int` and `str` alternating to any length — because the sequence node carries
 the linear prefix-and-tail form, so no schema valgebra builds takes that shape.
+
+A goal a rule reaches beneath a constructor is read by the set representation on
+its own, where a reference beside it stopped the pair's reading: `tuple[bool, R]` is
+below `tuple[Annotated[int, Lt(8)], R]`, and `{"a": Annotated[str, Regex("a")], "b": J}`
+below the same record over `Regex("[ab]")`, for `R` and `J` recursive, as the two would
+be with neither beside them. Such a goal holds no reference itself.
 
 Below a union holding a recursion, where the set representation's unfolding reads
 no answer, a sequence or a mapping is refuted on a value of one item: `list[bytes]`

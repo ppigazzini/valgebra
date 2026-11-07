@@ -18,10 +18,18 @@ answer of its own, or a repair to a change not yet released.
 - fix: a build pays for a step's table by what it holds
 - fix: a named tuple holds the positions its class stores
 - feat: a sequence or a mapping of one item outside every branch refutes
+- feat: a goal the rules decline is read by the sets, past what stopped the pair
 
 -->
 
 ### Added
+
+- **A leaf is decided beside what stops the pair.** A pattern below a pattern, a `bool` below
+  a bound over `int`, and every other pair only the sets read, stayed `undecided` beside a
+  recursion, a class key or a third attribute record, since the pair's own reading stopped
+  there: `tuple[bool, R]` below `tuple[Annotated[int, Lt(8)], R]`, and `{"a": P, "b": J}` below
+  the same record over a wider pattern, the object a JSON Schema writes most. A pair everything
+  else declined asks the sets of each goal the rules decline with no reference in it.
 
 - **A sequence or a mapping is refuted below a union on a value of one item.** `list[bytes]`
   is `not_subset` of `J | list[J]`, the shape of a field holding a document or a list of them,

@@ -10472,7 +10472,9 @@ fn a_union_holding_a_complement_is_asked_as_its_difference() {
         .into(),
     );
     let the_call_beside = Schema::Union(vec![called, not(constant(1))].into());
-    assert_eq!(both(&a_call_or_none, &the_call_beside), Relation::Unknown);
+    // A list is no constant, whatever the call answers: the goal is a leaf of its
+    // own, and the sets read it.
+    assert_eq!(both(&a_call_or_none, &the_call_beside), Relation::Holds);
 }
 
 /// No value is longer than [`LONGEST`], `sys.maxsize`: the data model has
@@ -13470,5 +13472,129 @@ mod one_item {
         // A key of no kind with no end of them may be one a dict cannot hold.
         let unhashable = map_of(list_of(Schema::Int), Schema::Int);
         assert!(!refutes(&unhashable, &[strings], &[]));
+    }
+}
+
+/// A goal the rules decline is read by the sets where a reference beside it stopped
+/// the pair's own reading, after everything else declined.
+mod leaves {
+    use super::*;
+
+    fn below(subject: &Schema, other: &Schema, defs: &[Schema]) -> Relation {
+        subject.subtype_relation_under(other, &Pure, defs)
+    }
+
+    /// A list of itself, `μt. list[t]`, which the sets cut.
+    fn lists() -> ([Schema; 1], Schema) {
+        let at = Schema::Ref(DefIx::new(0));
+        ([Schema::list(SeqShape::homogeneous(at.clone()))], at)
+    }
+
+    fn pattern(text: &str) -> Schema {
+        Schema::refine(Schema::Str, vec![Constraint::Regex(text.into())])
+    }
+
+    fn beside(leaf: Schema, reference: &Schema) -> Schema {
+        Schema::tuple(SeqShape::fixed([leaf, reference.clone()]))
+    }
+
+    #[test]
+    fn a_leaf_beside_a_reference_is_read_by_the_sets() {
+        let (defs, at) = lists();
+        let (narrow, wide) = (pattern("a"), pattern("[ab]"));
+        assert_eq!(
+            below(
+                &beside(narrow.clone(), &at),
+                &beside(wide.clone(), &at),
+                &defs
+            ),
+            Relation::Holds,
+            "the position's pair is the sets' alone"
+        );
+        assert_eq!(
+            below(&beside(wide, &at), &beside(narrow, &at), &defs),
+            Relation::Fails,
+            "and a value of the position refutes the tuple, the list beside it holding one"
+        );
+    }
+
+    #[test]
+    fn a_goal_holding_a_reference_is_not_read_by_the_sets() {
+        let (defs, at) = lists();
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &defs, &budget);
+        cx.reads_leaves = true;
+        let goal = Schema::list(SeqShape::homogeneous(at.clone()));
+        assert_eq!(
+            goal.a_goal_declined(&Schema::Int, &mut cx),
+            Relation::Unknown,
+            "a cut reading refutes nothing here"
+        );
+        assert_eq!(budget.left(), DECISION_BUDGET, "and spends no step");
+        assert_eq!(Schema::Int.a_goal_declined(&at, &mut cx), Relation::Unknown);
+    }
+
+    #[test]
+    fn a_goal_is_read_only_where_the_query_reads_its_leaves() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        let (narrow, wide) = (pattern("a"), pattern("[ab]"));
+        assert_eq!(narrow.a_goal_declined(&wide, &mut cx), Relation::Unknown);
+        assert_eq!(budget.left(), DECISION_BUDGET);
+        cx.reads_leaves = true;
+        assert_eq!(narrow.a_goal_declined(&wide, &mut cx), Relation::Holds);
+        assert_eq!(budget.left(), DECISION_BUDGET - LEAF_READING);
+    }
+
+    /// No step counts a lowering, so this charge is what bounds how many one
+    /// asking reads.
+    #[test]
+    fn a_goal_past_the_steps_left_is_not_read() {
+        let budget = Budget::new(LEAF_READING - 1);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        cx.reads_leaves = true;
+        let (narrow, wide) = (pattern("a"), pattern("[ab]"));
+        assert_eq!(narrow.a_goal_declined(&wide, &mut cx), Relation::Unknown);
+    }
+
+    #[test]
+    fn a_refutation_of_a_goal_stands_on_its_subject() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        cx.reads_leaves = true;
+        let (narrow, wide) = (pattern("a"), pattern("[ab]"));
+        assert_eq!(wide.a_goal_declined(&narrow, &mut cx), Relation::Fails);
+        let none = Schema::refine(pattern("a"), vec![Constraint::MinLen(2)]);
+        assert_ne!(none.a_goal_declined(&wide, &mut cx), Relation::Fails);
+    }
+
+    #[test]
+    fn a_pair_with_no_part_is_not_asked_again() {
+        let (narrow, wide) = (pattern("a"), pattern("[ab]"));
+        assert!(!narrow.holds_parts());
+        assert!(!Schema::union([narrow.clone(), wide]).holds_parts());
+        assert!(!narrow.clone().complement().holds_parts());
+        for parted in [
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::tuple(SeqShape::fixed([Schema::Int])),
+            Schema::keyed_map(Vec::new(), Vec::new()),
+            Schema::Ref(DefIx::new(0)),
+        ] {
+            assert!(parted.holds_parts(), "{parted:?}");
+            assert!(parted.clone().complement().holds_parts(), "{parted:?}");
+            assert!(Schema::Union(vec![narrow.clone(), parted].into()).holds_parts());
+        }
+    }
+
+    /// A meet holding one complement reads the relation it is, so the two routes
+    /// to one question answer alike.
+    #[test]
+    fn the_emptiness_of_the_difference_reads_the_leaf_too() {
+        let (defs, at) = lists();
+        let (narrow, wide) = (pattern("a"), pattern("[ab]"));
+        let (subject, other) = (beside(narrow, &at), beside(wide, &at));
+        assert_eq!(below(&subject, &other, &defs), Relation::Holds);
+        let difference = Schema::Intersection(vec![subject, other.complement()].into());
+        assert!(difference.is_empty_with(&Pure, &defs));
     }
 }

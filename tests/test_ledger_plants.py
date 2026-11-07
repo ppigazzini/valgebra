@@ -2274,7 +2274,7 @@ PLANTS = (
             "ACCEPTED: dict[str, str] = {\n"
             + "".join(
                 f'    "planted {n}": "an accepted gap planted to grow the list",\n'
-                for n in range(5)
+                for n in range(13)
             ),
         ),
         trips=("test_the_ledger_is_serializable_for_a_report",),
@@ -3950,10 +3950,10 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-core/src/decision.rs",
-            "    query: Cell<u64>,\n}\n",
-            "    query: Cell<u64>,\n"
+            "pub(super) struct Cx<'a> {\n",
+            "pub(super) struct Cx<'a> {\n"
             "    /// The goals already decided, so a repeat is answered from here.\n"
-            "    decided: FxHashMap<(Schema, Schema), Relation>,\n}\n",
+            "    decided: FxHashMap<(Schema, Schema), Relation>,\n",
         ),
         trips=("test_a_memo_without_a_revert_condition_fails_placement",),
     ),

@@ -1121,6 +1121,19 @@ under a second, with the 2,046 elements the state bound allows.
 `test_a_step_table_beneath_a_length_bound_keeps_to_the_memory_it_may_have` the
 answer under a limit of a gibibyte.
 
+**A goal the rules decline is read by the sets once, and last.** The set reading of
+a pair stops for the whole pair: at a cut, at what it cannot lower, past the depth.
+So `bool` below `Annotated[int, Lt(8)]` decides alone and declined beside a recursion,
+a class key or a third attribute record. A pair everything else declined is asked of
+the rules again with `reads_leaves` set, and a goal they decline, with no reference
+on either side, is lowered there (`a_goal_declined`), for `LEAF_READING` steps since
+no step counts a lowering. Asked of every goal the rules decline, the relation matrix
+read ninety-six times its instructions, because a goal declined on the way to an answer
+another rule gives is the common case. Asked here it pays only on a pair that declines
+and holds a constructor or a reference (`holds_parts`), a pair of leaves being what the
+reading of the whole read. The emptiness of a meet holding one complement asks it too,
+which keeps `is_empty` and the relation answering alike.
+
 **A complement is built only where it is read.** The parts of the universe are
 questions of their own [FCB08, (4)], and most sets hold a kind or two, so a
 complement spends most of what it costs on a top for every kind the set misses.

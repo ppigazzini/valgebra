@@ -1114,6 +1114,13 @@ as a list against a length-bounded list of the same element.
   JSON Schema containment suite read 37% fewer instructions on a release build,
   `--decision-sets` 29.82% fewer and `--decision-lengths` 66.37%, and what a
   relation keeps of its allowance decides a few a dearer reading declines.
+- **A leaf is read by the sets last, and alone.** A goal the rules decline, with no
+  reference on either side, is the sets' to answer where the pair's own reading
+  stopped at a reference beside it. Asked of every such goal, it cost the relation
+  matrix ninety-six times its instructions, since a goal declined on the way to another
+  rule's answer is the common case, so it is asked in a last asking of a pair
+  everything else declined, and only of one holding a constructor or a reference.
+  Lowerings are charged steps, so an asking reads at most sixty-four.
 - **A step's table is charged by what it holds, and shared rather than copied.** An
   operation over a `MultipleOf`'s table reads a list per residue, so one unit of a
   build's allowance bought up to 4,096 lists and each automaton edge kept them. A
