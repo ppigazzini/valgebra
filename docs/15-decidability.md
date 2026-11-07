@@ -518,6 +518,13 @@ answers `"undecided"`.
   value of the fixpoint, and no finite value satisfies it. A bound over a
   *fixed* position, or over a base whose values have no length at all, is not
   this shape and stays conservative.
+- **A meet of refinements of one base.** It is the one refinement holding all
+  their constraints, read so for whether it holds a value, as a refinement of a
+  union reads a branch that is a refinement with what narrows it:
+  `intersection(Annotated[dict, MaxLen(2)], Annotated[dict, MinLen(2), MaxLen(3)])`
+  is `not_subset` of `nothing`, by a dict of two entries. A meet over two bases
+  is not this shape: `intersection(Annotated[dict[str, int], MinLen(1)],
+  Annotated[dict[str, str], MinLen(1)])` stays `undecided`.
 - **A Boolean term of length bounds over one base.** A union, a meet or a
   complement of `MinLen`, `MaxLen` and `Len` bounds over one `str`, `bytes`,
   or list or tuple of one element type that holds a value is the values of

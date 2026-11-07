@@ -14419,3 +14419,97 @@ mod a_clause_beside_a_table {
         assert!(!leaves_the_name_out_of_a_table(&Schema::Str, "b", &Table));
     }
 }
+
+mod one_refinement {
+    use super::*;
+
+    fn map() -> Schema {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        )
+    }
+
+    fn words() -> Schema {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Str,
+            }],
+        )
+    }
+
+    fn list_of(item: Schema) -> Schema {
+        Schema::list(SeqShape::homogeneous(item))
+    }
+
+    fn lengths(base: &Schema, least: usize, most: usize) -> Schema {
+        Schema::refine(
+            base.clone(),
+            vec![Constraint::MinLen(least), Constraint::MaxLen(most)],
+        )
+    }
+
+    fn at_least(base: &Schema, least: usize) -> Schema {
+        Schema::refine(base.clone(), vec![Constraint::MinLen(least)])
+    }
+
+    fn at_most(base: &Schema, most: usize) -> Schema {
+        Schema::refine(base.clone(), vec![Constraint::MaxLen(most)])
+    }
+
+    fn verdict(schema: &Schema) -> Verdict {
+        schema.verdict_under(&NoLeafRelations)
+    }
+
+    #[test]
+    fn a_meet_of_bounds_over_one_map_holds_what_the_one_refinement_holds() {
+        let meet = Schema::meet([at_most(&map(), 2), lengths(&map(), 2, 3)]);
+        assert!(matches!(meet, Schema::Intersection(_)));
+        assert_eq!(verdict(&meet), Verdict::Inhabited);
+        assert_eq!(
+            meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+            Relation::Fails
+        );
+    }
+
+    /// A mapping of `str` to `int` and one of `str` to `str` share only the empty
+    /// dict, which a length of one leaves out, and no reading before this one says
+    /// so: read as one refinement of the first base, the meet would hold a value.
+    #[test]
+    fn a_meet_over_two_bases_is_no_one_refinement() {
+        let meet = Schema::meet([at_least(&map(), 1), at_least(&words(), 1)]);
+        assert_ne!(verdict(&meet), Verdict::Inhabited);
+    }
+
+    #[test]
+    fn a_member_of_another_base_is_not_read_past() {
+        let meet = Schema::meet([
+            at_least(&map(), 1),
+            at_most(&map(), 3),
+            at_least(&words(), 1),
+        ]);
+        assert_ne!(verdict(&meet), Verdict::Inhabited);
+    }
+
+    #[test]
+    fn a_refined_branch_of_a_union_is_read_with_what_narrows_it() {
+        let ints = list_of(Schema::Int);
+        let three = |branches: [Schema; 2]| {
+            let item = lengths(&Schema::union(branches), 3, 3);
+            lengths(&list_of(item), 1, 1)
+        };
+        assert_eq!(
+            verdict(&three([lengths(&ints, 1, 1), at_least(&ints, 2)])),
+            Verdict::Inhabited
+        );
+        assert_eq!(
+            verdict(&three([lengths(&ints, 1, 1), lengths(&ints, 2, 2)])),
+            Verdict::Empty
+        );
+    }
+}

@@ -313,6 +313,17 @@ decision. It reopens with a measured demand and that gate reading. A predicate i
 spelling meanwhile, and `test_an_array_element_bound_is_a_predicate` in
 `tests/test_numpy_generic.py` holds it.
 
+**A meet of refinements of one base folded in the constructor.** Refused.
+`Annotated[int, Ge(1)]` met with `Annotated[int, Le(9)]` and `Annotated[int, Ge(1),
+Le(9)]` are one set, and the fold makes them one term. It takes away the members a
+rule reads: `A <= (A & ~B) | (A & B)` stands on the `A` in each branch, and with `A & B`
+folded the law read undecided 58 times over 64,000 seeds, 64 answers lost against 28
+gained. It also breaks the associativity of the meet's own normal form,
+`(A & B) & ~A` not folding to `nothing` where `A & (B & ~A)` does, unless the
+complementary-pair law reads a constraint subset. Read as a further reading in
+`intersection_verdict` it gains 54 and loses none, so that is what stands
+(`one_refinement_of_its_members`).
+
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labeling than the record model
 assumes.

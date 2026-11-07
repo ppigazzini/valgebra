@@ -1203,9 +1203,9 @@ question of any asking: two sequences meet in nothing where a position each of t
 has does, 1,568 answers over the drawn families, for a meet the widened reading stops one
 unfolding short of.
 
-**A length on the map atom, not built.** `dict` under length bounds declines 796 of 5,000
-drawn Boolean terms of two levels, from 922 before the rules read its lengths, so a length
-component would decide some of those. A map type holds no such thing [Cas23, §4.4]; each
+**A length on the map atom, not built.** `dict` under length bounds declines 756 of 5,000
+drawn Boolean terms of two levels, from 922 before the rules read its lengths and a meet of
+its refinements as one, so a length component would decide some of those. A map type holds no such thing [Cas23, §4.4]; each
 map atom would hold one, every operation over atoms would meet it, and the frozen mapping
 refused in [01-schema-ir.md](01-schema-ir.md) read +2% to +7% for a part of the same cost.
 No caller has reported the shape past a fuzz harness, and it is not prototyped.
@@ -1920,6 +1920,13 @@ in `decision/tests.rs` holds the pair with the universe bare and in the
 fuzzer's spelling, a refinement carrying no constraint, and
 `the_complement_of_an_empty_pattern_bounds_a_complement_that_does_not_lower` in
 `laws.rs` draws the family.
+
+**A meet of refinements of one base is read as the one they are**
+(`one_refinement_of_its_members`): first in the readings a meet left undecided hands
+on, and only where every member is a refinement of that base, so a meet beside anything
+else pays one comparison. `refinement_verdict` reads a union's refined branch the same
+way, with what narrows the union. Neither folds a term, and
+[01-schema-ir.md](01-schema-ir.md) says why the constructor does not.
 
 **A Boolean term of length bounds over one base is read as its lengths**
 (`decision/lengths.rs`). `MinLen` and `MaxLen` over a `str`, a `bytes`, or a

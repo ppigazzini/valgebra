@@ -36,10 +36,17 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refinement of a refinement and equal constants past 64 bits are one
 - fix: a refusal names a refined branch's bounds and each clause reading a key
 - fix: a dict's entries are read from its storage on PyPy
+- feat: a meet of refinements of one base is read as the one they are
 
 -->
 
 ### Added
+
+- **A meet of refinements of one base is read as the one they are.**
+  `intersection(Annotated[dict, MaxLen(2)], Annotated[dict, MinLen(2), MaxLen(3)])` is `not_subset`
+  of `nothing`, `intersection(Annotated[int, Le(5)], Annotated[int, Ge(5)])` of `Annotated[dict,
+  MinLen(3), MaxLen(5)]`, and a list of a refinement of a union whose branches are refinements of
+  `nothing`, where each stayed `undecided`.
 
 - **A mapping's clauses are read beside a table and over a language of keys.**
   `Validator({Literal["a"]: str}).open()` is `not_subset` of the same over `bool`, on `{"a": "s"}`,
