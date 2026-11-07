@@ -2536,7 +2536,15 @@ fn a_declared_field_becomes_an_attribute_beside_the_class() {
                  \x20   pass\n\
                  @dataclasses.dataclass\n\
                  class Boxed(tuple):\n\
-                 \x20   x: int\n",
+                 \x20   x: int\n\
+                 class Wider(Pair):\n\
+                 \x20   _fields = ('left', 'right', 'more')\n\
+                 class Narrower(Pair):\n\
+                 \x20   _fields = ('left',)\n\
+                 class Mixin:\n\
+                 \x20   pass\n\
+                 class Mixed(Mixin, tuple):\n\
+                 \x20   _fields = ('a',)\n",
             )
             .expect("a source with no interior nul"),
             Some(&namespace),
@@ -2588,6 +2596,12 @@ fn a_declared_field_becomes_an_attribute_beside_the_class() {
             "a named tuple's fields are its positions"
         );
         assert_eq!(positions("Pair"), vec![Schema::Int, Schema::Str]);
+        // A subclass writing `_fields` adds no position and takes none away: the
+        // class directly above `tuple` stores them. A mixin in that place declares
+        // nothing, and the class answers for itself.
+        assert_eq!(positions("Wider"), vec![Schema::Int, Schema::Str]);
+        assert_eq!(positions("Narrower"), vec![Schema::Int, Schema::Str]);
+        assert_eq!(positions("Mixed"), vec![Schema::ANYTHING]);
         assert!(
             positions("Point").is_empty(),
             "a dataclass lays out no positions"

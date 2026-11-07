@@ -6,6 +6,7 @@ import enum
 import itertools
 import numbers
 import pathlib
+import platform
 import re
 import subprocess
 import sys
@@ -2120,3 +2121,36 @@ def test_a_class_is_read_where_python_dispatches_its_hooks() -> None:
     assert backwards.is_valid(0)
     assert backwards.relation_to(Annotated[int, at.Ge(4)]) != "subset"
     assert "<_Backwards: 5>" in repr(backwards)
+
+
+class _NamedOne(NamedTuple):
+    x: int
+
+
+class _WritesASecondField(_NamedOne):
+    _fields = ("x", "y")
+
+    @property
+    def y(self) -> int:
+        return 1
+
+
+class _NamedTwo(NamedTuple):
+    x: int
+    y: int
+
+
+class _WritesOneField(_NamedTwo):
+    _fields = ("x",)
+
+
+def test_a_named_tuple_writing_its_own_fields_holds_the_positions_it_stores() -> None:
+    """`_fields` is an attribute a subclass can write, and it adds no position."""
+    assert Validator(_WritesASecondField).is_valid(_WritesASecondField(1))
+    assert not Validator(_WritesASecondField).is_valid(_WritesASecondField("s"))  # ty: ignore[invalid-argument-type]
+    assert Validator(_WritesOneField).is_valid(_WritesOneField(1, 2))
+    assert not Validator(_WritesOneField).is_valid(_WritesOneField(1, "s"))  # ty: ignore[invalid-argument-type]
+    written, stored = platform.uname_result, platform.uname_result.__base__
+    assert Validator(written).is_valid(platform.uname())
+    assert Validator(written).relation_to(stored) == "subset"
+    assert not intersection(written, stored).is_empty()

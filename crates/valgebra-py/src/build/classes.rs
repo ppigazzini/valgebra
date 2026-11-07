@@ -1865,6 +1865,9 @@ fn field_hint<'py>(
 ///
 /// A field the annotations do not carry -- a `collections.namedtuple` has none
 /// -- takes `anything` at its position, which is the arity without the types.
+///
+/// The positions are those of the class that stores them ([`storing_class`]): a
+/// subclass can write `_fields` and adds no position to a tuple.
 pub(super) fn named_tuple_positions(
     ty: &Bound<'_, PyType>,
     hints: &Bound<'_, PyDict>,
@@ -1875,11 +1878,32 @@ pub(super) fn named_tuple_positions(
         return Ok(None);
     }
     let mut positions = Vec::new();
-    for name in declared_fields(ty)? {
+    for name in declared_fields(&storing_class(ty)?)? {
         positions.push(match hints.get_item(&name)? {
             Some(hint) => build_schema(&hint, lits, defs)?,
             None => Schema::ANYTHING,
         });
     }
     Ok(Some(Schema::tuple(SeqShape::fixed(positions))))
+}
+
+/// The class on `ty`'s order directly above `tuple`, where it declares `_fields`:
+/// the one `collections.namedtuple` and `NamedTuple` build, whose `_fields` are
+/// what an instance holds. `_fields` is an attribute any subclass can write, and
+/// `platform.uname_result` names a sixth, computed on demand, over five stored
+/// items. A mixin in that place declares nothing, and `ty` answers for itself.
+fn storing_class<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound<'py, PyType>> {
+    let py = ty.py();
+    let order = ty.mro();
+    let tuple = order
+        .iter()
+        .position(|class| class.is(py.get_type::<PyTuple>()));
+    let above = tuple
+        .and_then(|at| at.checked_sub(1))
+        .and_then(|at| order.get_item(at).ok())
+        .and_then(|class| class.cast_into::<PyType>().ok());
+    Ok(match above {
+        Some(class) if class.hasattr(intern!(py, "_fields"))? => class,
+        _ => ty.clone(),
+    })
 }

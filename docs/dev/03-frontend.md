@@ -381,7 +381,10 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    (`named_tuple_positions` in `build/classes.rs`), which carries the arity as
    well as the types. A field the hints do not carry — a `collections`
    namedtuple's — takes `anything` at its position, which checks the arity
-   without the types.
+   without the types. The positions are the `_fields` of the class directly above
+   `tuple` on the order, which is what an instance stores: a subclass can write
+   `_fields` and adds no position, and `platform.uname_result` names a sixth,
+   computed on demand, over five stored items.
 7. **A `Protocol`** is the record of the members it declares: an
    `AttrRecord` with one attribute per member and no class beside it, so
    it denotes every value whose attribute, read by `getattr`, holds what the

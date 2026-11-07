@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a class's kind reads a builtin its order names
 - fix: a required field is paid for by the entry its name finds
 - fix: a build pays for a step's table by what it holds
+- fix: a named tuple holds the positions its class stores
 
 -->
 
@@ -48,6 +49,11 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A named tuple holds the positions its class stores.** `_fields` is an attribute any
+  subclass can write, and `platform.uname_result` names a sixth, computed on demand, over five
+  stored items, so `Validator(platform.uname_result)` refused `platform.uname()`, on every release
+  read back to 0.0.20. The positions are those of the class directly above `tuple`.
 
 - **A relation over a large step keeps to the memory it may have.** A `MultipleOf`'s table
   holds a list per residue, and an operation over it counted as one step of a build: two list
