@@ -413,6 +413,25 @@ pub(super) fn check_refine(
             ControlFlow::Break(answer) => return answer,
         },
     };
+    constraints_hold(constraints, obj, frame)
+}
+
+/// Whether `obj`, a member of a refinement's base, satisfies every one of its
+/// constraints, each recorded as it fails where the walk explains.
+///
+/// The one caller of [`check_constraint`], which keeps it inlined here, and
+/// inlined into each caller: a call per element costs a list of strings under a
+/// pattern 2.3% of its instructions (`--binding-pattern`).
+#[expect(
+    clippy::inline_always,
+    reason = "measured: a call per element read +2.3% on the pattern walk"
+)]
+#[inline(always)]
+pub(super) fn constraints_hold(
+    constraints: &[Constraint],
+    obj: &Bound<'_, PyAny>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
     let mut ok = true;
     for constraint in constraints {
         if !check_constraint(constraint, obj, frame) {
