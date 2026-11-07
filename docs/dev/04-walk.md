@@ -688,7 +688,13 @@ most of what they cost, and each asks the test directly:
 - **A refinement's base.** `Annotated[int, Ge(0)]` asks its base before its
   constraints, and a scalar base that admits the value is its type test
   (`check_refine` in `walk/scalar.rs`); a base that refuses is walked, which
-  records the mismatch an explaining walk reports. The constraints read the
+  records the mismatch an explaining walk reports. An order bound over an exact
+  `float`, whose operand a float holds exactly, is the two floats compared
+  (`floats_compared`): the operand is read once a validator (`float_operand` in
+  `check/index.rs`), an `int` past `2^53` is no float and a subclass may answer with
+  code of its own, so each is the rich comparison's, and a slot the index does not
+  hold reads as one the comparison answers, so no verdict depends on the table.
+  `an_order_bound_over_a_float_reads_as_the_comparison_reads_it` holds the two. The constraints read the
   value the walk holds rather than a handle of their own, so a passing check
   writes no reference count on it: refined integers cost 8% fewer instructions
   on the binding gate (`--binding-refined`), and strings matched against a

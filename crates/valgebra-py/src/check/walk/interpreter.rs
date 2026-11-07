@@ -3,6 +3,7 @@ use std::ops::ControlFlow;
 use std::sync::Arc;
 
 use jiter::JsonValue;
+use pyo3::basic::CompareOp;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyModule, PySet, PyString,
     PyTuple,
@@ -15,11 +16,12 @@ use super::record::{
     RecordReading, SMALL_OBJECT, Undeclared, keyed_map_matches_json, resolves_through_the_plan,
     scan_dict,
 };
-use super::scalar::machine_range;
+use super::scalar::{floats_compared, machine_range};
 use super::sequence::{refined_scalar_list, scan_list};
 use super::*;
 use crate::check::ctx::{MAX_RECURSION_DEPTH, MAX_WALK_DEPTH};
 use crate::check::index::ValidatorIndex;
+use crate::check::index::float_operand;
 use crate::check::{WalkMode, WalkState, build_index};
 
 /// Decide membership of a Python value against a schema, through the real
@@ -6956,6 +6958,145 @@ fn a_list_of_refined_scalars_is_read_by_its_kind() {
                 &Value::Py(&value),
                 &mut Unwritten::default().frame(ctx),
             ),
+            None
+        );
+    });
+}
+
+/// An order bound over a float answers what the rich comparison answers, for
+/// every bound, a value of every kind and an operand of every kind, those the
+/// index holds and those it leaves to the comparison, at the edges where a float
+/// stops holding every integer.
+#[test]
+fn an_order_bound_over_a_float_reads_as_the_comparison_reads_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"from fractions import Fraction\n\
+              class Float(float):\n\
+              \x20   def __ge__(self, other):\n\
+              \x20       return False\n\
+              \x20   __gt__ = __le__ = __lt__ = __ge__\n\
+              TOP = 2 ** 53\n\
+              NAN = float('nan')\n\
+              INF = float('inf')\n\
+              OPERANDS = [0.0, -0.0, 1.5, -1.5, NAN, INF, -INF, 5e-324, 1.7976931348623157e308,\n\
+              \x20           float(TOP), 0, 1, -1, TOP, -TOP, TOP + 1, -TOP - 1, TOP + 2,\n\
+              \x20           2 ** 200, True, False, Fraction(3, 2), Float(1.5)]\n\
+              VALUES = [0.0, -0.0, 1.0, 1.5, -1.5, NAN, INF, -INF, 5e-324, 1.7976931348623157e308,\n\
+              \x20         float(TOP), float(TOP + 2), -float(TOP), 0, 1, TOP, TOP + 1, True,\n\
+              \x20         Float(1.5), Fraction(3, 2), 'x', None]\n",
+            c"float_bounds.py",
+            c"float_bounds",
+        )
+        .expect("the corpus compiles");
+        let list_of = |name: &str| -> Vec<Bound<'_, PyAny>> {
+            module
+                .getattr(name)
+                .expect("the corpus")
+                .try_iter()
+                .expect("a list")
+                .map(|item| item.expect("an element"))
+                .collect()
+        };
+        let operands = list_of("OPERANDS");
+        let values = list_of("VALUES");
+        let pool: Vec<Py<PyAny>> = operands.iter().map(|o| o.clone().unbind()).collect();
+        let bound_of = |op: CompareOp, at: OperandIx| match op {
+            CompareOp::Ge => Constraint::Ge(at),
+            CompareOp::Gt => Constraint::Gt(at),
+            CompareOp::Le => Constraint::Le(at),
+            _ => Constraint::Lt(at),
+        };
+        for (at, operand) in operands.iter().enumerate() {
+            for op in [CompareOp::Ge, CompareOp::Gt, CompareOp::Le, CompareOp::Lt] {
+                let schema = Schema::Refine {
+                    base: Arc::new(Schema::ANYTHING),
+                    constraints: vec![bound_of(op, OperandIx::new(at))].into(),
+                };
+                for value in &values {
+                    let compared = value
+                        .rich_compare(operand, op)
+                        .and_then(|answer| answer.is_truthy())
+                        .unwrap_or(false);
+                    assert_eq!(
+                        decide(py, &schema, value, &pool, &[]),
+                        compared,
+                        "{value:?} {op:?} {operand:?}"
+                    );
+                }
+            }
+        }
+    });
+}
+
+/// The index holds an operand as a float exactly where a float is that number,
+/// and reads a value that fails as its own failure.
+#[test]
+fn an_operand_is_held_as_a_float_only_where_one_is_that_number() {
+    Python::attach(|py| {
+        let held = |source: &str| float_operand(&evaluate(py, source));
+        assert_eq!(held("1.5"), Some(1.5));
+        assert_eq!(held("0"), Some(0.0));
+        assert_eq!(held("-3"), Some(-3.0));
+        assert_eq!(held("2 ** 53"), Some(9_007_199_254_740_992.0));
+        assert_eq!(held("-2 ** 53"), Some(-9_007_199_254_740_992.0));
+        assert_eq!(held("2 ** 53 + 1"), None);
+        assert_eq!(held("-2 ** 53 - 1"), None);
+        assert_eq!(held("2 ** 64"), None);
+        assert_eq!(held("True"), None);
+        assert_eq!(held("'x'"), None);
+        assert!(held("float('nan')").is_some_and(f64::is_nan));
+
+        let pool = vec![evaluate(py, "1.5").unbind(), evaluate(py, "2").unbind()];
+        let at = OperandIx::new;
+        let schema = Schema::Refine {
+            base: Arc::new(Schema::Float),
+            constraints: vec![Constraint::Ge(at(0)), Constraint::Lt(at(1))].into(),
+        };
+        let index = build_index(py, &schema, &[], &pool);
+        assert_eq!(index.float_operand(0), Some(1.5));
+        assert_eq!(index.float_operand(1), Some(2.0));
+        assert_eq!(index.float_operand(2), None);
+        let (ok, violations) = explain(py, &schema, &evaluate(py, "1.0"), &pool, &[]);
+        let reported: Vec<_> = violations.iter().map(|v| (v.code, &*v.expected)).collect();
+        assert!(!ok);
+        assert_eq!(reported, [("greater_than_equal", ">= 1.5")]);
+
+        // The cost is the reading's own: it answers an exact float under an
+        // operand the index holds, and leaves every other pair to the comparison.
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &pool,
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let two = evaluate(py, "2.0");
+        assert_eq!(
+            floats_compared(&two, at(0), CompareOp::Ge, &ctx),
+            Some(true)
+        );
+        assert_eq!(
+            floats_compared(&two, at(1), CompareOp::Gt, &ctx),
+            Some(false)
+        );
+        assert_eq!(
+            floats_compared(&two, at(1), CompareOp::Le, &ctx),
+            Some(true)
+        );
+        assert_eq!(
+            floats_compared(&two, at(0), CompareOp::Lt, &ctx),
+            Some(false)
+        );
+        assert_eq!(floats_compared(&two, at(2), CompareOp::Ge, &ctx), None);
+        assert_eq!(
+            floats_compared(&evaluate(py, "2"), at(0), CompareOp::Ge, &ctx),
+            None
+        );
+        assert_eq!(
+            floats_compared(&evaluate(py, "True"), at(0), CompareOp::Ge, &ctx),
             None
         );
     });

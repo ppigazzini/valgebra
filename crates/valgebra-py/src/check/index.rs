@@ -2,7 +2,7 @@
 //! tables, and compiled string patterns, built once and reused across calls.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyInt, PyString};
+use pyo3::types::{PyFloat, PyInt, PyString};
 use regex_automata::util::syntax;
 use regex_automata::{MatchKind, meta};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -487,9 +487,46 @@ pub(crate) struct ValidatorIndex {
     /// Which definitions a walk may remember at a value, and which nodes arm
     /// the memo ([`MemoPlan`]). Empty for a schema with no definitions.
     pub(crate) memo: MemoPlan,
+    /// What each order bound's operand is as a float, at its place in the pool,
+    /// where one holds it exactly ([`float_operand`]). A slot past the table
+    /// holds none, and a schema with no order bound has no table, so no answer
+    /// depends on it: the rich comparison reads what it does not hold.
+    float_operands: Vec<Option<f64>>,
 }
 
 impl ValidatorIndex {
+    /// The float the order bound's operand at `slot` is exactly, where the index
+    /// holds one.
+    #[inline]
+    pub(crate) fn float_operand(&self, slot: usize) -> Option<f64> {
+        self.float_operands.get(slot).copied().flatten()
+    }
+
+    /// Hold what the operand of the order bound `constraint` is as a float, read
+    /// out of the pool. Any other constraint holds none.
+    fn hold_float_operand(&mut self, constraint: &Constraint, pool: &[Py<PyAny>], py: Python<'_>) {
+        let (Constraint::Ge(index)
+        | Constraint::Gt(index)
+        | Constraint::Le(index)
+        | Constraint::Lt(index)) = constraint
+        else {
+            return;
+        };
+        let slot = index.get();
+        let Some(float) = pool
+            .get(slot)
+            .and_then(|operand| float_operand(operand.bind(py)))
+        else {
+            return;
+        };
+        if self.float_operands.len() <= slot {
+            self.float_operands.resize(slot + 1, None);
+        }
+        if let Some(held) = self.float_operands.get_mut(slot) {
+            *held = Some(float);
+        }
+    }
+
     /// Every Python object this index owns, for the validator's `__traverse__`.
     ///
     /// The interned attribute names and the interned record keys: the other
@@ -601,6 +638,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
         Schema::Refine { base, constraints } => {
             collect(py, base, pool, index);
             for constraint in constraints.iter() {
+                index.hold_float_operand(constraint, pool, py);
                 if let Constraint::Regex(pattern) = constraint
                     && let Entry::Vacant(slot) = index.regexes.entry(pattern.as_ptr() as usize)
                     && let Ok(compiled) = program(pattern)
@@ -632,6 +670,31 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
         }
         _ => {}
     }
+}
+
+/// The float `operand` is exactly: an exact `float`, or an exact `int` a float
+/// holds without rounding, and `None` for anything else.
+///
+/// An order bound over an exact `float` compares two numbers, whatever the other
+/// is, and asks nothing else of either, so where the operand is one of these the
+/// comparison is the two floats' own, `nan` refused by all four bounds as Python
+/// refuses it. An `int` up to `2^53` is read as itself, and past it two integers
+/// round to one float, which would read a value between them as equal to the
+/// bound. A subclass may answer a comparison with code of its own, and a `bool`
+/// is left to the comparison for no gain: neither is exact.
+pub(crate) fn float_operand(operand: &Bound<'_, PyAny>) -> Option<f64> {
+    if let Ok(float) = operand.cast_exact::<PyFloat>() {
+        return Some(float.value());
+    }
+    if !operand.is_exact_instance_of::<PyInt>() {
+        return None;
+    }
+    let whole = operand.extract::<i64>().ok()?;
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "an integer of at most 2^53 is a float exactly"
+    )]
+    (whole.unsigned_abs() <= 1 << 53).then_some(whole as f64)
 }
 
 /// Build a [`UnionPlan`] when every union member is a literal, bucketing the

@@ -194,6 +194,14 @@ hundred records whose record holds a list reads 1.3% more instructions on the
 profiled wheel. So the workload reads its lists of records at the weight a
 document's records are read with, one of them of records holding a list.
 
+A path's weight moves a path it does not touch. Trained at 2,000 rounds, a list of
+refined floats reads the list nested twenty-five deep 6% to 9% dearer in cycles at
+one count, the instructions on that list's path the same and laid out otherwise, on
+two builds of one tree. At 500 rounds that list reads between 1% cheaper and 4% dearer
+across two builds, the spread of a shape of that size, for 3% more instructions on the
+floats, and untrained the floats read 54% fewer instructions than through the rich
+comparison where trained they read 69%.
+
 A parsed JSON array of records is read through a loop of its own
 (`record_array_matches`), and untrained it is laid out by chance too: two builds
 of one source read the comparison gate's document 10% apart in instructions, and
@@ -726,6 +734,15 @@ program that builds validators per request, and to no validation call.
   frame rather than copied onto the stack once per constraint: a thousand
   integers under two bounds cost 11% fewer instructions, a thousand strings
   under two length bounds 17%.
+- **An order bound over a float compares two floats.** An exact `float` under an
+  operand a float holds exactly, an exact `float` or an exact `int` up to `2^53`, is
+  the two read where they lie, and no Python runs (`floats_compared` in
+  `check/walk/scalar.rs`, with the operands read once a validator by `float_operand`
+  in `check/index.rs`). A thousand floats under one bound read 69% fewer instructions
+  on the profiled CPython 3.15 wheel, `--binding-refined-float` 52% on the build
+  without a profile, and a record of two such fields beside a refined `int` 18%. Any
+  other value pays a load and a comparison, and a test holds the reading to the
+  comparison over every bound, a value of every kind and an operand of every kind.
 - **An error the walk answers with is dropped out of line.** Dropping one asks
   whether the thread is attached to the interpreter, a thread-local the
   extension reaches through a call into the dynamic linker, and inlined into a
@@ -1316,9 +1333,10 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   on `--binding-refined`, since reading a Python integer out costs more than the
   rich comparison it would replace. Read once per value and once per bound as
   a machine word, it is still 4.6% dearer on CPython 3.14, and an `int` past
-  the word raises on every read, nearly four times the cost; only a `float`,
-  whose value is a field, reads cheaper. A list reads its bounds once and stops
-  reading words at the first that raises, which is what makes
+  the word raises on every read, nearly four times the cost. A `float`, whose value
+  is a field and whose read cannot raise, is taken
+  ([Walking a Python value](#walking-a-python-value)), and a list reads its bounds
+  once and stops reading words at the first that raises, which is what makes
   [a list's range](#sequences-and-sets) a gain.
 - **A JSON string cache of keys only, or none**: jiter's default caches every
   string it parses, and parsing alone on CPython 3.14, a 1.5 MiB document of
