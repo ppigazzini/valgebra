@@ -348,6 +348,30 @@ impl Schema {
         refused && self.verdict_rec(cx) == Verdict::Inhabited
     }
 
+    /// Whether this sequence's repeated element holds no value, which leaves it the
+    /// values of its prefix alone [Cas23, fn. 11], and that length meets every one of
+    /// `constraints`: `list[μt. tuple[t]]` holds `[]` alone, and so is below
+    /// `Annotated[list[int], MaxLen(0)]` wherever it is below `list[int]`.
+    #[inline(never)]
+    pub(super) fn holds_its_prefix_alone_within(
+        &self,
+        constraints: &[Constraint],
+        cx: &mut Cx<'_>,
+    ) -> bool {
+        let Schema::Seq { shape, .. } = self else {
+            return false;
+        };
+        let Some(tail) = shape.tail.as_deref() else {
+            return false;
+        };
+        let length = shape.prefix.len();
+        constraints.iter().all(|constraint| match constraint {
+            Constraint::MinLen(least) => length >= *least,
+            Constraint::MaxLen(most) => length <= *most,
+            _ => false,
+        }) && tail.verdict_rec(cx) == Verdict::Empty
+    }
+
     /// Whether a refinement holding a value of every length its bounds admit
     /// holds one the supertype's length bounds refuse.
     ///

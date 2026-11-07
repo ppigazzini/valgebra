@@ -1165,6 +1165,12 @@ answers it loses none. `holds_parts` stays as it is for a refinement over a cons
 reading those too moved `Annotated[list[B3], Len(1, 1)]` below `nothing` and read 22.8%
 more on `--decision-matrix`.
 
+**A position or a clause holding no value is read in the last asking.** `list[t]` for a `t`
+with no finite value holds `[]` alone (`holds_its_prefix_alone_within`), and a clause with
+no value carries no entry [Cas23, fn. 11], where a set reading cuts `t` to a top and finds a
+value. Asked in the last asking alone, since a position rarely holds none and the verdict
+costs a goal's steps.
+
 **A mapping keyed by a class or a shape reads no single entry, refused.**
 `dict[K, str]` below `{}` holds `{K(): ""}`, which the supertype refuses, and declines. Its
 one witness is a key that hashes, and what says so of a class is a new question on

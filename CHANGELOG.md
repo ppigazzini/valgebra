@@ -27,10 +27,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a refinement only the sets read holds a value a refutation stands on
 - feat: a set of one member and a mapping of its required fields hold a value
 - feat: a mapping's own lengths refuse a length its subject holds
+- feat: a position or a clause holding no value is read as what it leaves
 
 -->
 
 ### Added
+
+- **A position or a clause holding no value is read as what it leaves.** `list[N]`, for an `N` with
+  no finite value such as `recursive(lambda t: tuple[t])`, is `subset` of `Annotated[list[int],
+  MaxLen(0)]`, and `dict[str, N]` of `{}`, where they stayed `undecided`.
 
 - **A mapping's own lengths refuse a length its subject holds.** `Annotated[dict, MaxLen(2)]`,
   `Annotated[dict, MinLen(1)]` and `Annotated[dict[str, int], MinLen(1)]` are `not_subset` of `{}`,

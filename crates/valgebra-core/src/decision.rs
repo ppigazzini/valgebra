@@ -2831,8 +2831,9 @@ impl Schema {
                 // hold lengths, so every other subject pays the one test.
                 Schema::Refine { base, constraints } => {
                     let below = self.is_subtype_rec(base, cx);
-                    if matches!(self, Schema::Coll { .. } | Schema::KeyedMap { .. })
-                        && self.lengths_entail(constraints, cx.oracle)
+                    if (matches!(self, Schema::Coll { .. } | Schema::KeyedMap { .. })
+                        && self.lengths_entail(constraints, cx.oracle))
+                        || (cx.reads_leaves && self.holds_its_prefix_alone_within(constraints, cx))
                     {
                         below
                     } else {

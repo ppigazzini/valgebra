@@ -14090,3 +14090,86 @@ mod one_member {
         assert_ne!(holding(&at_least(unread, 1)), Relation::Fails);
     }
 }
+
+/// What a position or a clause holding no value leaves of a container.
+mod an_empty_position {
+    use super::*;
+
+    /// `μt. tuple[t]`, which no finite value is in.
+    fn no_value() -> (Schema, [Schema; 1]) {
+        let at = Schema::Ref(DefIx::new(0));
+        let tuple = Schema::tuple(SeqShape::fixed(vec![at.clone()]));
+        (at, [tuple])
+    }
+
+    fn list_of(element: Schema) -> Schema {
+        Schema::list(SeqShape::homogeneous(element))
+    }
+
+    /// An element with no value leaves the empty list, inside a maximum of zero, and
+    /// a minimum it misses declines.
+    #[test]
+    fn a_list_of_no_value_holds_the_empty_list_alone() {
+        let (at, defs) = no_value();
+        let empty = Schema::refine(list_of(Schema::Int), vec![Constraint::MaxLen(0)]);
+        let subject = list_of(at);
+        assert_eq!(
+            subject.subtype_relation_under(&empty, &Pure, &defs),
+            Relation::Holds
+        );
+        let some = Schema::refine(list_of(Schema::Int), vec![Constraint::MinLen(1)]);
+        assert_ne!(
+            subject.subtype_relation_under(&some, &Pure, &defs),
+            Relation::Holds
+        );
+    }
+
+    #[test]
+    fn the_prefix_alone_is_read_only_of_a_tail_with_no_value() {
+        let (at, defs) = no_value();
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &defs, &budget);
+        let most = [Constraint::MaxLen(0)];
+        assert!(list_of(at).holds_its_prefix_alone_within(&most, &mut cx));
+        assert!(!list_of(Schema::Int).holds_its_prefix_alone_within(&most, &mut cx));
+        assert!(!Schema::Int.holds_its_prefix_alone_within(&most, &mut cx));
+        let fixed = Schema::list(SeqShape::fixed(vec![Schema::Int]));
+        assert!(!fixed.holds_its_prefix_alone_within(&most, &mut cx));
+        // A prefix meets a minimum up to its own length, and no further.
+        let (defs_at, defs) = no_value();
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &defs, &budget);
+        let prefixed = Schema::list(SeqShape {
+            prefix: vec![Schema::Int].into(),
+            tail: Some(Arc::new(defs_at)),
+        });
+        let within = |least: usize| [Constraint::MinLen(least), Constraint::MaxLen(1)];
+        assert!(prefixed.holds_its_prefix_alone_within(&within(1), &mut cx));
+        assert!(!prefixed.holds_its_prefix_alone_within(&within(2), &mut cx));
+    }
+
+    /// A clause with no value carries no entry, so nothing is left for the supertype
+    /// to refuse. A clause holding a value is refused as before.
+    #[test]
+    fn a_clause_of_no_value_carries_no_entry() {
+        let (at, defs) = no_value();
+        let closed = Schema::keyed_map(Vec::new(), Vec::new());
+        let clause = |value: Schema| {
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value,
+                }],
+            )
+        };
+        assert_eq!(
+            clause(at).subtype_relation_under(&closed, &Pure, &defs),
+            Relation::Holds
+        );
+        assert_eq!(
+            clause(Schema::Int).subtype_relation_under(&closed, &Pure, &defs),
+            Relation::Fails
+        );
+    }
+}

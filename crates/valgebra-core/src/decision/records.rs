@@ -342,6 +342,11 @@ pub(super) fn keyed_map_subtype(
             return Relation::Fails;
         }
         let defaults = Relation::all(da.iter().map(|mine| {
+            // A clause holding no value carries no entry [Cas23, fn. 11], read in
+            // the last asking, since a clause rarely holds none.
+            if cx.reads_leaves && mine.value.verdict_rec(cx) == Verdict::Empty {
+                return Relation::Holds;
+            }
             // One clause of `b` subsuming this one settles it. None of them
             // doing so is not yet a refutation -- the clause may be covered by
             // several of `b`'s between them, or by a clause pair the rules
