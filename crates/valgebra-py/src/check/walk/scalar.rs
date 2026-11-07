@@ -790,6 +790,24 @@ fn check_constraint(
     }
 }
 
+/// What one constraint asks, as its own failure names it, for a label naming the
+/// refinement it stands in: `>= 10`, `length <= 2`.
+pub(super) fn constraint_label(constraint: &Constraint, ctx: Ctx<'_>, py: Python<'_>) -> String {
+    let operand = |index: OperandIx| operand_at(ctx, index, py);
+    let expected = match constraint {
+        Constraint::Ge(i) => operand(*i).map(|bound| Expected::Order(">=", bound)),
+        Constraint::Gt(i) => operand(*i).map(|bound| Expected::Order(">", bound)),
+        Constraint::Le(i) => operand(*i).map(|bound| Expected::Order("<=", bound)),
+        Constraint::Lt(i) => operand(*i).map(|bound| Expected::Order("<", bound)),
+        Constraint::MultipleOf(i) => operand(*i).map(Expected::Multiple),
+        Constraint::MinLen(n) => Some(Expected::Length(">=", *n)),
+        Constraint::MaxLen(n) => Some(Expected::Length("<=", *n)),
+        Constraint::Regex(pattern) => Some(Expected::Pattern(pattern)),
+        Constraint::Predicate(_) => None,
+    };
+    expected.map_or_else(|| "a predicate".to_owned(), |expected| expected.render(ctx))
+}
+
 /// `ok`, with the failure it is recorded where the walk explains one. What
 /// the failure says is built past that test, so a passing value -- and every
 /// value a walk that only decides reads -- names no operand.

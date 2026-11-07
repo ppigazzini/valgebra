@@ -475,7 +475,11 @@ Messages and codes follow a fixed style so they stay predictable:
   the prose. Codes do not change meaning across releases.
 - `expected` names the set, `value` is a short repr of what was found, truncated
   so a large value cannot flood the message. A union names each of its branches,
-  bounded, as each would name itself alone.
+  bounded, as each would name itself alone, a refined branch its base and its
+  bounds: `one of: int and >= 10, int and < 0`, and a complement what it excludes:
+  `not (int and >= 0)`. Clauses are a disjunction, so a key several of a mapping's
+  clauses hold names each of their values the same way, a key one holds is refused by
+  its value, and a key none holds is the failure alone.
 - A `complement`, and a `union` on which no branch makes progress, report at the
   location of the combinator. A union whose closest branch descended into the
   value reports that branch's failures, never a discarded branch's.

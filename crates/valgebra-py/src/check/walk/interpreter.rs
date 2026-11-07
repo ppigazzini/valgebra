@@ -363,6 +363,81 @@ fn a_union_names_its_branches_by_their_constants() {
     });
 }
 
+/// A refined branch names its base and each of its constraints, in the words its
+/// own failure uses, so a value of the base is not called outside it.
+#[test]
+fn a_refined_branch_names_its_base_and_its_bounds() {
+    Python::attach(|py| {
+        let pool = vec![
+            PyInt::new(py, 10).into_any().unbind(),
+            PyInt::new(py, 0).into_any().unbind(),
+        ];
+        let refine = |base: Schema, constraint: Constraint| Schema::Refine {
+            base: Arc::new(base),
+            constraints: vec![constraint].into(),
+        };
+        let at_least = refine(Schema::Int, Constraint::Ge(OperandIx::new(0)));
+        let below = refine(Schema::Int, Constraint::Lt(OperandIx::new(1)));
+        let either = Schema::Union(vec![at_least.clone(), below].into());
+        let value = PyInt::new(py, 5).into_any();
+        let (valid, violations) = explain(py, &either, &value, &pool, &[]);
+        assert!(!valid);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].expected, "one of: int and >= 10, int and < 0");
+        let outside = Schema::Complement(Arc::new(at_least));
+        let value = PyInt::new(py, 12).into_any();
+        let (valid, violations) = explain(py, &outside, &value, &pool, &[]);
+        assert!(!valid);
+        assert_eq!(violations[0].expected, "not (int and >= 10)");
+    });
+}
+
+/// Clauses are a disjunction: a key several hold names each of their values, a key
+/// one holds is refused by its value, and a key none holds is the failure alone.
+#[test]
+fn a_refusal_names_each_clause_reading_a_key() {
+    Python::attach(|py| {
+        let pattern = |text: &str| Schema::Refine {
+            base: Arc::new(Schema::Str),
+            constraints: vec![Constraint::Regex(text.to_owned())].into(),
+        };
+        let words = Schema::keyed_map(
+            Vec::new(),
+            vec![
+                MapClause {
+                    key: pattern("a.*"),
+                    value: Schema::Int,
+                },
+                MapClause {
+                    key: pattern(".*z"),
+                    value: Schema::Str,
+                },
+            ],
+        );
+        let refused = |key: &str, value: Bound<'_, PyAny>| {
+            let held = PyDict::new(py);
+            held.set_item(key, value).expect("a str key");
+            explain(py, &words, held.as_any(), &[], &[])
+        };
+        let (valid, violations) = refused("az", PyFloat::new(py, 1.5).into_any());
+        assert!(!valid);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "union_error");
+        // In the order a map's clauses are canonical in, by key.
+        assert_eq!(violations[0].expected, "one of: str, int");
+        let (valid, violations) = refused("a", PyString::new(py, "s").into_any());
+        assert!(!valid);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "int_type");
+        let (valid, violations) = refused("b", PyInt::new(py, 1).into_any());
+        assert!(!valid);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert_eq!(violations[0].code, "union_error");
+        assert!(violations[0].expected.contains("'a.*'"));
+        assert!(violations[0].expected.contains("'.*z'"));
+    });
+}
+
 /// A meet collects every member's failure until one rejects the value
 /// *itself*, and then stops: what a later member would say describes a value
 /// already known to be the wrong kind of thing. A member that fails *inside*
