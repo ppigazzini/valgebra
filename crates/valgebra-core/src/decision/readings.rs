@@ -754,6 +754,29 @@ impl Schema {
         possibly(self, &mut KindWalk::new(oracle, defs, false))
     }
 
+    /// Whether this schema is a table with no constant of some builtin kind `other`
+    /// holds no value of: a plain value of that kind is of no constant's exact type,
+    /// so it is outside the table, and outside `other`. A constant of the kind leaves
+    /// that kind unread, though a table is finite and the kind need not be.
+    pub(super) fn plain_kind_beside_a_table(&self, other: &Schema, cx: &Cx<'_>) -> bool {
+        let Some(constants) = super::literals::literal_constants(self) else {
+            return false;
+        };
+        let mut named = 0;
+        for constant in constants.iter() {
+            match cx.oracle.literal_kind(*constant) {
+                Some(kind) => named |= bit(kind),
+                // A constant the bindings decline may be a plain value of any
+                // kind, so no kind is read beside the table.
+                None if !cx.oracle.literal_of_no_kind(*constant) => return false,
+                None => {}
+            }
+        }
+        Kind::ALL
+            .iter()
+            .any(|kind| named & bit(*kind) == 0 && other.holds_no_value_of(*kind, cx.oracle))
+    }
+
     /// A concrete type tag for nodes whose disjointness the core can decide
     /// soundly. `None` for nodes it cannot (`Literal`/`Instance`/`Any`/...).
     pub(super) fn type_tag(&self) -> Option<Kind> {

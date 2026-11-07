@@ -40,10 +40,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a sequence's length bound names the positions its values hold
 - feat: a set's own lengths refuse a length its subject holds
 - feat: two attribute records share no value where a shared attribute holds none
+- feat: the complement of a table holds a plain value of another kind
 
 -->
 
 ### Added
+
+- **The complement of a table holds a plain value of a kind it has no constant of.**
+  `complement(Literal[Color.RED])` is `not_subset` of `str`, on `None`, and of `union(str, int)`,
+  where each stayed `undecided`.
 
 - **Two attribute records share no value where a shared attribute holds none.** A protocol with
   `x: Literal[Color.RED]` is `subset` of the complement of one with `x: Literal[Color.GREEN]`, where

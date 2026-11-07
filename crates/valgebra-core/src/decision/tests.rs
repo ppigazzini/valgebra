@@ -14396,15 +14396,112 @@ mod a_plain_value {
         subject.a_plain_value_outside_a_table(other, &mut cx)
     }
 
+    /// Every kind but `left_out`, held by a schema the walk reads kind by kind.
+    fn all_but(left_out: &[Kind]) -> Schema {
+        Schema::union(
+            [
+                (Kind::NoneType, Schema::NoneType),
+                (Kind::Bool, Schema::Bool),
+                (Kind::Int, Schema::Int),
+                (Kind::Float, Schema::Float),
+                (Kind::Str, Schema::Str),
+                (Kind::Bytes, Schema::Bytes),
+                (
+                    Kind::List,
+                    Schema::list(SeqShape::homogeneous(Schema::ANYTHING)),
+                ),
+                (
+                    Kind::Tuple,
+                    Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING)),
+                ),
+                (Kind::Set, Schema::set(Schema::ANYTHING)),
+                (Kind::FrozenSet, Schema::frozen_set(Schema::ANYTHING)),
+                (
+                    Kind::Dict,
+                    Schema::keyed_map(
+                        Vec::new(),
+                        vec![MapClause {
+                            key: Schema::ANYTHING,
+                            value: Schema::ANYTHING,
+                        }],
+                    ),
+                ),
+            ]
+            .into_iter()
+            .filter(|(kind, _)| !left_out.contains(kind))
+            .map(|(_, schema)| schema),
+        )
+    }
+
     /// A constant the oracle declines may be of any kind, the subject's among
     /// them, so it refutes nothing: `None` is not outside a table of one, which
-    /// is below `Literal[None]` where the constant is `None`.
+    /// is below `Literal[None]` where the constant is `None`, and the table's
+    /// complement is not outside every value but `None` on `None`, which it
+    /// holds only where the constant is not `None`.
     #[test]
     fn a_constant_the_oracle_declines_refutes_nothing() {
         let table = Schema::Literal(ConstIx::new(0));
         assert_ne!(
             Schema::NoneType.subtype_relation_under(&table, &NoLeafRelations, &[]),
             Relation::Fails
+        );
+        assert_ne!(
+            table.complement().subtype_relation_under(
+                &Schema::NoneType.complement(),
+                &NoLeafRelations,
+                &[]
+            ),
+            Relation::Fails
+        );
+    }
+
+    #[test]
+    fn the_complement_of_a_table_holds_a_plain_value_of_a_kind_it_has_no_constant_of() {
+        let beside = table(&[MEMBER]).complement();
+        assert_eq!(read(&beside, &Schema::Str), Relation::Fails);
+        assert_eq!(
+            read(&beside, &all_but(&[Kind::Bytes])),
+            Relation::Fails,
+            "the last kind read"
+        );
+        assert_eq!(read(&beside, &all_but(&[])), Relation::Unknown);
+        assert_eq!(read(&beside, &Schema::ANYTHING), Relation::Unknown);
+    }
+
+    /// A constant of a kind leaves that kind unread, and a supertype that may hold a
+    /// kind leaves it unread, so what is left is a kind neither has.
+    #[test]
+    fn a_kind_the_table_or_the_supertype_holds_is_not_read() {
+        let words = table(&[WORD, MEMBER]).complement();
+        assert_eq!(read(&words, &all_but(&[Kind::Str])), Relation::Unknown);
+        assert_eq!(
+            read(&words, &all_but(&[Kind::Int, Kind::Bool])),
+            Relation::Fails,
+            "every boolean being an integer, a supertype holding either may hold both"
+        );
+        let two_words = table(&[WORD, ConstIx::new(1)]).complement();
+        assert_eq!(read(&two_words, &all_but(&[Kind::Str])), Relation::Unknown);
+        let big = table(&[BIG]).complement();
+        assert_eq!(read(&big, &all_but(&[Kind::Int])), Relation::Unknown);
+        assert_eq!(read(&big, &all_but(&[Kind::Str])), Relation::Fails);
+    }
+
+    /// A class on the right is asked of the oracle, kind by kind: one laying down
+    /// lists alone holds no plain `None`, and one the oracle cannot say holds any.
+    #[test]
+    fn the_kinds_of_a_class_on_the_right_are_the_oracles() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&Kinded, &[], &budget);
+        let member = Schema::Literal(ConstIx::new(0));
+        assert!(member.plain_kind_beside_a_table(&Schema::Instance(ClassIx::new(0)), &cx));
+        assert!(!member.plain_kind_beside_a_table(&Schema::Instance(ClassIx::new(1)), &cx));
+    }
+
+    #[test]
+    fn the_complement_of_what_is_no_table_is_not_read() {
+        assert_eq!(
+            read(&Schema::Int.complement(), &Schema::Str),
+            Relation::Unknown
         );
     }
 
