@@ -4660,6 +4660,18 @@ PLANTS = (
         trips=("test_the_generator_draws_a_reference_wider_than_its_table",),
     ),
     Plant(
+        # The corpus reading a package the venv of the published wheel does not hold.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            "import importlib.metadata\n",
+            "import importlib.metadata\nimport annotated_types\n",
+        ),
+        trips=("test_the_corpus_imports_nothing_but_valgebra",),
+    ),
+    Plant(
         # The reference left on a release the changelog is past.
         "tests/test_metamorphic_gate.py",
         ("scripts/metamorphic_reference.json", "CHANGELOG.md"),
