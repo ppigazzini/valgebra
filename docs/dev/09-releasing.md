@@ -119,6 +119,18 @@ release waits for whatever reviewers those environments require.
    git push origin vX.Y.Z
    ```
 
+8. **Record the metamorphic reference from the published wheel**, in a commit of its
+   own:
+
+   ```bash
+   <venv holding the published wheel>/bin/python scripts/metamorphic_gate.py --record
+   ```
+
+   Every later push is held to the answers that wheel gives, so a reference left on an
+   older release holds a push to answers no user has, and a regression against the
+   last one passes. The diff is read: every move is a widening or is a change this
+   release's section says. `test_the_reference_is_the_last_release` holds the version.
+
 ## Checking an index (steps 4 and 6)
 
 The workflow's smoke jobs prove each **artifact** imports and passes the product
