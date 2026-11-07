@@ -15,7 +15,7 @@ import sys
 import typing
 from decimal import Decimal, FloatOperation, localcontext
 from fractions import Fraction
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import annotated_types as at
 import pytest
@@ -1370,3 +1370,38 @@ def test_a_relation_over_float_steps_answers_as_the_walk_does(
     # A value the walk finds outside is a refutation no proof may contradict.
     if any(not b.is_valid(value) for value in held_by_a):
         assert answer != "subset", (a, b)
+
+
+def test_a_float_refinement_holds_a_value_a_refutation_stands_on() -> None:
+    """The sets read the interval, whatever kind of number bounds it."""
+    half = Annotated[float, at.Ge(Fraction(5, 16))]
+    assert Validator(half).relation_to(Literal[9223372036854775808]) == "not_subset"
+    assert (
+        Validator(Annotated[set[half], at.MinLen(1)]).relation_to(nothing)
+        == "not_subset"
+    )
+    none = Annotated[float, at.Ge(1.3125), at.Le(0.3125)]
+    assert Validator(none).relation_to(nothing) == "subset"
+
+
+# Steps no other test writes: `typing` caches an `Annotated` by its metadata's `==`,
+# and `MultipleOf(2.0)` is `MultipleOf(2)` to that cache.
+@pytest.mark.parametrize("step", [0.0625, 1.125, 2.25, -0.375, math.inf])
+def test_zero_is_a_multiple_of_every_float_step_over_the_integers(step: float) -> None:
+    """A value needs no division, and the walk reads the same remainder."""
+    multiple = Annotated[int, at.MultipleOf(step)]
+    assert Validator(multiple).is_valid(0)
+    assert Validator(multiple).relation_to(nothing) == "not_subset"
+    assert Validator(multiple).relation_to(str) == "not_subset"
+
+
+def test_an_operand_answering_the_remainder_of_zero_is_not_read_as_a_step() -> None:
+    """A subclass's `__rmod__` is the operand's, which a relation does not read past."""
+
+    class Refusing(float):
+        def __rmod__(self, other: object) -> float:
+            return 1.0
+
+    multiple = Annotated[int, at.MultipleOf(Refusing(7.25))]
+    assert not Validator(multiple).is_valid(0)
+    assert Validator(multiple).relation_to(str) != "not_subset"

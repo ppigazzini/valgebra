@@ -171,6 +171,10 @@ answers `"undecided"`.
 
   Each stays an `isinstance` atom, which is sound for every enumeration and
   merely less complete.
+- **Zero under a float step.** Zero is a multiple of every float step a build admits,
+  so `Annotated[int, MultipleOf(0.5)]` is `not_subset` of `nothing` and of `str`, on `0`.
+  A step of another kind declines here: a `float` subclass's `__rmod__` answers the
+  remainder of an integer and may refuse zero, and no kind tells a `Decimal` from one.
 - **Divisibility between two moduli**, where it holds. Every multiple of `a` is
   a multiple of `b` when `b` divides `a`, so the two steps settle the inclusion
   between them and the size of either is beside the point: `MultipleOf(5000)`

@@ -1505,16 +1505,12 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         | Constraint::Le(index)
         | Constraint::Lt(index) => integers(integer_bound(constraint, &pool.operand(*index)?)?),
         Constraint::MultipleOf(index) => {
-            let step = match (pool.operand(*index)?, base_is_floats) {
-                (Operand::Integer(step), _) => step,
-                // `True` is the integer it is to `%`, as to a comparison; a zero
-                // step is refused before it is read.
-                (Operand::Boolean(step), _) => i64::from(step),
+            let step = match pool.operand(*index)? {
                 // A float reads a whole float step as the integer it equals. An
                 // integer does not: it is rounded to a float first, so `2.0`
                 // over an `int` base is left to the rules.
-                (Operand::Float(step), true) => whole_step(step)?,
-                _ => return None,
+                Operand::Float(_) if !base_is_floats => return None,
+                operand => step_over_floats(&operand)?,
             };
             if base_is_floats {
                 floats(FloatSet::multiples_of(step)?)
@@ -1536,6 +1532,18 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         // A callback is a leaf the core cannot read, which is what makes it
         // opaque to the procedure beside this one too.
         Constraint::Predicate(_) => None,
+    }
+}
+
+/// The integer a step over a base of floats is read as: an integer, a boolean, which
+/// is the integer it is to `%` as to a comparison, or a whole float. A zero step is
+/// refused before it is read.
+fn step_over_floats(operand: &Operand) -> Option<i64> {
+    match *operand {
+        Operand::Integer(step) => Some(step),
+        Operand::Boolean(step) => Some(i64::from(step)),
+        Operand::Float(step) => whole_step(step),
+        _ => None,
     }
 }
 
@@ -1665,20 +1673,7 @@ const I64_EDGE: f64 = 9_223_372_036_854_775_808.0;
 fn float_bound(constraint: &Constraint, operand: &Operand) -> Option<FloatSet> {
     let lower = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
     let strict = matches!(constraint, Constraint::Gt(_) | Constraint::Lt(_));
-    let value = match *operand {
-        Operand::Float(value) => Straddle::Exact(value),
-        Operand::Integer(value) => straddle(value, lower),
-        Operand::Boolean(value) => straddle(i64::from(value), lower),
-        #[expect(
-            clippy::float_cmp,
-            reason = "one float handed over twice is the value, with no arithmetic between"
-        )]
-        Operand::Rational { below, above, .. } if below == above => Straddle::Exact(below),
-        Operand::Rational { below, above, .. } => {
-            Straddle::Beside(if lower { above } else { below })
-        }
-        _ => return None,
-    };
+    let value = float_edge(lower, operand)?;
     // No float equals an inexact bound, so `>` and `>=` admit the same ones and
     // the neighbor carries what the strictness would have.
     Some(match value {
@@ -1697,6 +1692,92 @@ fn float_bound(constraint: &Constraint, operand: &Operand) -> Option<FloatSet> {
             }
         }
     })
+}
+
+/// Where a bound's operand falls among the floats, on the side `lower` keeps.
+fn float_edge(lower: bool, operand: &Operand) -> Option<Straddle> {
+    Some(match *operand {
+        Operand::Float(value) => Straddle::Exact(value),
+        Operand::Integer(value) => straddle(value, lower),
+        Operand::Boolean(value) => straddle(i64::from(value), lower),
+        #[expect(
+            clippy::float_cmp,
+            reason = "one float handed over twice is the value, with no arithmetic between"
+        )]
+        Operand::Rational { below, above, .. } if below == above => Straddle::Exact(below),
+        Operand::Rational { below, above, .. } => {
+            Straddle::Beside(if lower { above } else { below })
+        }
+        _ => return None,
+    })
+}
+
+/// Whether a float meets every constraint, each read as the lowering reads it over a
+/// base of floats: `None` where one is neither an order bound nor a step
+/// [`step_over_floats`] reads, or its operand is one the floats do not order.
+///
+/// The bounds are read at their two edges, a strict one at the float beside it, with
+/// no set built. Zero is a multiple of every step, `0.0 % k` being `0.0`, so an
+/// interval holding it holds a value whatever the steps; only steps beside an
+/// interval clear of zero are read as the sets the lowering builds.
+pub(crate) fn floats_meet(constraints: &[Constraint], pool: &dyn Constants) -> Option<bool> {
+    let (mut least, mut most) = (f64::NEG_INFINITY, f64::INFINITY);
+    let mut stepped = false;
+    for constraint in constraints {
+        let (Constraint::Ge(index)
+        | Constraint::Gt(index)
+        | Constraint::Le(index)
+        | Constraint::Lt(index)) = constraint
+        else {
+            let Constraint::MultipleOf(index) = constraint else {
+                return None;
+            };
+            step_over_floats(&pool.operand(*index)?)?;
+            stepped = true;
+            continue;
+        };
+        let lower = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
+        let edge = match float_edge(lower, &pool.operand(*index)?)? {
+            Straddle::Exact(bound) if bound.is_nan() => return None,
+            // No float lies past an infinity, so a strict bound on one holds none.
+            Straddle::Exact(bound) if matches!(constraint, Constraint::Gt(_)) => {
+                if bound == f64::INFINITY {
+                    return Some(false);
+                }
+                bound.next_up()
+            }
+            Straddle::Exact(bound) if matches!(constraint, Constraint::Lt(_)) => {
+                if bound == f64::NEG_INFINITY {
+                    return Some(false);
+                }
+                bound.next_down()
+            }
+            Straddle::Exact(bound) | Straddle::Beside(bound) => bound,
+        };
+        if lower {
+            least = least.max(edge);
+        } else {
+            most = most.min(edge);
+        }
+    }
+    if !stepped || (least <= 0.0 && 0.0 <= most) {
+        return Some(least <= most);
+    }
+    let mut floats = FloatSet::all();
+    for constraint in constraints {
+        let set = match constraint {
+            Constraint::MultipleOf(index) => {
+                FloatSet::multiples_of(step_over_floats(&pool.operand(*index)?)?)?
+            }
+            Constraint::Ge(index)
+            | Constraint::Gt(index)
+            | Constraint::Le(index)
+            | Constraint::Lt(index) => float_bound(constraint, &pool.operand(*index)?)?,
+            _ => return None,
+        };
+        floats = floats.intersect(&set)?;
+    }
+    Some(!floats.is_empty())
 }
 
 /// The values of the base's kinds whose length the bound admits.

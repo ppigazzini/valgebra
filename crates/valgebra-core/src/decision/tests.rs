@@ -550,6 +550,50 @@ fn a_union_nested_in_the_union_is_read_as_its_members() {
     }
 }
 
+/// A float refinement holds a value the rules read at its edges, in every asking, so
+/// a refutation by kind stands on it where the sets read no constant of the
+/// supertype: the bindings hand no `int` past 64 bits to the pool.
+#[test]
+fn a_float_refinement_holds_a_value_the_rules_read_at_its_edges() {
+    /// A `Fraction(5, 16)` bound, a float exactly, and a constant of `int` the pool
+    /// cannot read.
+    struct Wide;
+    impl Constants for Wide {
+        fn operand(&self, index: OperandIx) -> Option<Operand> {
+            (index.get() == 0).then_some(Operand::Rational {
+                floor: 0,
+                ceil: 1,
+                below: 0.3125,
+                above: 0.3125,
+            })
+        }
+    }
+    impl LeafRelations for Wide {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn literal_kind(&self, _: ConstIx) -> Option<Kind> {
+            Some(Kind::Int)
+        }
+    }
+    let refined = |constraint: Constraint| Schema::Refine {
+        base: Arc::new(Schema::Float),
+        constraints: vec![constraint].into(),
+    };
+    let wide = Schema::Literal(ConstIx::new(0));
+    let at = OperandIx::new(0);
+    assert_eq!(
+        refined(Constraint::Ge(at)).subtype_relation_under(&wide, &Wide, &[]),
+        Relation::Fails,
+        "a float at or past a bound is no int"
+    );
+    assert_eq!(
+        refined(Constraint::Le(at)).subtype_relation_under(&wide, &Wide, &[]),
+        Relation::Fails,
+        "nor one at or below it"
+    );
+}
+
 // THEORY: structural-rather-than-reduction, a-set-is-a-powerset
 /// The structural inclusion rules, held to their own work.
 ///

@@ -4,8 +4,9 @@ use std::sync::{Arc, LazyLock};
 use proptest::prelude::*;
 
 use super::{
-    BUDGET, Bounds, Constants, DEPTH, Operand, Room, WORK, an_empty_reading_stands, descend, lower,
-    lower_widened, lower_within, narrowed_cover, nests_past_the_depth, read_widened,
+    BUDGET, Bounds, Constants, DEPTH, Operand, Room, WORK, an_empty_reading_stands, descend,
+    floats_meet, lower, lower_widened, lower_within, narrowed_cover, nests_past_the_depth,
+    read_widened,
 };
 use crate::descr::budget;
 use crate::descr::classes::Class;
@@ -3672,6 +3673,224 @@ proptest! {
                 ..Bounds::DEFAULT
             };
             prop_assert_eq!(built, lower_within(past_any_depth, &schema, &pool), "{:?}", schema);
+        }
+    }
+}
+
+/// The operands [`floats_meet`]'s rows read, by slot: `0.5` and the float above it,
+/// both infinities, `nan`, an integer no float equals, the integer `2`, `-1.0`,
+/// `1.5`, a step past the sets' tables, a word, and `2.0`.
+fn edges_pool() -> Pool {
+    Pool(vec![
+        Operand::Float(0.5),
+        Operand::Float(0.5_f64.next_up()),
+        Operand::Float(f64::INFINITY),
+        Operand::Float(f64::NEG_INFINITY),
+        Operand::Float(f64::NAN),
+        Operand::Integer(9_007_199_254_740_993),
+        Operand::Integer(2),
+        Operand::Float(-1.0),
+        Operand::Float(1.5),
+        Operand::Integer(crate::descr::integers::MAX_PERIOD + 1),
+        Operand::Word(b"a".to_vec(), Kind::Str),
+        Operand::Float(2.0),
+    ])
+}
+
+/// Each row's constraints, [`floats_meet`]'s answer over [`edges_pool`], and why.
+type EdgeRow = (Vec<Constraint>, Option<bool>, &'static str);
+
+fn the_rows_meet_as_written(rows: Vec<EdgeRow>) {
+    let pool = edges_pool();
+    for (constraints, answer, why) in rows {
+        assert_eq!(
+            floats_meet(&constraints, &pool),
+            answer,
+            "{why}: {constraints:?}"
+        );
+    }
+}
+
+/// The bounds are read at their edges, as the lowering reads a float base: a strict
+/// bound at the float beside it, and an integer no float equals at its neighbor on
+/// the side it keeps.
+#[test]
+fn the_floats_a_list_of_bounds_meets_are_read_at_its_edges() {
+    let o = OperandIx::new;
+    let (half, past_half, inf, minus_inf, nan, wide, word) =
+        (o(0), o(1), o(2), o(3), o(4), o(5), o(10));
+    the_rows_meet_as_written(vec![
+        (vec![Constraint::Ge(half)], Some(true), "a lower bound"),
+        (
+            vec![Constraint::Ge(half), Constraint::Le(half)],
+            Some(true),
+            "one float",
+        ),
+        (
+            vec![Constraint::Gt(half), Constraint::Le(half)],
+            Some(false),
+            "a strict lower edge",
+        ),
+        (
+            vec![Constraint::Ge(half), Constraint::Lt(half)],
+            Some(false),
+            "a strict upper edge",
+        ),
+        (
+            vec![Constraint::Gt(half), Constraint::Lt(past_half)],
+            Some(false),
+            "no float between two neighbors",
+        ),
+        (
+            vec![Constraint::Gt(half), Constraint::Le(past_half)],
+            Some(true),
+            "the neighbor past a strict edge",
+        ),
+        (vec![Constraint::Ge(inf)], Some(true), "infinity is a float"),
+        (
+            vec![Constraint::Le(minus_inf)],
+            Some(true),
+            "so is its negation",
+        ),
+        (
+            vec![Constraint::Gt(inf)],
+            Some(false),
+            "none is past infinity",
+        ),
+        (
+            vec![Constraint::Lt(minus_inf)],
+            Some(false),
+            "none is below its negation",
+        ),
+        (vec![Constraint::Ge(nan)], None, "nan orders no float"),
+        (
+            vec![Constraint::Ge(wide), Constraint::Le(wide)],
+            Some(false),
+            "an integer no float equals, read from both sides",
+        ),
+        (vec![Constraint::Ge(word)], None, "a word orders no float"),
+        (
+            vec![Constraint::MinLen(1)],
+            None,
+            "a length is no order bound",
+        ),
+        (
+            vec![Constraint::Predicate(PredIx::new(0))],
+            None,
+            "a callback is read by no one",
+        ),
+    ]);
+}
+
+/// A step is read through the sets beside an interval clear of zero, and not at all
+/// beside one holding it: zero is a multiple of every step, so a step past the
+/// sets' tables holds a value there and declines elsewhere.
+#[test]
+fn the_floats_a_list_with_a_step_meets_are_read_past_zero() {
+    let o = OperandIx::new;
+    let (half, two, minus_one, one_half, vast, word, two_f) =
+        (o(0), o(6), o(7), o(8), o(9), o(10), o(11));
+    the_rows_meet_as_written(vec![
+        (
+            vec![
+                Constraint::MultipleOf(two),
+                Constraint::Ge(minus_one),
+                Constraint::Le(half),
+            ],
+            Some(true),
+            "zero is a multiple of a step",
+        ),
+        (
+            vec![
+                Constraint::MultipleOf(two_f),
+                Constraint::Ge(half),
+                Constraint::Le(one_half),
+            ],
+            Some(false),
+            "no multiple of two between a half and one and a half",
+        ),
+        (
+            vec![Constraint::MultipleOf(two), Constraint::Ge(one_half)],
+            Some(true),
+            "a multiple past a bound clear of zero",
+        ),
+        (
+            vec![Constraint::MultipleOf(vast), Constraint::Le(half)],
+            Some(true),
+            "zero holds where the sets read no table for the step",
+        ),
+        (
+            vec![Constraint::MultipleOf(vast), Constraint::Ge(half)],
+            None,
+            "past zero, a step the sets cannot read declines",
+        ),
+        (
+            vec![Constraint::MultipleOf(half)],
+            None,
+            "a step no integer equals declines",
+        ),
+        (
+            vec![Constraint::MultipleOf(word)],
+            None,
+            "a word is no step",
+        ),
+        (
+            vec![Constraint::MultipleOf(two), Constraint::MinLen(1)],
+            None,
+            "a length beside a step",
+        ),
+    ]);
+}
+
+proptest! {
+    /// Where `floats_meet` answers, it answers what the lowering's set does: a float
+    /// base under the same constraints holds a value exactly where it says one meets
+    /// them, over bounds at, beside and past the floats, both infinities, `-0.0`,
+    /// integers no float equals, and the steps the sets read.
+    #[test]
+    fn the_floats_a_list_meets_are_the_set_the_lowering_builds(
+        picks in proptest::collection::vec((0usize..5, 0usize..10), 1..4),
+    ) {
+        let operands = vec![
+            Operand::Float(0.5),
+            Operand::Float(0.5_f64.next_up()),
+            Operand::Float(-0.0),
+            Operand::Float(f64::INFINITY),
+            Operand::Float(f64::NEG_INFINITY),
+            Operand::Integer(9_007_199_254_740_993),
+            Operand::Integer(3),
+            Operand::Float(-2.5),
+            Operand::Integer(-3),
+            Operand::Float(2.0),
+        ];
+        let constraints: Vec<Constraint> = picks
+            .iter()
+            .map(|&(which, at)| {
+                let at = OperandIx::new(at);
+                match which {
+                    0 => Constraint::Ge(at),
+                    1 => Constraint::Gt(at),
+                    2 => Constraint::Le(at),
+                    3 => Constraint::Lt(at),
+                    _ => Constraint::MultipleOf(OperandIx::new([6, 9].get(at.get() % 2).copied().unwrap_or(6))),
+                }
+            })
+            .collect();
+        let pool = Pool(operands);
+        let Some(meets) = floats_meet(&constraints, &pool) else {
+            return Ok(());
+        };
+        let set = lower(
+            &Schema::Refine {
+                base: Arc::new(Schema::Float),
+                constraints: constraints.clone().into(),
+            },
+            &pool,
+        );
+        if let Some(set) = set {
+            let held = set.emptiness();
+            prop_assert_ne!(held, Verdict::Unknown, "{:?}", constraints);
+            prop_assert_eq!(meets, held == Verdict::Inhabited, "{:?}", constraints);
         }
     }
 }

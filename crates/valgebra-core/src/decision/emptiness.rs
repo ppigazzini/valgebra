@@ -22,7 +22,7 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 
 use crate::descr::classes::Reach;
-use crate::descr::lower::{Constants, an_empty_reading_stands, lower, read_widened};
+use crate::descr::lower::{Constants, an_empty_reading_stands, floats_meet, lower, read_widened};
 use crate::ir::{
     Attribute, ClassIx, ConstIx, Constraint, Constraints, Field, MapClause, REACHED, Schema,
 };
@@ -1598,6 +1598,13 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
     if matches!(base, Schema::Int) {
         return bounded_integer_verdict(constraints, cx.oracle);
     }
+    // The floats are read as the sets read them, the bounds at their edges.
+    if matches!(base, Schema::Float) {
+        return match floats_meet(constraints, cx.oracle) {
+            Some(true) => Verdict::Inhabited,
+            _ => Verdict::Unknown,
+        };
+    }
     let lengths_only = constraints
         .iter()
         .all(|c| matches!(c, Constraint::MinLen(_) | Constraint::MaxLen(_)));
@@ -1677,6 +1684,14 @@ fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations
         } else {
             Verdict::Inhabited
         };
+    }
+    // Zero is a multiple of every float step a build admits, `0 % 0.5` being `0.0`.
+    // An operand of no exact builtin type declines here: a `float` subclass's
+    // `__rmod__` answers the remainder of an integer, and may refuse zero.
+    if constraints.iter().all(|c| {
+        matches!(c, Constraint::MultipleOf(step) if oracle.operand_kind(*step) == Some(Kind::Float))
+    }) {
+        return Verdict::Inhabited;
     }
     // A constraint that is not an order bound narrows the set by something this
     // cannot read, so it names no value.
