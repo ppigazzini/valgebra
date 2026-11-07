@@ -14360,3 +14360,170 @@ mod a_plain_value {
         assert_eq!(read(&Schema::Str, &Schema::Int), Relation::Unknown);
     }
 }
+
+/// A mapping's clauses read beside a table, and over a language of keys.
+mod a_clause_beside_a_table {
+    use super::a_plain_value::{Table, WORD};
+    use super::records::{
+        a_constant_of_theirs_refuted, a_word_no_clause_reads, leaves_the_name_out_of_a_table,
+    };
+    use super::*;
+
+    const WORD_B: ConstIx = ConstIx::new(1);
+
+    fn field(name: &str) -> Field {
+        Field {
+            name: name.into(),
+            schema: Schema::Int,
+            required: false,
+        }
+    }
+
+    fn clause(key: Schema, value: Schema) -> MapClause {
+        MapClause { key, value }
+    }
+
+    fn word(text: &str) -> Schema {
+        Schema::refine(Schema::Str, vec![Constraint::Regex(text.to_owned())])
+    }
+
+    fn a_constant(mine: &MapClause, fa: &[Field], fb: &[Field], db: &[MapClause]) -> Relation {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Table, &[], &budget);
+        a_constant_of_theirs_refuted(mine, fa, fb, db, &mut None, &mut Vec::new(), &mut cx)
+    }
+
+    fn a_word(mine: &MapClause, fa: &[Field], fb: &[Field], db: &[MapClause]) -> Relation {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Table, &[], &budget);
+        a_word_no_clause_reads(mine, fa, fb, db, &mut None, &mut cx)
+    }
+
+    /// A key of every word beside keys that are tables of constants alone holds a word
+    /// none names, with no set built: a table of 4,096 words, which the sets' reading
+    /// of the language declines, is refuted as a table of one word is.
+    #[test]
+    fn a_key_of_every_word_escapes_a_table_of_any_size() {
+        /// A pool reading constant `i` as the word `w{i}`.
+        struct Words;
+        impl Constants for Words {
+            fn constant(&self, index: ConstIx) -> Option<Operand> {
+                Some(Operand::Word(
+                    format!("w{}", index.get()).into_bytes(),
+                    Kind::Str,
+                ))
+            }
+        }
+        impl LeafRelations for Words {
+            fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+                None
+            }
+            fn literal_kind(&self, _: ConstIx) -> Option<Kind> {
+                Some(Kind::Str)
+            }
+        }
+        let table = Schema::Union(
+            (0..4096)
+                .map(|at| Schema::Literal(ConstIx::new(at)))
+                .collect(),
+        );
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Words, &[], &budget);
+        let every_word = clause(Schema::Str, Schema::Int);
+        let theirs = [clause(table, Schema::Int)];
+        assert_eq!(
+            a_word_no_clause_reads(&every_word, &[], &[], &theirs, &mut None, &mut cx),
+            Relation::Fails
+        );
+        // A key of one word the table names, and keys holding every word, leave none.
+        let one_word = clause(word("w0"), Schema::Int);
+        assert_eq!(
+            a_word_no_clause_reads(&one_word, &[], &[], &theirs, &mut None, &mut cx),
+            Relation::Unknown
+        );
+        let every_key = [clause(Schema::Str, Schema::Int)];
+        assert_eq!(
+            a_word_no_clause_reads(&every_word, &[], &[], &every_key, &mut None, &mut cx),
+            Relation::Unknown
+        );
+    }
+
+    /// A constant of `b`'s, of a kind `mine` holds whole, carries a value `mine`
+    /// allows and that clause forbids, whatever other fields either side declares.
+    #[test]
+    fn a_constant_of_theirs_refutes_a_clause_holding_its_kind() {
+        let mine = clause(Schema::Str, Schema::Str);
+        let theirs = [clause(Schema::Literal(WORD), Schema::Bool)];
+        assert_eq!(a_constant(&mine, &[], &[], &theirs), Relation::Fails);
+        let other = [field("z")];
+        assert_eq!(a_constant(&mine, &other, &[], &theirs), Relation::Fails);
+        assert_eq!(a_constant(&mine, &[], &other, &theirs), Relation::Fails);
+    }
+
+    /// A key a field names is the field's, on either side, and a clause not holding
+    /// the constant's kind has no such entry.
+    #[test]
+    fn a_constant_a_field_names_or_a_clause_does_not_hold_reads_nothing() {
+        let theirs = [clause(Schema::Literal(WORD), Schema::Bool)];
+        let mine = clause(Schema::Str, Schema::Str);
+        let named = [field("a")];
+        assert_eq!(a_constant(&mine, &named, &[], &theirs), Relation::Unknown);
+        assert_eq!(a_constant(&mine, &[], &named, &theirs), Relation::Unknown);
+        let bytes = clause(Schema::Bytes, Schema::Str);
+        assert_eq!(a_constant(&bytes, &[], &[], &theirs), Relation::Unknown);
+    }
+
+    /// Two clauses reading the constant decline, each refuting on a value of its
+    /// own, and a value inside the one reader refutes nothing.
+    #[test]
+    fn a_constant_read_twice_or_inside_its_reader_refutes_nothing() {
+        let mine = clause(Schema::Str, Schema::Str);
+        let twice = [
+            clause(Schema::Literal(WORD), Schema::Bool),
+            clause(Schema::Literal(WORD), Schema::Bytes),
+        ];
+        assert_eq!(a_constant(&mine, &[], &[], &twice), Relation::Unknown);
+        let inside = [clause(Schema::Literal(WORD), Schema::Str)];
+        assert_eq!(a_constant(&mine, &[], &[], &inside), Relation::Unknown);
+    }
+
+    /// A word the keys of `b` leave out is an entry no clause reads, with no field
+    /// beside it to read the word first.
+    #[test]
+    fn a_word_no_clause_reads_refutes() {
+        let mine = clause(word("a|b"), Schema::Int);
+        let theirs = [clause(word("a"), Schema::Int)];
+        assert_eq!(a_word(&mine, &[], &[], &theirs), Relation::Fails);
+        let named = [field("z")];
+        assert_eq!(a_word(&mine, &named, &[], &theirs), Relation::Unknown);
+        assert_eq!(a_word(&mine, &[], &named, &theirs), Relation::Unknown);
+        // Inside the keys of `b` no word is left out, and a key of another kind may
+        // not hash.
+        let inside = clause(word("a"), Schema::Int);
+        let wider = [clause(word("a|b"), Schema::Int)];
+        assert_eq!(a_word(&inside, &[], &[], &wider), Relation::Unknown);
+        let items = clause(
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::Int,
+        );
+        assert_eq!(a_word(&items, &[], &[], &theirs), Relation::Unknown);
+    }
+
+    /// The complement of a table holds a name the table leaves out, and of a whole
+    /// kind it says nothing a name can read.
+    #[test]
+    fn a_tables_complement_holds_a_name_it_leaves_out() {
+        let outside = Schema::Literal(WORD).complement();
+        assert!(leaves_the_name_out_of_a_table(&outside, "b", &Table));
+        assert!(!leaves_the_name_out_of_a_table(&outside, "a", &Table));
+        let both =
+            Schema::Union(vec![Schema::Literal(WORD), Schema::Literal(WORD_B)].into()).complement();
+        assert!(!leaves_the_name_out_of_a_table(&both, "b", &Table));
+        assert!(!leaves_the_name_out_of_a_table(
+            &Schema::Str.complement(),
+            "b",
+            &Table
+        ));
+        assert!(!leaves_the_name_out_of_a_table(&Schema::Str, "b", &Table));
+    }
+}

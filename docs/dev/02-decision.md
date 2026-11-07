@@ -1169,6 +1169,19 @@ answers it loses none. `holds_parts` stays as it is for a refinement over a cons
 reading those too moved `Annotated[list[B3], Len(1, 1)]` below `nothing` and read 22.8%
 more on `--decision-matrix`.
 
+**A key read beside a table.** `open` writes a literal key's complement beside it, which
+reads no constant of that table, so a clause of `b` holding a constant has one reader
+(`read_once`), and `{Literal["a"]: str}` opened is refuted below the same over `bool`, on
+`{"a": "s"}`. In the last asking two more keys refute: a constant a clause of `b` names, of
+a kind `mine` holds whole (`a_constant_of_theirs_refuted`), and a word of a language the
+keys of `b` leave out, read by the sets alone, with no field beside it to read the word
+(`a_word_no_clause_reads`), which is what a recursion over narrowed keys stops the pair's
+own reading short of. A key of every word beside keys that are tables of constants alone
+holds such a word with no set built, the words being without end: read by the sets,
+`dict[str, int]` below a table of 1,024 words declined in twice 0.0.24's time. The
+complement of a table holds every key equal to a name it leaves out, a literal pinning its
+text, so `{"b": str}` is below `{~Literal["a"]: anything}`.
+
 **A float refinement is read by the rules at its edges.** An order bound over a float is
 one interval, and a refutation over it stands on its value: `Annotated[float, Ge(Fraction(1,
 2))]` below `Literal[2**63]` declined. `refinement_verdict` reads a float base as the sets

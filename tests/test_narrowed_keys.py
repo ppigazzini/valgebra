@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import itertools
 import json
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import annotated_types as at
 import pytest
@@ -24,6 +24,7 @@ from valgebra import (
     complement,
     intersection,
     nothing,
+    recursive,
     union,
 )
 
@@ -365,3 +366,55 @@ def test_a_key_keeping_the_hash_of_its_text_stands_against_no_proof() -> None:
     assert narrowed.relation_to(record) == "subset"
     assert narrowed.is_valid({Plain("a"): 1})
     assert record.is_valid({Plain("a"): 1})
+
+
+def test_a_clause_keyed_by_a_literal_is_refuted_beside_its_complement() -> None:
+    """`open` writes the complement beside a literal key, which reads no constant."""
+    one: Any = Literal["a"]
+    assert (
+        Validator({one: str}).open().relation_to(Validator({one: bool}).open())
+        == "not_subset"
+    )
+    assert (
+        Validator({one: bool}).open().relation_to(Validator({one: int}).open())
+        == "subset"
+    )
+    assert (
+        Validator({}).open().relation_to(Validator({one: bool}).open()) == "not_subset"
+    )
+    assert not Validator({one: bool}).open().is_valid({"a": "s"})
+    assert Validator({}).open().is_valid({"a": "s"})
+
+
+def test_a_name_a_table_leaves_out_is_held_by_its_complement() -> None:
+    """A literal pins its text, so no key equal to another name is in the table."""
+    one: Any = Literal["a"]
+    outside = {complement(one): anything}
+    assert Validator({"b": str}).relation_to(outside) == "subset"
+    assert Validator({"a": str}).relation_to(outside) != "subset"
+    assert Validator({"b": str}).is_valid({"b": "s"})
+    assert Validator(outside).is_valid({"b": "s"})
+    assert not Validator(outside).is_valid({"a": "s"})
+
+
+@pytest.mark.parametrize(
+    ("wide", "narrow", "witness"),
+    [
+        (Annotated[str, Regex("a|b")], Annotated[str, Regex("a")], {"b": 1}),
+        (Annotated[str, at.MinLen(1)], Annotated[str, at.MinLen(2)], {"a": 1}),
+    ],
+)
+def test_a_word_no_clause_reads_refutes_a_recursion_over_its_keys(
+    wide: Any,
+    narrow: Any,
+    witness: dict[str, int],
+) -> None:
+    """The sets stop at the fixpoint, and read the two key languages alone."""
+
+    def keyed(key: Any) -> Validator[Any]:
+        return recursive(lambda s: union(int, {key: s}))
+
+    assert keyed(wide).is_valid(witness)
+    assert not keyed(narrow).is_valid(witness)
+    assert keyed(wide).relation_to(keyed(narrow)) == "not_subset"
+    assert keyed(narrow).relation_to(keyed(wide)) != "not_subset"
