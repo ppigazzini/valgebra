@@ -14612,3 +14612,48 @@ mod one_refinement {
         );
     }
 }
+
+mod attributes_apart {
+    use super::*;
+
+    fn carrying(fields: Vec<(&str, Schema)>) -> Schema {
+        Schema::attr_record(
+            fields
+                .into_iter()
+                .map(|(name, schema)| attribute(name, schema))
+                .collect(),
+        )
+    }
+
+    fn apart(left: &Schema, right: &Schema) -> bool {
+        left.disjoint_with(right, &NoLeafRelations)
+    }
+
+    #[test]
+    fn two_records_of_attributes_share_no_value_where_a_shared_one_holds_none() {
+        let (ints, words) = (
+            carrying(vec![("x", Schema::Int)]),
+            carrying(vec![("x", Schema::Str)]),
+        );
+        assert!(apart(&ints, &words));
+        assert_eq!(
+            ints.subtype_relation_under(&words.clone().complement(), &NoLeafRelations, &[]),
+            Relation::Holds
+        );
+        let both = carrying(vec![("w", Schema::Int), ("x", Schema::Int)]);
+        let last = carrying(vec![("x", Schema::Str), ("y", Schema::Str)]);
+        assert!(apart(&both, &last));
+        assert!(apart(&last, &both));
+    }
+
+    #[test]
+    fn an_attribute_only_one_carries_or_both_can_hold_leaves_them_a_value() {
+        let ints = carrying(vec![("x", Schema::Int)]);
+        assert!(!apart(&ints, &carrying(vec![("y", Schema::Str)])));
+        assert!(!apart(&ints, &carrying(vec![("x", Schema::Bool)])));
+        assert!(!apart(
+            &carrying(vec![("w", Schema::Str), ("x", Schema::Int)]),
+            &carrying(vec![("w", Schema::Str), ("x", Schema::Bool)]),
+        ));
+    }
+}

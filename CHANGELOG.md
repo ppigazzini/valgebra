@@ -39,10 +39,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet of refinements of one base is read as the one they are
 - feat: a sequence's length bound names the positions its values hold
 - feat: a set's own lengths refuse a length its subject holds
+- feat: two attribute records share no value where a shared attribute holds none
 
 -->
 
 ### Added
+
+- **Two attribute records share no value where a shared attribute holds none.** A protocol with
+  `x: Literal[Color.RED]` is `subset` of the complement of one with `x: Literal[Color.GREEN]`, where
+  it stayed `undecided`, as two records requiring one key already read.
 
 - **A meet of refinements of one base is read as the one they are.**
   `intersection(Annotated[dict, MaxLen(2)], Annotated[dict, MinLen(2), MaxLen(3)])` is `not_subset`

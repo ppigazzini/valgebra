@@ -542,7 +542,9 @@ answers `"undecided"`.
   either side holds: every value of the subject is outside the supertype. The
   disjointness read here is the one the concrete types settle -- two distinct
   builtin scalars, two distinct container kinds -- so `list[int]` is decided not
-  below `tuple[int, int]`, and a mapping not below a list. A subject with no
+  below `tuple[int, int]`, and a mapping not below a list. Two records requiring
+  one key, or carrying one attribute, share no value where the two schemas there
+  share none. A subject with no
   value is the exception the reading catches: it is below both. A **class**
   joins the comparison through the bindings, which read the builtin it derives
   from: a class built on `dict` holds mappings and nothing else, since a
