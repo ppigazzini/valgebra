@@ -1243,7 +1243,9 @@ it would refute `None` below a table whose constant is `None`, a world the
 **A position or a clause holding no value is read in the last asking.** `list[t]` for a `t`
 with no finite value holds `[]` alone (`holds_its_prefix_alone_within`), and a clause with
 no value carries no entry [Cas23, fn. 11], where a set reading cuts `t` to a top and finds a
-value. Asked in the last asking alone, since a position rarely holds none and the verdict
+value. Nor does a clause whose key holds no value, which names no key, and an optional field
+holding no value is never present, so no clause of the supertype has its entry to read.
+Asked in the last asking alone, since a position rarely holds none and the verdict
 costs a goal's steps. `sequences_meeting_in_nothing` reads the other half in an emptiness
 question of any asking: two sequences meet in nothing where a position each of their values
 has does, 1,568 answers over the drawn families, for a meet the widened reading stops one

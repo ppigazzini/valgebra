@@ -14179,6 +14179,7 @@ mod one_member {
 mod an_empty_position {
     use super::emptiness::sequences_meeting_in_nothing;
     use super::*;
+    use crate::ir::ClassIx;
 
     /// `μt. tuple[t]`, which no finite value is in.
     fn no_value() -> (Schema, [Schema; 1]) {
@@ -14231,6 +14232,69 @@ mod an_empty_position {
         let within = |least: usize| [Constraint::MinLen(least), Constraint::MaxLen(1)];
         assert!(prefixed.holds_its_prefix_alone_within(&within(1), &mut cx));
         assert!(!prefixed.holds_its_prefix_alone_within(&within(2), &mut cx));
+    }
+
+    /// A clause whose key holds no value names no key, and carries no entry: the
+    /// mapping holds `{}` alone, below the closed record and below a mapping of
+    /// another key. A key holding a value is refused as before.
+    #[test]
+    fn a_clause_whose_key_holds_no_value_carries_no_entry() {
+        let (at, defs) = no_value();
+        let closed = Schema::keyed_map(Vec::new(), Vec::new());
+        let keyed = |key: Schema| {
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key,
+                    value: Schema::Int,
+                }],
+            )
+        };
+        let apart = Schema::Intersection(vec![Schema::Str, Schema::Int].into());
+        for key in [at, apart] {
+            assert_eq!(
+                keyed(key.clone()).subtype_relation_under(&closed, &Pure, &defs),
+                Relation::Holds,
+                "{key:?}"
+            );
+        }
+        assert_eq!(
+            keyed(Schema::Str).subtype_relation_under(&closed, &Pure, &defs),
+            Relation::Fails
+        );
+    }
+
+    /// An optional field holding no value is never present, so a supertype with no
+    /// clause reading its name holds the record; a clause the rules cannot read
+    /// declined it.
+    #[test]
+    fn an_optional_field_holding_no_value_is_never_present() {
+        let (at, defs) = no_value();
+        let field = |schema: Schema| {
+            Schema::keyed_map(
+                vec![Field {
+                    name: "a".into(),
+                    schema,
+                    required: false,
+                }],
+                Vec::new(),
+            )
+        };
+        let unread = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Instance(ClassIx::new(0)),
+                value: Schema::Bool,
+            }],
+        );
+        assert_eq!(
+            field(at).subtype_relation_under(&unread, &Pure, &defs),
+            Relation::Holds
+        );
+        assert_ne!(
+            field(Schema::Int).subtype_relation_under(&unread, &Pure, &defs),
+            Relation::Holds
+        );
     }
 
     /// A clause with no value carries no entry, so nothing is left for the supertype

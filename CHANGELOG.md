@@ -47,10 +47,16 @@ answer of its own, or a repair to a change not yet released.
 - fix: the module loads in the main interpreter of a process, once
 - fix: what a marker or a class yields is read within the node bound
 - fix: an allocation Python refuses inside a call raises MemoryError
+- feat: a key or an optional field holding no value carries no entry
 
 -->
 
 ### Added
+
+- **A clause whose key holds no value and an optional field holding none carry no entry.**
+  `dict[intersection(Literal["a"], Literal["b"]), int]` and `dict[intersection(str, int), int]`
+  are `subset` of `{}`, and `{"a?": Never}` of `dict[Color, bool]`, where they stayed
+  `undecided`: each holds the empty dict alone.
 
 - **A field's name is read as a word of a clause narrowed by a language.** `{"a": int}` is `subset`
   of `recursive(lambda t: union(int, {Annotated[str, MaxLen(1)]: t}))`, as of one such mapping,

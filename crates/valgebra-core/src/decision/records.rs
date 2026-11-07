@@ -200,6 +200,15 @@ fn fields_read_by_clauses(
                 if unproved {
                     return Relation::Unknown;
                 }
+                // An optional field holding no value is never present, so no
+                // clause of `b` has its entry to read; read in the last asking,
+                // as a clause holding none is.
+                if cx.reads_leaves
+                    && !a_field.required
+                    && a_field.schema.verdict_rec(cx) == Verdict::Empty
+                {
+                    return Relation::Holds;
+                }
                 let answer = Relation::any(db.iter().map(|clause| {
                     if clause.key.holds_every_value_of(Kind::Str, cx.oracle)
                         || leaves_the_name_out_of_a_table(&clause.key, &a_field.name, cx.oracle)
@@ -368,9 +377,13 @@ pub(super) fn keyed_map_subtype(
             return Relation::Fails;
         }
         let defaults = Relation::all(da.iter().map(|mine| {
-            // A clause holding no value carries no entry [Cas23, fn. 11], read in
-            // the last asking, since a clause rarely holds none.
-            if cx.reads_leaves && mine.value.verdict_rec(cx) == Verdict::Empty {
+            // A clause holding no value carries no entry [Cas23, fn. 11], and nor
+            // does one whose key holds none: it names no key. Read in the last
+            // asking, since a clause rarely holds none.
+            if cx.reads_leaves
+                && (mine.value.verdict_rec(cx) == Verdict::Empty
+                    || mine.key.verdict_rec(cx) == Verdict::Empty)
+            {
                 return Relation::Holds;
             }
             // One clause of `b` subsuming this one settles it. None of them
