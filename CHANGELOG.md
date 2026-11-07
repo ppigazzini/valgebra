@@ -26,10 +26,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: the complement of a set proved empty is every value
 - feat: a refinement only the sets read holds a value a refutation stands on
 - feat: a set of one member and a mapping of its required fields hold a value
+- feat: a mapping's own lengths refuse a length its subject holds
 
 -->
 
 ### Added
+
+- **A mapping's own lengths refuse a length its subject holds.** `Annotated[dict, MaxLen(2)]`,
+  `Annotated[dict, MinLen(1)]` and `Annotated[dict[str, int], MinLen(1)]` are `not_subset` of `{}`,
+  on a dict of one key, where they stayed `undecided`.
 
 - **A set of one member and a mapping of its required fields hold a value.**
   `Annotated[set[tuple[int]], MinLen(1)]`, `Annotated[{"a": int}, Len(1, 1)]` and

@@ -372,8 +372,11 @@ impl Schema {
     /// branch leaves out is the same witness: a branch that is a refinement
     /// admits no length outside its bounds, whatever its base and its other
     /// constraints, and a branch holding no value of the subject's kind admits
-    /// none. Any other branch leaves the union unread. The length asked is the
-    /// least one from the subject's least that no branch's bounds admit.
+    /// none, and a mapping's lengths are the bounds its shape says without writing
+    /// them ([`lengths_held`](Self::lengths_held)): `Annotated[dict, MaxLen(2)]` holds
+    /// a dict of one key, which `{}` refuses. Any other branch leaves the union unread.
+    /// The length asked is the least one from the subject's least that no branch's
+    /// bounds admit.
     ///
     /// A base written bare is its refinement under no bound: every length is
     /// at least zero, so `str` and `Annotated[str, MinLen(0)]` are one set,
@@ -388,7 +391,7 @@ impl Schema {
             bare => (bare, &[]),
         };
         let branches = match other {
-            Schema::Refine { .. } => core::slice::from_ref(other),
+            Schema::Refine { .. } | Schema::KeyedMap { .. } => core::slice::from_ref(other),
             Schema::Union(members) => &members[..],
             _ => return false,
         };
@@ -409,6 +412,10 @@ impl Schema {
                     ..
                 } => admitted.push((shortest(theirs.iter()), longest(theirs.iter()))),
                 _ if branch.holds_no_value_of(kind, cx.oracle) => {}
+                Schema::KeyedMap { .. } => match branch.lengths_held(cx.oracle) {
+                    Some(lengths) => admitted.push(lengths),
+                    None => return false,
+                },
                 _ => return false,
             }
         }

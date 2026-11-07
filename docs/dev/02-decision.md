@@ -1165,6 +1165,13 @@ answers it loses none. `holds_parts` stays as it is for a refinement over a cons
 reading those too moved `Annotated[list[B3], Len(1, 1)]` below `nothing` and read 22.8%
 more on `--decision-matrix`.
 
+**A mapping keyed by a class or a shape reads no single entry, refused.**
+`dict[K, str]` below `{}` holds `{K(): ""}`, which the supertype refuses, and declines. Its
+one witness is a key that hashes, and what says so of a class is a new question on
+`LeafRelations`, for a row no caller has reported past a fuzz harness: a class may set
+`__hash__` to `None`, and `slice` takes no subclass to restore it. `one_item_outside` reads
+a whole kind's key, which needs no such question.
+
 **A goal the rules decline is read by the sets once, and last.** The set reading of
 a pair stops for the whole pair: at a cut, at what it cannot lower, past the depth.
 So `bool` below `Annotated[int, Lt(8)]` decides alone and declined beside a recursion,

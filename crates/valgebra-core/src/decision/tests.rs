@@ -14044,6 +14044,30 @@ mod one_member {
         }
     }
 
+    /// A mapping's own lengths leave a length out as a written bound does, of a
+    /// subject holding every length.
+    #[test]
+    fn a_mapping_refuses_a_length_its_shape_does_not_hold() {
+        let dict = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        let below =
+            |subject: &Schema, other: &Schema| subject.subtype_relation_under(other, &Pure, &[]);
+        let empty = Schema::keyed_map(Vec::new(), Vec::new());
+        let one = Schema::keyed_map(vec![field("a", Schema::Int, false)], Vec::new());
+        assert_eq!(below(&at_least(dict.clone(), 1), &empty), Relation::Fails);
+        assert_eq!(below(&at_least(dict.clone(), 2), &one), Relation::Fails);
+        // Bounds the supertype's lengths take in leave nothing out.
+        let at_most_one = Schema::refine(dict.clone(), vec![Constraint::MaxLen(1)]);
+        assert_ne!(below(&at_most_one, &one), Relation::Holds);
+        let none = Schema::refine(dict, vec![Constraint::MaxLen(0)]);
+        assert_eq!(below(&none, &empty), Relation::Holds);
+    }
+
     /// The value holding the required fields alone, under bounds admitting that many.
     #[test]
     fn a_mapping_under_bounds_admitting_its_required_fields_holds_them() {
