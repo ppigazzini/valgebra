@@ -15,8 +15,10 @@ LEDGER: every relation the metamorphic gate holds can be driven to fail
 
 from __future__ import annotations
 
+import ast
 import json
 import re
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -238,3 +240,21 @@ def test_the_reference_is_the_last_release() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text()
     released = re.findall(r"^## \[(\d+\.\d+\.\d+)\]", changelog, re.MULTILINE)
     assert reference["version"] in released[:2], (reference["version"], released[:2])
+
+
+@pytest.mark.interpreter
+def test_the_corpus_imports_nothing_but_valgebra() -> None:
+    """The bench lane records the published wheel in a venv holding nothing else.
+
+    The script reads no dependency, or that step ends "could not run", and the
+    gate holding time and memory to the release never reads a thing.
+    """
+    tree = ast.parse((ROOT / "scripts" / "metamorphic_gate.py").read_text())
+    named = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            named.update(alias.name.partition(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            named.add(node.module.partition(".")[0])
+    outside = named - sys.stdlib_module_names - {"_lib", "valgebra"}
+    assert not outside, f"the corpus imports {sorted(outside)}"

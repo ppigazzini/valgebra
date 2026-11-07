@@ -9,10 +9,12 @@ gives one constant two indices, fails it.
 """
 
 import enum
+import itertools
 import json
 import math
 from collections.abc import Callable
 from decimal import Decimal
+from types import GenericAlias
 from typing import Annotated, Any, Literal, Protocol, runtime_checkable
 
 import annotated_types as at
@@ -1632,3 +1634,40 @@ def test_a_complemented_union_is_read_by_de_morgan_below_any_supertype() -> None
     assert de_morgan.relation_to(dict) == "subset"
     assert de_morgan.relation_to(complement(not_a_dict)) == "subset"
     assert de_morgan.relation_to(list) == "not_subset"
+
+
+_KINDS = (int, str, bytes)
+_KIND_SETS = [
+    frozenset(chosen)
+    for size in (1, 2, 3)
+    for chosen in itertools.combinations(_KINDS, size)
+]
+_CONTAINERS = {
+    "list": lambda item: GenericAlias(list, (item,)),
+    "tuple": lambda item: GenericAlias(tuple, (item, ...)),
+    "set": lambda item: GenericAlias(set, (item,)),
+    "frozenset": lambda item: GenericAlias(frozenset, (item,)),
+    "dict": lambda item: GenericAlias(dict, (str, item)),
+}
+
+
+@pytest.mark.parametrize("container", sorted(_CONTAINERS))
+def test_a_container_below_a_union_of_two_is_decided_over_the_grid(
+    container: str,
+) -> None:
+    """Every value of `A`, and one of each pair outside, says the answer exactly.
+
+    A container of `A` is below a union of containers of `B` and `C` where `A` is below
+    one of them: otherwise an item outside `B` beside an item outside `C` is in neither.
+    A grid and not a draw, since a family with no such shape read no answer lost here.
+    """
+    wrap = _CONTAINERS[container]
+
+    def spelled(kinds: frozenset[type]) -> object:
+        return union(*sorted(kinds, key=lambda kind: kind.__name__))
+
+    for a, b, c in itertools.product(_KIND_SETS, repeat=3):
+        answer = Validator(wrap(spelled(a))).relation_to(
+            union(wrap(spelled(b)), wrap(spelled(c)))
+        )
+        assert answer == ("subset" if a <= b or a <= c else "not_subset"), (a, b, c)

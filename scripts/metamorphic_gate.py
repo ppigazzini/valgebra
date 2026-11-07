@@ -51,9 +51,10 @@ past it.
 schemas below, it asks a few named pairs as written, each a shape a change since
 the release made slower or lost an answer on: a tuple and a record against the
 corners that cover them, two discriminated unions, a list against a union of
-length bounds, a guarded record against the complement of a record. A pair's two
-schemas are asked of every value too, so a proof it gains is checked as any
-other.
+length bounds, a guarded record against the complement of a record, a word table
+beneath lists, sets of one literal, a dict of literal keys, a step table beneath
+a bound, a recursion holding no value. A pair's two schemas are asked of every
+value too, so a proof it gains is checked as any other.
 
 Usage:
     python scripts/metamorphic_gate.py            # compare against the reference
@@ -296,9 +297,17 @@ def _pairs(
     schema, since the shapes are wide and the question is the one that moved.
     """
     from types import GenericAlias  # noqa: PLC0415
-    from typing import Annotated, Literal  # noqa: PLC0415
+    from typing import Annotated, Literal, Protocol  # noqa: PLC0415
 
-    from valgebra import Validator, complement, intersection, union  # noqa: PLC0415
+    from valgebra import (  # noqa: PLC0415
+        Regex,
+        Validator,
+        complement,
+        intersection,
+        nothing,
+        recursive,
+        union,
+    )
 
     # A tuple of `int | str` at each position and the corners that cover it,
     # which the rules split a position at a time: six decide, eight decline.
@@ -359,7 +368,62 @@ def _pairs(
             str: Validator({"a": GenericAlias(tuple, (json_value, ...))}).close(),
         }
     )
+    # A pattern over a Unicode class beneath four lists: a product of two automata
+    # holds thousands of entries, and read for a step apiece it took seconds.
+    word = Annotated[str, Regex(r"\w*")]
+    short = Annotated[str, MinLen(3), MaxLen(4)]
+    few_bytes = Annotated[bytes, MinLen(2), MaxLen(4)]
+
+    def nested(shape: object, depth: int) -> object:
+        for _ in range(depth):
+            shape = GenericAlias(list, (shape,))
+        return shape
+
+    # 512 frozensets of one literal: every branch once lowered the subject.
+    sets_of_one = union(
+        *(GenericAlias(frozenset, (Literal.__getitem__(i),)) for i in range(512))
+    )
+    set_of_all = GenericAlias(frozenset, (Literal.__getitem__(tuple(range(512))),))
+    # A dict of 4,096 literal keys: its whole reading once read three times a decline.
+    keys_of_a_dict = GenericAlias(
+        dict, (Literal.__getitem__(tuple(f"w{i}" for i in range(4096))), int)
+    )
+
+    # A step of 4,096 beneath a list's bound: the table a build keeps per edge.
+    def stepped(top: int, least: int) -> object:
+        element = union(
+            Annotated[float, MultipleOf(1), Ge(0), Le(top)],
+            Annotated[float, MultipleOf(4096)],
+        )
+        items: Any = GenericAlias(list, (element,))
+        return Annotated[items, MinLen(least)]
+
+    # A recursion of attribute records holding no value, whose difference read as
+    # holding values both ways, to a depth that doubles.
+    def carrying(**attributes: object) -> Validator:
+        return Validator(
+            type(
+                "Carrying",
+                (Protocol,),  # ty: ignore[unsupported-dynamic-base]
+                {"__annotations__": attributes, "__module__": __name__},
+            )
+        )
+
+    no_value = carrying(
+        x=carrying(
+            x=recursive(lambda t: carrying(x=carrying(x=t, y=t), y=carrying(x=t, y=t)))
+        )
+    )
     return {
+        "a-word-table-beneath-lists": (
+            nested(GenericAlias(tuple, (word, few_bytes)), 4),
+            nested(GenericAlias(tuple, (short, few_bytes)), 4),
+        ),
+        "sets-of-one-literal": (set_of_all, sets_of_one),
+        "a-dict-of-literal-keys": (GenericAlias(dict, (str, int)), keys_of_a_dict),
+        "a-step-table-beneath-a-bound": (stepped(50000, 128), stepped(40000, 127)),
+        "below-a-recursion-of-no-value": (str, no_value),
+        "complement-of-no-value": (complement(no_value), nothing),
         "tuple-corners-6": tuple_corners(6),
         "tuple-corners-8": tuple_corners(8),
         "record-corners-6": record_corners(6),
