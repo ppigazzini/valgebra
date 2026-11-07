@@ -321,9 +321,10 @@ pub(super) fn keyed_map_subtype(
             fa.iter()
                 .filter(|a_field| b_by_name.named(&a_field.name).is_none())
                 .map(|a_field| {
-                    let covering = db
-                        .iter()
-                        .filter(|clause| clause.key.holds_every_value_of(Kind::Str, cx.oracle));
+                    let covering = db.iter().filter(|clause| {
+                        clause.key.holds_every_value_of(Kind::Str, cx.oracle)
+                            || leaves_the_name_out_of_a_table(&clause.key, &a_field.name, cx.oracle)
+                    });
                     let answer = Relation::any(
                         covering.map(|clause| a_field.schema.is_subtype_rec(&clause.value, cx)),
                     );
@@ -480,9 +481,101 @@ fn clause_by_key<'b>(
     let names_constants = literal(&mine.key)
         || matches!(&mine.key, Schema::Union(members) if members.iter().any(literal));
     if !names_constants {
+        if cx.reads_leaves {
+            return a_constant_of_theirs_refuted(
+                mine,
+                fa,
+                fb,
+                db,
+                &mut inhabited,
+                values_asked,
+                cx,
+            )
+            .or_else(|| a_word_no_clause_reads(mine, fa, fb, db, &mut inhabited, cx));
+        }
         return Relation::Unknown;
     }
     by_constants(mine, fa, fb, db, &mut inhabited, values_asked, cx)
+}
+
+/// Whether this key is the complement of a table not naming `name`, so it holds every
+/// key equal to the name: a literal pins its constant's type and its text, so none such
+/// is in the table, a `str` subclass's instance included.
+pub(super) fn leaves_the_name_out_of_a_table(
+    key: &Schema,
+    name: &str,
+    oracle: &dyn super::LeafRelations,
+) -> bool {
+    let Schema::Complement(inner) = key else {
+        return false;
+    };
+    key_cover(inner, oracle)
+        .is_some_and(|(labels, parts)| parts.is_empty() && !labels.contains(&Label::str(name)))
+}
+
+/// `Fails` where `mine`'s key is a language holding a word the keys of `b` do not, read
+/// by the sets, whose entry `b` holds no reader for: `{"b": 1}` under `Regex("a|b")` keys
+/// is refused by `Regex("a")` keys. With no field on either side, a word's entry being
+/// `mine`'s alone. A str or a bytes key hashes, as a kind's plain value does.
+pub(super) fn a_word_no_clause_reads(
+    mine: &MapClause,
+    fa: &[Field],
+    fb: &[Field],
+    db: &[MapClause],
+    inhabited: &mut Option<Relation>,
+    cx: &mut Cx<'_>,
+) -> Relation {
+    if !fa.is_empty()
+        || !fb.is_empty()
+        || !matches!(mine.key.type_tag(), Some(Kind::Str | Kind::Bytes))
+    {
+        return Relation::Unknown;
+    }
+    let keys = Schema::union(db.iter().map(|clause| clause.key.clone()));
+    if mine.key.descriptor_contained_in(&keys, cx.oracle, cx.defs) != Relation::Fails {
+        return Relation::Unknown;
+    }
+    #[cfg(test)]
+    let _crossing = super::goal_tests::goals::crossing();
+    *inhabited.get_or_insert_with(|| Relation::of_mismatch(mine.value.verdict_rec(cx)))
+}
+
+/// `Fails` where a key a clause of `b` names, of a kind `mine` holds whole, carries a
+/// value of `mine`'s that clause forbids: `{}` opened holds `{"a": "s"}`, and `{Literal["a"]:
+/// bool}` opened refuses it. A key is read as [`by_constants`] reads one, and this is the
+/// refutation alone: the other keys of the kind are not read. In the last asking, since
+/// a key of kinds is the common one and a table beside it is not.
+#[inline(never)]
+pub(super) fn a_constant_of_theirs_refuted<'b>(
+    mine: &MapClause,
+    fa: &[Field],
+    fb: &'b [Field],
+    db: &'b [MapClause],
+    inhabited: &mut Option<Relation>,
+    values_asked: &mut Vec<(&'b Schema, Relation)>,
+    cx: &mut Cx<'_>,
+) -> Relation {
+    for theirs in db {
+        let Some((labels, _)) = key_cover(&theirs.key, cx.oracle) else {
+            continue;
+        };
+        // One constant a clause: the clause reads each of its constants alike, and
+        // asked of them all a table of 4,096 read its clause 4,096 times.
+        let free = labels.into_iter().find(|label| {
+            let named = |field: &Field| Label::str(&field.name) == *label;
+            mine.key.holds_every_value_of(label.kind(), cx.oracle)
+                && !fa.iter().any(named)
+                && !fb.iter().any(named)
+        });
+        let Some(label) = free else {
+            continue;
+        };
+        let (reader, read_one_way) = read_once(&label, db, cx);
+        if read_one_way && entered(mine, reader, inhabited, values_asked, cx) == Relation::Fails {
+            return Relation::Fails;
+        }
+    }
+    Relation::Unknown
 }
 
 /// The constants `mine`'s key names, each read as a key of its own, as the
@@ -537,6 +630,13 @@ fn by_constants<'b>(
 fn read_once<'b>(label: &Label, db: &'b [MapClause], cx: &Cx<'_>) -> (Option<&'b Schema>, bool) {
     let mut reader = None;
     for theirs in db {
+        // The complement of a table holding the key does not read it, which is what
+        // `open` writes beside a literal key.
+        if let Schema::Complement(inner) = &theirs.key
+            && key_cover(inner, cx.oracle).is_some_and(|(labels, _)| labels.contains(label))
+        {
+            continue;
+        }
         let Some((labels, parts)) = key_cover(&theirs.key, cx.oracle) else {
             return (None, false);
         };

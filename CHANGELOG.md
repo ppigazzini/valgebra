@@ -32,10 +32,17 @@ answer of its own, or a repair to a change not yet released.
 - feat: a plain value of a kind is outside a table of another exact type
 - feat: a float refinement and a float step over the integers hold a value
 - feat: a class holds no boolean but through the order of bool
+- feat: a mapping's clauses are read beside a table and over a language of keys
 
 -->
 
 ### Added
+
+- **A mapping's clauses are read beside a table and over a language of keys.**
+  `Validator({Literal["a"]: str}).open()` is `not_subset` of the same over `bool`, on `{"a": "s"}`,
+  a recursion over `Annotated[str, Regex("a|b")]` keys of one over `Regex("a")`, on `{"b": 1}`, and
+  `{"b": str}` is `subset` of `{complement(Literal["a"]): anything}`, where each stayed
+  `undecided`.
 
 - **A class holds no boolean but through the order of `bool`.** `bool` takes no subclass, so
   `intersection(K, bool)` is empty and `subset` of `nothing` for a class with a plain metaclass,
