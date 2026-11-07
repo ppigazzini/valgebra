@@ -41,10 +41,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a set's own lengths refuse a length its subject holds
 - feat: two attribute records share no value where a shared attribute holds none
 - feat: the complement of a table holds a plain value of another kind
+- feat: a field's name is read as a word of a clause narrowed by a language
 
 -->
 
 ### Added
+
+- **A field's name is read as a word of a clause narrowed by a language.** `{"a": int}` is `subset`
+  of `recursive(lambda t: union(int, {Annotated[str, MaxLen(1)]: t}))`, as of one such mapping,
+  where a reference in the way left it `undecided`.
 
 - **The complement of a table holds a plain value of a kind it has no constant of.**
   `complement(Literal[Color.RED])` is `not_subset` of `str`, on `None`, and of `union(str, int)`,

@@ -14862,3 +14862,137 @@ mod attributes_apart {
         ));
     }
 }
+
+mod a_name_as_a_word {
+    use super::records::holds_the_name_as_a_word;
+    use super::*;
+
+    fn short() -> Schema {
+        Schema::refine(Schema::Str, vec![Constraint::MaxLen(1)])
+    }
+
+    /// `μt. int | {key: t}`, whose every value the sets cut at the reference.
+    fn recursion_over(keys: Vec<Schema>) -> ([Schema; 1], Schema) {
+        let at = Schema::Ref(DefIx::new(0));
+        let clauses = keys
+            .into_iter()
+            .map(|key| MapClause {
+                key,
+                value: at.clone(),
+            })
+            .collect();
+        (
+            [Schema::union([
+                Schema::Int,
+                Schema::keyed_map(Vec::new(), clauses),
+            ])],
+            at,
+        )
+    }
+
+    fn record(names: &[&str]) -> Schema {
+        Schema::keyed_map(
+            names
+                .iter()
+                .map(|name| field(name, Schema::Int, true))
+                .collect(),
+            Vec::new(),
+        )
+    }
+
+    fn below(subject: &Schema, keys: Vec<Schema>) -> Relation {
+        let (defs, at) = recursion_over(keys);
+        subject.subtype_relation_under(&at, &Pure, &defs)
+    }
+
+    #[test]
+    fn a_name_a_narrowed_clause_holds_is_read_by_that_clause() {
+        assert_eq!(below(&record(&["a"]), vec![short()]), Relation::Holds);
+        let long = Schema::refine(Schema::Str, vec![Constraint::MinLen(2)]);
+        assert_eq!(
+            below(&record(&["a", "bb"]), vec![short(), long]),
+            Relation::Holds
+        );
+        let pattern = Schema::refine(Schema::Str, vec![Constraint::Regex("a".into())]);
+        assert_eq!(below(&record(&["a"]), vec![pattern]), Relation::Holds);
+    }
+
+    #[test]
+    fn a_name_no_clause_holds_is_not_read_by_one() {
+        assert_ne!(below(&record(&["bb"]), vec![short()]), Relation::Holds);
+        let pattern = Schema::refine(Schema::Str, vec![Constraint::Regex("b".into())]);
+        assert_ne!(below(&record(&["a"]), vec![pattern]), Relation::Holds);
+    }
+
+    /// A narrowed clause leaves the fields only proofs, so the first unproved settles
+    /// them: the fields after it read nothing, whatever their number.
+    #[test]
+    fn a_field_unproved_under_a_narrowed_clause_ends_the_reading() {
+        let keyed = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: short(),
+                value: Schema::Int,
+            }],
+        );
+        let spent = |names: &[&str]| {
+            let budget = Budget::new(DECISION_BUDGET);
+            let mut cx = Cx::new(&Pure, &[], &budget);
+            cx.reads_leaves = true;
+            assert!(!record(names).is_subtype_rec(&keyed, &mut cx).holds());
+            DECISION_BUDGET - budget.left()
+        };
+        let (one, more) = (spent(&["bb"]), spent(&["bb", "cc", "dd", "ee"]));
+        assert!(
+            more - one < crate::decision::LEAF_READING,
+            "{one} steps for one field, {more} for four"
+        );
+    }
+
+    /// Where a witness stands, one field's decline leaves the next to refute.
+    #[test]
+    fn a_field_declined_under_a_witness_leaves_the_next_to_refute() {
+        let every_word = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Str,
+            }],
+        );
+        let subject = Schema::keyed_map(
+            vec![
+                field("a", Schema::Instance(ClassIx::new(9)), false),
+                field("b", Schema::Int, true),
+            ],
+            Vec::new(),
+        );
+        assert_eq!(
+            subject.subtype_relation_under(&every_word, &NoLeafRelations, &[]),
+            Relation::Fails
+        );
+    }
+
+    /// Only the last asking reads the sets, only a key of words holds a name, and the
+    /// query pays for it.
+    #[test]
+    fn the_reading_is_the_last_askings_and_is_paid_for() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        assert!(!holds_the_name_as_a_word(&short(), "a", &cx));
+        cx.reads_leaves = true;
+        assert!(holds_the_name_as_a_word(&short(), "a", &cx));
+        assert!(!holds_the_name_as_a_word(&short(), "aa", &cx));
+        let unread = Schema::refine(Schema::Str, vec![Constraint::Predicate(PredIx::new(0))]);
+        assert!(!holds_the_name_as_a_word(&unread, "a", &cx));
+        let bytes = Schema::refine(Schema::Bytes, vec![Constraint::MaxLen(1)]);
+        let left = budget.left();
+        assert!(!holds_the_name_as_a_word(&bytes, "a", &cx));
+        assert_eq!(budget.left(), left, "a key of no words pays for nothing");
+        let spent = Budget::new(0);
+        let mut poor = Cx::new(&Pure, &[], &spent);
+        poor.reads_leaves = true;
+        let met = bounds_met();
+        assert!(!holds_the_name_as_a_word(&short(), "a", &poor));
+        assert_ne!(bounds_met(), met, "a reading refused meets a bound");
+    }
+}
