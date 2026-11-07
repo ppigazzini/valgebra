@@ -1403,6 +1403,18 @@ impl Schema {
     /// identity law, settled where the schema is built like the others.
     #[must_use]
     pub fn refine(base: Schema, mut constraints: Vec<Constraint>) -> Schema {
+        // A refinement of a refinement is one: `⟦b⟧ ∩ ⟦c1⟧ ∩ ⟦c2⟧` [JV20, §3.2], which
+        // `typing` flattens where a `Validator` between the two does not.
+        let base = match base {
+            Schema::Refine {
+                base,
+                constraints: inner,
+            } => {
+                constraints.extend(inner.iter().cloned());
+                (*base).clone()
+            }
+            base => base,
+        };
         constraints.sort();
         constraints.dedup();
         if constraints.is_empty() {

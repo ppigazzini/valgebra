@@ -118,7 +118,8 @@ of it, so it proves and refutes nothing. `Literal[5]` is not refuted below
 ## Why construction preserves meaning
 
 Every fold a constructor applies is a law of the Boolean algebra of sets —
-flattening associative nodes, dropping identities and duplicates, letting the
+flattening associative nodes and a refinement of a refinement, dropping identities
+and duplicates, letting the
 top absorb a join and the bottom a meet, ordering the members, canceling `¬¬X`
 to `X`, and folding `X ∩ ¬X` to `⊥` and `X ∪ ¬X` to `⊤` where `X` holds no class
 and no predicate — each of which holds of the *sets*, so none can change `⟦S⟧`.
