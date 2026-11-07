@@ -43,6 +43,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: the complement of a table holds a plain value of another kind
 - feat: a field's name is read as a word of a clause narrowed by a language
 - fix: each key of a parsed object is its own value to the walk's memo
+- fix: a value sharing a sub-object answers as its copy past the walk's bounds
 
 -->
 
@@ -192,6 +193,16 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A value sharing a sub-object answers as its copy past the walk's bounds.** The walk's memo
+  answered a definition at a value from any earlier walk of it, and a walk with less of the
+  bounds left, which would stop on its own, found the answer instead: against
+  `recursive(lambda t: union(int, list[t], list[union(t, str)]))`, a list sharing one inner list
+  at two depths was `False` to `is_valid` and admitted by `validate`, and a member where the same
+  value sharing nothing was refused with `recursion_limit`. A document reaches it too, where the
+  second list branch reads an inner list again: `[[..., "s"], "s"]` a hundred deep was refused by
+  `is_valid_json` and admitted by `validate_json`. An answer is found by a walk with as much of
+  each bound left as the kept walk used.
 
 - **Each key of a parsed object is its own value to the walk's memo.** `is_valid_json` answered
   one key of an object with the answer kept for another, where two members of a schema read a

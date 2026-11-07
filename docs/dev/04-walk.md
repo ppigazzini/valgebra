@@ -142,7 +142,8 @@ code: the third value. A union reads each branch with the cell cleared
 stops beside it are dropped, and with none the branches' stop is the answer.
 The complement admits on its inner walk's refusal, refuses on a member, and
 refuses with the code on a stop, which it puts back so a complement above
-reads it too. A settling walk takes an answer from the memo, and a stop only
+reads it too. A settling walk takes an answer from the memo where it has as
+much of each bound left as the kept walk used (`Answer::answers`), and a stop only
 where a settling walk kept it (`Kept::settled`): a stop any other walk kept was
 met by a walk that ended its scan there, where reading past it may find a part
 that decides, and a settling walk read past every stop it met. Its stop answers

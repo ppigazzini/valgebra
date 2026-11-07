@@ -16,8 +16,12 @@
 //! before, so each pair is walked once. It is kept where it can be read as the
 //! value's own answer, which is four conditions:
 //!
-//! - **A walk that stopped answers only a walk with no more room.** A walk
-//!   that decided answers for the value, and is found by any later one. A walk
+//! - **An answer holds for a walk that would not have stopped.** A walk that
+//!   decided used some of each bound, [`Room`]'s two counts past where it
+//!   began, and is found by a later walk with that much of each left, one
+//!   begun no deeper than [`Answer::deepest`]: that walk of its own stops
+//!   nowhere, and answers alike. A walk with less left walks the pair and
+//!   stops where a value sharing nothing does. A walk
 //!   that stopped -- at the depth bound, at a value inside itself, at a value
 //!   that moved -- and refused has answered for the room it had: the walk
 //!   levels open and the definitions unfolded where it began. Every answer a
@@ -80,9 +84,20 @@ pub(crate) struct MemoPlan {
     /// members reach a remembered definition, and the clause buffers of the
     /// maps two of whose clauses do.
     shared: FxHashSet<usize>,
+    /// By definition, as many walk levels as its body can open before it names
+    /// another definition. Every level a walk opens is below some reference it
+    /// entered, so what a walk reached is read at the references alone, and the
+    /// walk's per-node path carries no count for it.
+    levels: Box<[usize]>,
 }
 
 impl MemoPlan {
+    /// The walk levels a body of this definition can open by itself; past
+    /// what the plan reads, any number.
+    pub(crate) fn levels(&self, def: DefIx) -> usize {
+        self.levels.get(def.get()).copied().unwrap_or(usize::MAX)
+    }
+
     /// Whether a walk of this definition may be kept.
     #[inline]
     pub(crate) fn remembers(&self, def: DefIx) -> bool {
@@ -135,7 +150,26 @@ pub(crate) fn plan(
             collect_shared(node, &reach, remembered, &mut shared);
         }
     }
-    MemoPlan { remembered, shared }
+    // A node opens at most two levels, a meet and a record read at one element;
+    // the two levels past that are the reference's own. Read only where a walk
+    // can be kept, the one place they are asked.
+    let levels = if remembered == 0 {
+        Box::default()
+    } else {
+        defs.iter().map(|body| 2 * height(body) + 2).collect()
+    };
+    MemoPlan {
+        remembered,
+        shared,
+        levels,
+    }
+}
+
+/// How many nodes the longest path below `schema` holds, references not followed.
+fn height(schema: &Schema) -> usize {
+    let mut below = 0;
+    for_each_child(schema, &mut |child| below = below.max(height(child)));
+    below + 1
 }
 
 /// `named` together with everything the definitions it names reach.
@@ -276,7 +310,7 @@ fn for_each_child(schema: &Schema, visit: &mut impl FnMut(&Schema)) {
 /// How much of the walk's two bounds a walk had left where it began: the walk
 /// levels already open, and the definitions already unfolded on its path. A
 /// walk begun deeper on either has less room.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub(crate) struct Room {
     pub(crate) levels: usize,
     pub(crate) unfolded: usize,
@@ -295,16 +329,20 @@ impl Room {
 pub(crate) struct Answer {
     pub(crate) admitted: bool,
     pub(crate) stopped: Option<(Code, Room)>,
+    /// The deepest room a walk can begin with and answer alike: the kept
+    /// walk's own, deepened by what it left of each bound. A stop is found by
+    /// its own rule and reaches the bounds, so its deepest is never read.
+    pub(crate) deepest: Room,
 }
 
 impl Answer {
     /// Whether this answer is a later walk's, begun with `room`: a walk that
-    /// decided, or admitted, answers any, and one that stopped and refused
-    /// answers a walk with no more room than it had.
+    /// stopped and refused answers a walk with no more room than it had, and
+    /// any other a walk begun no deeper than [`deepest`](Self::deepest).
     fn answers(&self, room: Room) -> bool {
         match self.stopped {
             Some((_, kept)) if !self.admitted => room.within(kept),
-            _ => true,
+            _ => self.deepest.within(room),
         }
     }
 
@@ -315,12 +353,16 @@ impl Answer {
     }
 }
 
-/// What the deciding walks kept for a pair: an answer that holds for any
-/// later walk, or a refusal that stopped, with the rooms the walks that met it
-/// began with, none of them covering another.
-enum Decided {
-    Answered(Answer),
-    Stopped(Code, Vec<Room>),
+/// What the deciding walks kept for a pair: an answer that met no stop, found
+/// by a walk begun no deeper than its deepest room, and a refusal that stopped,
+/// with the rooms the walks that met it began with, none of them covering
+/// another. One pair can hold both, each walked at the room that met it.
+#[derive(Default)]
+struct Decided {
+    /// A walk that met no stop: whether it admitted, and the deepest room a
+    /// walk can begin with and find it ([`Answer::deepest`]).
+    answered: Option<(bool, Room)>,
+    stopped: Option<(Code, Vec<Room>)>,
 }
 
 /// A definition explained at a value: its answer, and what it reported, with
@@ -423,6 +465,9 @@ pub(crate) struct Kept {
     explained: FxHashMap<(usize, usize), Explained>,
     /// One reference per Python value a key names.
     held: Vec<Py<PyAny>>,
+    /// The furthest the walk being kept has reached, each count from the root;
+    /// a walk that reached nothing yet holds the root's.
+    pub(crate) reached: Room,
 }
 
 impl Kept {
@@ -438,23 +483,31 @@ impl Kept {
         Self::read(&self.settled, key, room)
     }
 
+    #[inline]
     fn read(
         table: &FxHashMap<(usize, usize), Decided>,
         key: (usize, usize),
         room: Room,
     ) -> Option<Answer> {
-        match table.get(&key)? {
-            Decided::Answered(answer) => Some(*answer),
-            Decided::Stopped(code, rooms) => {
-                rooms
-                    .iter()
-                    .any(|kept| room.within(*kept))
-                    .then_some(Answer {
-                        admitted: false,
-                        stopped: Some((*code, room)),
-                    })
-            }
+        let decided = table.get(&key)?;
+        if let Some((admitted, deepest)) = decided.answered
+            && deepest.within(room)
+        {
+            return Some(Answer {
+                admitted,
+                stopped: None,
+                deepest,
+            });
         }
+        let (code, rooms) = decided.stopped.as_ref()?;
+        rooms
+            .iter()
+            .any(|kept| room.within(*kept))
+            .then_some(Answer {
+                admitted: false,
+                stopped: Some((*code, room)),
+                deepest: room,
+            })
     }
 
     /// The answer an explaining walk kept for this pair, where it answers a
@@ -530,7 +583,20 @@ impl Kept {
     ) {
         self.hold(value);
         let Some((code, room)) = answer.stopped.filter(|_| !answer.admitted) else {
-            self.decided.insert(key, Decided::Answered(answer));
+            // One probe where the pair holds nothing yet, as it nearly always
+            // does: a stop kept beside an answer is a walk past the bounds.
+            let fresh = Decided {
+                answered: Some((answer.admitted, answer.deepest)),
+                stopped: None,
+            };
+            if let Some(Decided {
+                stopped: Some(stop),
+                ..
+            }) = self.decided.insert(key, fresh)
+                && let Some(decided) = self.decided.get_mut(&key)
+            {
+                decided.stopped = Some(stop);
+            }
             return;
         };
         if settling {
@@ -545,15 +611,13 @@ impl Kept {
         code: Code,
         room: Room,
     ) {
-        match table.get_mut(&key) {
-            Some(Decided::Stopped(_, rooms)) => {
-                rooms.retain(|kept| !kept.within(room));
-                rooms.push(room);
-            }
-            _ => {
-                table.insert(key, Decided::Stopped(code, vec![room]));
-            }
-        }
+        let (_, rooms) = table
+            .entry(key)
+            .or_default()
+            .stopped
+            .get_or_insert_with(|| (code, Vec::new()));
+        rooms.retain(|kept| !kept.within(room));
+        rooms.push(room);
     }
 
     /// Keep what an explaining walk answered and reported for this pair; the

@@ -210,7 +210,10 @@ decision steps. None caps time, and four costs grow inside them:
   them. A value nested past the bounds is reached by each path to it with its
   own room -- the walk levels open and the definitions unfolded -- and walked
   once for each, at most the product of the two bounds per definition and
-  value, where a value inside them on every path is walked once.
+  value, where a value inside them on every path is walked once. An answer
+  kept is found by a member with as much of each bound left as the walk that
+  kept it used, so sharing moves no answer: a value holding one sub-object at
+  two depths answers as the same value sharing nothing does.
 - **A relation's budget counts steps, not their size.** A query spends at most
   a million decision steps an asking, and one that ends undecided at a smaller
   allowance inside that budget, with steps of its own left, is asked once more

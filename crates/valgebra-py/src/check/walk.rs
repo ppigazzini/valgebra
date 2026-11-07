@@ -1606,6 +1606,7 @@ fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -
     let ctx = frame.ctx;
     let memo = &ctx.state.memo;
     if ctx.mode.stops_at_first() && !frame.out.is_empty() {
+        note_reach(ctx, BOUNDS);
         return check_ref(id, value, frame);
     }
     let key = (value.id(), id.get());
@@ -1635,6 +1636,14 @@ fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -
         found
     };
     if let Some(found) = found {
+        note_reach(
+            ctx,
+            if found.stop().is_some() {
+                BOUNDS
+            } else {
+                shifted(room, BOUNDS, found.deepest)
+            },
+        );
         if !found.admitted
             && let Some(code) = found.stop()
         {
@@ -1646,12 +1655,21 @@ fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -
     if !memo.is_armed() {
         return check_ref(id, value, frame);
     }
-    let earlier = ctx.state.signals.stopped.take();
     let start = frame.out.len();
-    let admitted = check_ref(id, value, frame);
-    let met = ctx.state.signals.stopped.get();
-    ctx.state.signals.stopped.set(earlier.or(met));
-    if !ctx.state.signals.fatal_seen.get() {
+    let (admitted, met, outer) = walked_reaching(id, value, frame, room);
+    let fatal = ctx.state.signals.fatal_seen.get();
+    let (path, out) = (&*frame.path, &*frame.out);
+    // One borrow reads how far the walk reached, puts back the reach of the
+    // walk around it, and keeps the answer.
+    ctx.state.keep(|kept| {
+        let reach = if met.is_some() { BOUNDS } else { kept.reached };
+        kept.reached = furthest(outer, reach);
+        if fatal {
+            return;
+        }
+        // A walk begun deeper by what this one left of each bound reaches the
+        // bounds and no further.
+        let deepest = shifted(room, BOUNDS, reach);
         // Kept as a walk that refuses on a stop reads it: a member keeps no
         // stop, a refusal keeps the one it met, and a settling walk's `true`
         // with a stop is that refusal, while its plain refusal decided and
@@ -1660,27 +1678,90 @@ fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -
             (true, Some(code)) if settling => Answer {
                 admitted: false,
                 stopped: Some((code, room)),
+                deepest,
             },
             (true, _) => Answer {
                 admitted: true,
                 stopped: None,
+                deepest,
             },
             (false, met) => Answer {
                 admitted: false,
                 stopped: met.filter(|_| !settling).map(|code| (code, room)),
+                deepest,
             },
         };
         if ctx.mode.explains() {
-            let reported = frame.out.get(start..).unwrap_or_default();
-            let from = frame.path.len();
-            ctx.state
-                .keep(|kept| kept.keep_explained(key, value, answer, from, reported));
+            let reported = out.get(start..).unwrap_or_default();
+            kept.keep_explained(key, value, answer, path.len(), reported);
         } else {
-            ctx.state
-                .keep(|kept| kept.keep_decided(key, value, answer, settling));
+            kept.keep_decided(key, value, answer, settling);
         }
-    }
+    });
     admitted
+}
+
+/// The definition walked at the value, with the stop cell cleared for it and
+/// put back after: its answer, the stop it met, and the reach of the walk
+/// around it, which the caller puts back once it reads this walk's own.
+///
+/// What a walk reaches is read at the references it enters: this one's body to
+/// its own depth, read once a validator (`MemoPlan::levels`), and each
+/// reference below by this same reading, so no node the walk reads carries a
+/// count for it. A walk that met a stop reached the bounds.
+fn walked_reaching(
+    id: DefIx,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+    room: Room,
+) -> (bool, Option<Code>, Room) {
+    let ctx = frame.ctx;
+    let own = Room {
+        levels: room
+            .levels
+            .saturating_add(ctx.index.memo.levels(id))
+            .min(MAX_WALK_DEPTH),
+        unfolded: (room.unfolded + 1).min(MAX_RECURSION_DEPTH),
+    };
+    let mut outer = Room::default();
+    ctx.state
+        .keep(|kept| outer = std::mem::replace(&mut kept.reached, own));
+    let earlier = ctx.state.signals.stopped.take();
+    let admitted = check_ref(id, value, frame);
+    let met = ctx.state.signals.stopped.get();
+    ctx.state.signals.stopped.set(earlier.or(met));
+    (admitted, met, outer)
+}
+
+/// How far a walk inside the one being kept reached, for that walk to read.
+fn note_reach(ctx: Ctx<'_>, reach: Room) {
+    ctx.state.keep(|kept| {
+        kept.reached = furthest(kept.reached, reach);
+    });
+}
+
+/// `room` moved by what lies from `from` to `to`, count by count: a walk's
+/// reach from its room and the deepest room it answers for, and back.
+fn shifted(room: Room, to: Room, from: Room) -> Room {
+    Room {
+        levels: room.levels + to.levels.saturating_sub(from.levels),
+        unfolded: room.unfolded + to.unfolded.saturating_sub(from.unfolded),
+    }
+}
+
+/// Every level and every unfolding the walk's two bounds allow: the reach of
+/// a walk that met a stop, whose answer no walk with less room shares.
+const BOUNDS: Room = Room {
+    levels: MAX_WALK_DEPTH,
+    unfolded: MAX_RECURSION_DEPTH,
+};
+
+/// The further of two reaches, count by count.
+fn furthest(a: Room, b: Room) -> Room {
+    Room {
+        levels: a.levels.max(b.levels),
+        unfolded: a.unfolded.max(b.unfolded),
+    }
 }
 
 /// The refusal an explaining walk kept where it stopped, said again by an

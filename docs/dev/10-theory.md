@@ -793,13 +793,14 @@ a_set_line_is_read_as_python_holds_its_members
 Test Cases" (1998)**, and **Chen et al., "Metamorphic Testing: A Review of
 Challenges and Opportunities" (2018).** Derive a test case from one that passed
 and check a relation between the two outputs; neither run needs an oracle.
-**[LOAD-BEARING: metamorphic-testing]** — the JSON path against the object path, and fast mode against
-explain mode. Both relate a source run to a follow-up run, which is what makes
-them metamorphic relations rather than invariants that happen to hold.
+**[LOAD-BEARING: metamorphic-testing]** — the JSON path against the object path, fast mode against
+explain mode, and a value sharing a sub-object against its copy. Each relates a source run to a
+follow-up run, which is what makes them metamorphic relations rather than invariants that happen
+to hold.
 
 SOURCE: §13.8 "**Metamorphic testing.**"
 
-HELD-BY: test_json_walk_matches_the_object_walk, test_is_valid_agrees_with_validate, test_each_key_of_a_document_is_read_as_its_own_value
+HELD-BY: test_json_walk_matches_the_object_walk, test_is_valid_agrees_with_validate, test_each_key_of_a_document_is_read_as_its_own_value, test_a_shared_value_answers_as_its_copy_past_the_bounds
 
 The two are cited for different things. The 1998 report states the approach;
 neither "metamorphic relation" nor "necessary property" occurs in it. The

@@ -10,9 +10,15 @@ use pyo3::types::{PyDict, PyList, PyModule, PyTuple};
 use valgebra_core::{Constraint, DefIx, MapClause, PredIx, SeqShape};
 
 use super::*;
-use crate::check::memo::{Answer, Memo, MemoPlan, PLANNED_DEFINITIONS, Room};
+use crate::check::memo::{Answer, Memo, MemoPlan, PLANNED_DEFINITIONS, Room, plan};
 use crate::check::{WalkState, build_index};
 use crate::codes::{RECURSION_LIMIT, RECURSION_LOOP};
+
+/// A start no walk is deeper than: an answer kept with it is found by any.
+const ANY_DEPTH: Room = Room {
+    levels: usize::MAX,
+    unfolded: usize::MAX,
+};
 
 /// What one walk answered, reported and met.
 struct Walked {
@@ -223,6 +229,9 @@ fn shapes(py: Python<'_>) -> Vec<(&'static str, Vec<Schema>, Wrap<'_>)> {
 #[test]
 fn the_memo_changes_no_answer_and_no_report() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
+        assert_a_settling_walk_costs_what_a_deciding_walk_does(py);
         let leaves = [
             0i64.into_pyobject(py).expect("an int").into_any(),
             py.None().into_bound(py),
@@ -424,6 +433,9 @@ fn a_value_one_branch_admits_where_another_stops_is_admitted() {
 #[test]
 fn a_settling_walk_meets_the_stop_the_walk_without_the_memo_meets() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
+        assert_a_settling_walk_costs_what_a_deciding_walk_does(py);
         let defs = two_lists();
         let at = (&[][..], &defs[..]);
         let looped = PyList::empty(py);
@@ -482,6 +494,8 @@ fn a_settling_walk_meets_the_stop_the_walk_without_the_memo_meets() {
 #[test]
 fn a_value_one_path_admits_with_definitions_to_spare_is_admitted() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
         let defs = through_an_alias();
         let at = (&[][..], &defs[..]);
         for (depth, admitted) in [(6, true), (9, false)] {
@@ -515,6 +529,8 @@ fn a_value_one_path_admits_with_definitions_to_spare_is_admitted() {
 #[test]
 fn a_member_kept_beside_a_stop_answers_a_walk_with_less_room() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
         let defs = through_an_alias();
         let at = (&[][..], &defs[..]);
         let value = nested(PyDict::new(py).into_any(), 6, under_a_key);
@@ -555,6 +571,9 @@ fn a_member_kept_beside_a_stop_answers_a_walk_with_less_room() {
 #[test]
 fn a_union_whose_branches_share_no_definition_arms_nothing() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
+        assert_a_settling_walk_costs_what_a_deciding_walk_does(py);
         // `A = int | list[A] | list[str | A]`, which shares `A` between its
         // list branches, and `B = None | dict[str, B]`; the root is
         // `list[A] | list[B]`, whose branches share nothing.
@@ -667,6 +686,7 @@ fn an_answer_found_carries_its_stop_and_a_report_its_own_path() {
         let stopped = Answer {
             admitted: false,
             stopped: Some((RECURSION_LIMIT, anywhere)),
+            deepest: ANY_DEPTH,
         };
         let find = |mode: WalkMode, state: &WalkState, path: &mut Vec<PathSegment>| {
             let ctx = Ctx {
@@ -723,6 +743,8 @@ fn an_answer_found_carries_its_stop_and_a_report_its_own_path() {
 #[test]
 fn a_definition_reaching_a_predicate_is_walked_at_each_occurrence() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
         let module = PyModule::from_code(
             py,
             c"calls = 0\ndef count(x):\n    global calls\n    calls += 1\n    return True\n",
@@ -773,6 +795,20 @@ fn a_definition_reaching_a_predicate_is_walked_at_each_occurrence() {
 /// Every definition a validator can hold has a bit in the plan
 /// (`PLANNED_DEFINITIONS`): the last of a table at the validator's limit is
 /// remembered as the first is, each naming the next.
+/// A definition's body opens twice its height in walk levels and two more,
+/// counted from the body alone: `T = int | list[str | T] | list[T]` holds a
+/// union, a list, a union and a reference on its longest path, so ten. A
+/// definition past the table is read as opening any number.
+#[test]
+fn a_definition_opens_twice_its_height_and_two_levels() {
+    Python::attach(|py| {
+        let planned = plan(py, &reference(), &two_lists(), &[]);
+        assert!(planned.remembers(DefIx::new(0)));
+        assert_eq!(planned.levels(DefIx::new(0)), 2 * 4 + 2);
+        assert_eq!(planned.levels(DefIx::new(1)), usize::MAX);
+    });
+}
+
 #[test]
 fn the_last_definition_a_validator_can_hold_is_planned() {
     Python::attach(|py| {
@@ -869,6 +905,9 @@ fn a_definition_reaching_a_class_with_a_metaclass_of_its_own_is_not_remembered()
 #[test]
 fn a_branch_refused_by_its_kind_arms_nothing() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
+        assert_a_settling_walk_costs_what_a_deciding_walk_does(py);
         let defs = vec![union_of(vec![
             Schema::NoneType,
             Schema::Int,
@@ -908,6 +947,8 @@ fn a_branch_refused_by_its_kind_arms_nothing() {
 #[test]
 fn a_meet_refused_by_its_first_member_arms_nothing() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
         let defs = a_meet();
         let value = nested(py.None().into_bound(py), 6, in_a_list);
         let walked = walk(py, &reference(), &value, (&[], &defs), WalkMode::Fast, true);
@@ -935,6 +976,7 @@ fn the_memo_holds_each_value_it_keys_for_the_length_of_the_call() {
         let answer = Answer {
             admitted: false,
             stopped: None,
+            deepest: ANY_DEPTH,
         };
         let key = (value.as_ptr() as usize, 0);
         state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), answer, false));
@@ -976,6 +1018,7 @@ fn a_stop_answers_a_walk_with_no_more_room_on_either_count() {
             let stopped = Answer {
                 admitted: false,
                 stopped: Some((RECURSION_LIMIT, kept_at)),
+                deepest: ANY_DEPTH,
             };
             state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), stopped, false));
         }
@@ -1029,6 +1072,7 @@ fn an_explanation_that_stopped_answers_a_walk_with_no_more_room() {
             let answer = Answer {
                 admitted,
                 stopped: stopped.then_some((RECURSION_LIMIT, kept_at)),
+                deepest: ANY_DEPTH,
             };
             let state = WalkState::new();
             state.keep(|kept| kept.keep_explained(key, &Value::Py(&value), answer, 0, &[]));
@@ -1153,6 +1197,8 @@ fn a_clause_reaches_what_its_key_and_its_value_both_name() {
 #[test]
 fn a_report_holding_a_violation_walks_a_shared_definition_once_per_level() {
     Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
         let defs = two_lists();
         let at = (&[][..], &defs[..]);
         let entries = |depth: usize| {
@@ -1224,6 +1270,140 @@ fn each_key_of_a_parsed_object_is_its_own_value() {
             );
             assert_eq!(found, admitted, "{source}");
             assert!(state.memo.in_use(), "{source}: the memo was not armed");
+        }
+    });
+}
+
+/// A kept answer is found by a walk with what its walk used left of each
+/// bound, and by no walk with less: that walk, on its own, stops where the
+/// kept one did not.
+#[test]
+fn an_answer_is_found_by_a_walk_with_what_it_used_left() {
+    Python::attach(|py| {
+        let value = PyList::empty(py).into_any();
+        let key = (value.as_ptr() as usize, 0);
+        let room = |levels, unfolded| Room { levels, unfolded };
+        for admitted in [true, false] {
+            let state = WalkState::new();
+            let answer = Answer {
+                admitted,
+                stopped: None,
+                deepest: room(MAX_WALK_DEPTH - 10, MAX_RECURSION_DEPTH - 4),
+            };
+            state.keep(|kept| kept.keep_decided(key, &Value::Py(&value), answer, false));
+            for (levels, unfolded, found) in [
+                (0, 0, true),
+                (MAX_WALK_DEPTH - 10, MAX_RECURSION_DEPTH - 4, true),
+                (MAX_WALK_DEPTH - 9, 0, false),
+                (0, MAX_RECURSION_DEPTH - 3, false),
+            ] {
+                let answered = state.recall(|kept| kept.decided(key, room(levels, unfolded)));
+                assert_eq!(
+                    answered.map(|answer| answer.admitted),
+                    found.then_some(admitted),
+                    "admitted {admitted}, {levels} levels, {unfolded} unfolded"
+                );
+            }
+        }
+    });
+}
+
+/// `[near, far, "s"]`.
+fn pair<'py>(near: Bound<'py, PyAny>, far: Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+    let text = "s".into_pyobject(near.py()).expect("a str").into_any();
+    PyList::new(near.py(), [near, far, text])
+        .expect("a list")
+        .into_any()
+}
+
+/// A value holding one sub-object at two depths answers as the same value
+/// sharing nothing, near and past the bounds, in every mode. The first list
+/// branch reads the sub-object near the root and the second branch finds it
+/// kept; where it is met again a walk level from the bound, that walk has
+/// less left than the kept one used, and walks it as the copy is walked.
+#[test]
+fn a_shared_value_answers_as_its_copy_past_the_bounds() {
+    Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
+        assert_a_settling_walk_costs_what_a_deciding_walk_does(py);
+        let defs = two_lists();
+        let one = || 1i64.into_pyobject(py).expect("an int").into_any();
+        for (inner, outer) in [(100, 60), (120, 10), (90, 40), (40, 40)] {
+            let shared = nested(one(), inner, in_a_list);
+            let shared = pair(shared.clone(), nested(shared, outer, in_a_list));
+            let copy = pair(
+                nested(one(), inner, in_a_list),
+                nested(nested(one(), inner, in_a_list), outer, in_a_list),
+            );
+            for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle] {
+                let at = (&[][..], &defs[..]);
+                let walked = walk(py, &reference(), &shared, at, mode, true);
+                let alone = walk(py, &reference(), &copy, at, mode, true);
+                assert_eq!(
+                    (walked.admitted, walked.stopped),
+                    (alone.admitted, alone.stopped),
+                    "{inner} inside, {outer} more, {mode:?}"
+                );
+            }
+        }
+    });
+}
+
+/// [`a_shared_value_answers_as_its_copy_past_the_bounds`] with one bound
+/// placed near and the other far, so the reach a kept answer is read with is
+/// counted in that bound's count alone: the trail holds all but a few dozen
+/// unfoldings, or the walk starts a few dozen levels from its depth bound. The
+/// sub-object is met again at every depth around the bound, where a reach one
+/// short reads a kept answer one level too far.
+#[test]
+fn a_shared_value_answers_as_its_copy_near_each_bound() {
+    Python::attach(|py| {
+        assert_linear_in_the_depth(py);
+        assert_a_stop_is_found_again(py);
+        assert_a_settling_walk_costs_what_a_deciding_walk_does(py);
+        let defs = two_lists();
+        // A fresh object at each call: a small `int` is one cached object, which
+        // the copy would share with the value and read the same kept answer for.
+        let one = || (1i128 << 100).into_pyobject(py).expect("an int").into_any();
+        // All but a few dozen unfoldings held by the trail, with pairs no walk
+        // enters (no definition has that index), or a walk started a few dozen
+        // levels from its depth bound.
+        let place = |state: &WalkState, near_unfoldings: bool| {
+            if near_unfoldings {
+                for open in 0..MAX_RECURSION_DEPTH - 28 {
+                    let opened = state.guard.borrow_mut().enter((open, usize::MAX));
+                    assert!(matches!(opened, Entered::Open));
+                }
+            } else {
+                state.depth.set(MAX_WALK_DEPTH - 90);
+            }
+        };
+        for (bound, near_unfoldings) in [("unfoldings", true), ("levels", false)] {
+            for inner in [8, 14, 20, 24] {
+                for outer in 1..=30 {
+                    let shared = nested(one(), inner, in_a_list);
+                    let shared = pair(shared.clone(), nested(shared, outer, in_a_list));
+                    let copy = pair(
+                        nested(one(), inner, in_a_list),
+                        nested(nested(one(), inner, in_a_list), outer, in_a_list),
+                    );
+                    for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle] {
+                        let walked = |value: &Bound<'_, PyAny>| {
+                            let state = WalkState::new();
+                            place(&state, near_unfoldings);
+                            let at = (&[][..], &defs[..]);
+                            walk_in(py, &state, &reference(), value, at, mode, true)
+                        };
+                        let (shared, alone) = (walked(&shared), walked(&copy));
+                        assert_eq!(
+                            (shared.admitted, shared.stopped),
+                            (alone.admitted, alone.stopped),
+                            "{bound} near, {inner} inside, {outer} more, {mode:?}"
+                        );
+                    }
+                }
+            }
         }
     });
 }

@@ -557,6 +557,63 @@ def test_every_entry_point_gives_one_answer_at_the_depth_bound(leaf: str) -> Non
             assert len(answers) == 1, (outer, level, answers)
 
 
+#: `T = int | list[T] | list[T | str]`: two list branches read a list's
+#: element through one definition, and the walk keeps the second reading.
+_TWO_LISTS = Validator(
+    recursive(lambda t: union(int, list[t], list[union(t, str)]))  # ty: ignore[invalid-type-form]
+)
+
+
+def _lists_around(leaf: object, depth: int) -> object:
+    """Return `leaf` inside `depth` one-element lists."""
+    value = leaf
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+# THEORY: metamorphic-testing
+@pytest.mark.parametrize(("inner", "outer"), [(100, 60), (120, 10), (90, 40), (40, 40)])
+def test_a_shared_value_answers_as_its_copy_past_the_bounds(
+    inner: int, outer: int
+) -> None:
+    """A value holding one sub-object at two depths answers as the copy sharing nothing.
+
+    The first list branch reads the sub-object near the root, and the second
+    finds what the walk kept. Met again near the bound, the walk has less of
+    the bounds left than the kept walk used, and walks it as the copy is
+    walked, so sharing moves no answer of any entry point.
+    """
+    near = _lists_around(1, inner)
+    shared = [near, _lists_around(near, outer), "s"]
+    copy = [_lists_around(1, inner), _lists_around(_lists_around(1, inner), outer), "s"]
+    answers = _boundary_answers(_TWO_LISTS, shared)
+    assert answers == _boundary_answers(_TWO_LISTS, copy)
+    assert len(answers) == 1
+
+
+@pytest.mark.parametrize("depth", [60, 96, 100, 110, 118, 130])
+def test_a_document_past_the_bounds_answers_alike_on_each_json_path(depth: int) -> None:
+    """A JSON document the second list branch reads again past the bound answers alike.
+
+    `[[...["s", "s"]...], "s"]`: the first list branch refuses each level at
+    its `"s"`, and the second reads the inner list again with less of the
+    bounds left, which a document reaches with no sharing at all.
+    """
+    value: object = "s"
+    for _ in range(depth):
+        value = [value, "s"]
+    doc = json.dumps(value)
+    try:
+        _TWO_LISTS.validate_json(doc)
+    except ValidationError:
+        explained = False
+    else:
+        explained = True
+    loaded = _TWO_LISTS.is_valid(json.loads(doc))
+    assert {_TWO_LISTS.is_valid_json(doc), explained} == {loaded}
+
+
 # THEORY: a-cycle-is-caught-by-identity
 # TRUST: The values are the finite ones.
 def test_a_cycle_is_caught_by_identity_rather_than_by_equality() -> None:
