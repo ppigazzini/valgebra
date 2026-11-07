@@ -1464,8 +1464,12 @@ impl Schema {
         if met.len() == branches.len() {
             // What the rules refuted of each branch at the root is read back
             // ([`Schema::below_a_union`]): a containment the rules refuted is
-            // one the set representation, sound as they are, never proves.
+            // one the set representation, sound as they are, never proves. A
+            // union past what the root keeps is asked here, which spends a step
+            // where a reading of the sets rebuilds the subject: 512 frozensets
+            // of a literal read 512 lowerings of 513 nodes.
             let refuted = cx.refuted_at_the_root(self, branches);
+            let kept = branches.len() <= MEMBERS_HELD;
             return Relation::proven(
                 by_branch
                     && branches
@@ -1473,11 +1477,13 @@ impl Schema {
                         .enumerate()
                         .filter(|&(at, branch)| {
                             !matches!(branch, Schema::Literal(_))
-                                && (at >= MEMBERS_HELD || refuted >> at & 1 == 0)
+                                && (!kept || refuted >> at & 1 == 0)
                         })
                         .any(|(_, branch)| {
-                            self.descriptor_contained_in(branch, cx.oracle, cx.defs)
-                                .holds()
+                            (kept || self.is_subtype_rec(branch, cx) != Relation::Fails)
+                                && self
+                                    .descriptor_contained_in(branch, cx.oracle, cx.defs)
+                                    .holds()
                         }),
             );
         }

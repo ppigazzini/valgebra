@@ -9808,9 +9808,10 @@ fn a_spent_query_asks_no_part() {
 /// narrows the parts reading lowers no branch the rules refuted at the root:
 /// a list of at least 255 items meets each of four bounds on its length, the
 /// rules refute it below each alone, and the record they keep is read back. A
-/// query whose root kept no record lowers every branch, as does one past the
-/// widest union the record holds, and the record is read as no member placed
-/// by the readings of a union subject and a meet.
+/// query whose root kept no record lowers every branch. One past the widest union
+/// the record holds asks the rules of each, and lowers the branches they decline.
+/// The record is read as no member placed by the readings of a union subject and
+/// a meet.
 #[test]
 fn a_branch_the_rules_refute_is_not_lowered() {
     use super::goal_tests::goals::pairs_read_by_the_sets;
@@ -9853,8 +9854,29 @@ fn a_branch_the_rules_refute_is_not_lowered() {
     let _parts = short.decided_by_parts(&wide, &mut cx, true);
     assert_eq!(
         pairs_read_by_the_sets() - before,
+        0,
+        "a union wider than the record lowers no branch the rules refute"
+    );
+    let pattern = |text: String| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(text)].into(),
+    };
+    let word = pattern("a+".into());
+    let declined = Schema::Union(
+        (0..=MEMBERS_HELD)
+            .map(|k| pattern(format!("a{{1,{}}}", k + 2)))
+            .collect::<Vec<_>>()
+            .into(),
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let _root = word.is_subtype_rec(&declined, &mut cx);
+    let before = pairs_read_by_the_sets();
+    let _parts = word.decided_by_parts(&declined, &mut cx, true);
+    assert_eq!(
+        pairs_read_by_the_sets() - before,
         MEMBERS_HELD as u64 + 1,
-        "a union wider than the record lowers every branch it meets"
+        "and every branch they decline"
     );
     let budget = Budget::new(DECISION_BUDGET);
     let mut cx = Cx::new(&NoLeafRelations, &[], &budget);

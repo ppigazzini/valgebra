@@ -158,7 +158,11 @@ parts are asked only while the query has a step left: a pair the rules spent
 the budget on has as many parts as members and branches, and a union of four
 thousand records against another, or a tuple against its two thousand corners,
 read a part at a time cost seventy times the decline and answered nothing
-more. `a_union_is_decided_a_part_at_a_time` holds each exit,
+more. A branch the rules refuted is one the sets never prove, so it is not lowered:
+read back from the root's record where the union fits it, and asked again where it
+is wider, which spends a step where a lowering rebuilds the subject, 512 frozensets
+of a literal reading 512 lowerings of 513 nodes for no answer.
+`a_union_is_decided_a_part_at_a_time` holds each exit,
 `a_meet_supertype_is_decided_a_member_at_a_time` the meet's,
 `a_branch_the_rules_refute_is_not_lowered` the union supertype's record, and
 `a_spent_query_asks_no_part` the step the parts need.
