@@ -114,6 +114,18 @@ impl Schema {
                     })
                 });
             }
+            // An instance in both carries the attribute, and its reading there is
+            // in both schemas, as for a key each record requires. The names are
+            // sorted, so a class of many attributes is not read pair by pair.
+            (Schema::AttrRecord { fields: mine }, Schema::AttrRecord { fields: theirs }) => {
+                return mine.iter().any(|field| {
+                    theirs
+                        .binary_search_by(|other| other.name.cmp(&field.name))
+                        .ok()
+                        .and_then(|at| theirs.get(at))
+                        .is_some_and(|other| field.schema.disjoint_with(&other.schema, oracle))
+                });
+            }
             _ => {}
         }
         // Two sequences of one container meet in the sequences of their
