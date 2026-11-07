@@ -14085,6 +14085,48 @@ mod one_member {
         }
     }
 
+    /// Constants of one kind, each its own value.
+    struct Numbers;
+
+    impl Constants for Numbers {}
+
+    impl LeafRelations for Numbers {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+
+        fn literal_kind(&self, _: ConstIx) -> Option<Kind> {
+            Some(Kind::Int)
+        }
+
+        fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+            Some(left != right)
+        }
+    }
+
+    /// A set's own lengths leave a length out as a written bound does: each item of
+    /// the pair is in a branch, so only its length refutes.
+    #[test]
+    fn a_set_refuses_a_length_its_element_does_not_hold() {
+        let constant = |index| Schema::Literal(ConstIx::new(index));
+        let pair = Schema::set(Schema::union([constant(0), constant(1)]));
+        let each = Schema::union([Schema::set(constant(0)), Schema::set(constant(1))]);
+        assert_eq!(
+            pair.subtype_relation_under(&each, &Numbers, &[]),
+            Relation::Fails
+        );
+        let any_number = Schema::union([Schema::set(constant(0)), Schema::set(Schema::Int)]);
+        assert_ne!(
+            pair.subtype_relation_under(&any_number, &Numbers, &[]),
+            Relation::Holds
+        );
+        let either = Schema::union([constant(0), constant(1), constant(2)]);
+        assert_eq!(
+            pair.subtype_relation_under(&Schema::set(either), &Numbers, &[]),
+            Relation::Holds
+        );
+    }
+
     /// A mapping's own lengths leave a length out as a written bound does, of a
     /// subject holding every length.
     #[test]
