@@ -1212,7 +1212,9 @@ value. Asked in the last asking alone, since a position rarely holds none and th
 costs a goal's steps. `sequences_meeting_in_nothing` reads the other half in an emptiness
 question of any asking: two sequences meet in nothing where a position each of their values
 has does, 1,568 answers over the drawn families, for a meet the widened reading stops one
-unfolding short of.
+unfolding short of. A refinement's `MinLen` names those positions as a prefix does, and the
+loop stops at one past the longest prefix, since the tails read the rest and a bound may ask
+for `2**60` of them.
 
 **A length on the map atom, not built.** `dict` under length bounds declines 756 of 5,000
 drawn Boolean terms of two levels, from 922 before the rules read its lengths and a meet of

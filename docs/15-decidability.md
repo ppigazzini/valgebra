@@ -613,6 +613,8 @@ answers `"undecided"`.
   share no value where a position every value of both holds meets in nothing, so
   `[int, None]` is below the complement of `recursive(lambda t: list[t])`, whose
   every item is a list, and a list that may be empty shares `[]` and is refuted.
+  A length bound names positions as a prefix does:
+  `Annotated[list[int], MinLen(1)]` is below that complement too.
   This is the
   semantic-subtyping reduction applied where no structural rule can help — a
   complement has no shape on the right to recurse into.
