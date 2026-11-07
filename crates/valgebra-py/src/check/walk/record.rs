@@ -58,7 +58,8 @@ use crate::input::Value;
 /// `cpyext` and takes the process with it. There the entries are read from a
 /// copy taken before the first visit, which nothing else can reach, while the
 /// size check still reads the value itself. `dict.copy` asks no key for its
-/// hash, so taking it runs no code of the value's.
+/// hash, so taking it runs no code of the value's, and the entries are its
+/// `items`, since the same function answers a value with a lookup of its key.
 #[cfg(not(Py_GIL_DISABLED))]
 pub(super) fn scan_dict<'py>(
     dict: &Bound<'py, PyDict>,
@@ -86,8 +87,18 @@ pub(super) fn scan_dict<'py>(
                 return Scan::Unreadable;
             }
         };
+        // `items` is `dict.items`, which reads the storage, where `PyDict_Next`
+        // answers each value with a lookup of its key: two keys reaching one name
+        // would read one value, and a key's own `__hash__` would run. A list of a
+        // tuple per entry, measured at 6% over a thousand entries and half a
+        // microsecond over three.
         #[cfg(PyPy)]
-        let mut iter = copied.iter();
+        let items = copied.items();
+        #[cfg(PyPy)]
+        let mut iter = items.iter().filter_map(|entry| {
+            let entry = entry.cast_into::<pyo3::types::PyTuple>().ok()?;
+            Some((entry.get_item(0).ok()?, entry.get_item(1).ok()?))
+        });
         #[cfg(not(PyPy))]
         let mut iter = dict.iter();
         let mut seen = 0;

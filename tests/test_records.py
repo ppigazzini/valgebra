@@ -454,24 +454,14 @@ def test_a_field_is_the_entry_the_lookup_finds_and_not_the_first_read() -> None:
     value[_Folded("A")] = 1
     if not isinstance(value["a"], int):
         pytest.skip("this interpreter's lookup answers with the entry read first")
-    if sys.implementation.name == "pypy":
-        pytest.skip(
-            "`PyDict_Next` reads each value through a lookup: `s` is never read"
-        )
     assert list(value.values()) == ["s", 1]
     assert Validator({"a": int, str: str}).is_valid(value)
     assert Validator({"a": int, str: object}).is_valid(value)
     assert not Validator({"a": str, str: int}).is_valid(value)
 
 
-@pytest.mark.xfail(
-    sys.implementation.name == "pypy",
-    strict=True,
-    reason="PyPy's `PyDict_Next` answers each value with a lookup of its key",
-)
-# TRUST: A dict's entries are read from its storage.
 def test_a_dicts_entries_are_read_from_its_storage() -> None:
-    """The known-unsound case on PyPy: two keys reaching one name read one value."""
+    """Two keys reaching one name hold two values, which PyPy's C API reads as one."""
 
     class Collides(str):
         __slots__ = ()
