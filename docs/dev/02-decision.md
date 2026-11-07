@@ -1166,6 +1166,15 @@ and holds a constructor or a reference (`holds_parts`), a pair of leaves being w
 reading of the whole read. The emptiness of a meet holding one complement asks it too,
 which keeps `is_empty` and the relation answering alike.
 
+The reading of a whole pair spends no step, so it reads alike however often it is read.
+So the pair at this asking's root is not lowered (`read_whole`), where the sets have read
+it, which the emptiness of a meet has not, and a second asking starts past it
+(`decided_past_the_whole_pair`): a dict of 4,096 literal keys read it three times for one
+decline, and reads it once. A stop in this asking does ask the question again, which is
+the larger allowance at work: 1,311 of the answers over the drawn families rest on it, and
+a wide pair that declines pays for it, `[int, int]` below 256 lists of a literal reading
+twice the instructions of a query with no such asking.
+
 **A complement is built only where it is read.** The parts of the universe are
 questions of their own [FCB08, (4)], and most sets hold a kind or two, so a
 complement spends most of what it costs on a top for every kind the set misses.

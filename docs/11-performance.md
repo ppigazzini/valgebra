@@ -1114,6 +1114,10 @@ as a list against a length-bounded list of the same element.
   JSON Schema containment suite read 37% fewer instructions on a release build,
   `--decision-sets` 29.82% fewer and `--decision-lengths` 66.37%, and what a
   relation keeps of its allowance decides a few a dearer reading declines.
+- **A pair the sets read whole is not read again.** Their reading of a pair spends no step,
+  so it reads alike however often it is read. Neither the last asking's root nor a second
+  asking lowers it again, and `dict[str, int]` below a dict of 4,096 literal keys reads 761
+  million instructions where it read 1.87 billion, a release's being 719 million.
 - **A wide union asks the rules before it lowers a branch.** A branch the rules refute
   is one the sets never prove, and what the root keeps of that fits 64 branches, so a
   wider union lowered the subject once a branch: `frozenset[Literal[0, ..., 511]]` below

@@ -1001,7 +1001,8 @@ impl Schema {
             return asked_again(|budget| {
                 let mut cx = Cx::new(oracle, defs, budget);
                 self.is_subtype_rec(other, &mut cx)
-                    .or_else(|| self.decided_by_sets(other, &mut cx, true))
+                    .or_else(|| self.a_side_with_no_value(other, &mut cx))
+                    .or_else(|| self.decided_past_the_whole_pair(other, &mut cx, true))
             });
         }
         first
@@ -1027,7 +1028,19 @@ impl Schema {
             return read_alone;
         }
         self.descriptor_contained_in(other, cx.oracle, cx.defs)
-            .or_else(|| self.decided_by_parts(other, cx, by_branch))
+            .or_else(|| self.decided_past_the_whole_pair(other, cx, by_branch))
+    }
+
+    /// What follows the set representation of the whole pair: both deciders asked
+    /// of its parts. A second asking starts here, the whole pair's reading being
+    /// a function of the pair that spends no step, so read again it declines alike.
+    fn decided_past_the_whole_pair(
+        &self,
+        other: &Schema,
+        cx: &mut Cx<'_>,
+        by_branch: bool,
+    ) -> Relation {
+        self.decided_by_parts(other, cx, by_branch)
             .or_else(|| {
                 if by_branch {
                     self.decided_as_respelled(other, cx)
@@ -1044,7 +1057,7 @@ impl Schema {
             })
             .or_else(|| {
                 if by_branch {
-                    self.decided_by_its_leaves(other, cx)
+                    self.decided_by_its_leaves(other, cx, true)
                 } else {
                     Relation::Unknown
                 }
@@ -1067,14 +1080,26 @@ impl Schema {
     /// of every such goal a lowering cost the relation matrix ninety-six times its
     /// instructions. The rules are asked here and never reach this again, so a
     /// query asks it a fixed number of times, under [`RESPELLING`]'s allowance.
+    ///
+    /// `read_whole` is that the sets have read this pair, which read alike, so the
+    /// goal at the root is not read again: a dict of 4,096 literal keys read it
+    /// three times over for one decline.
     #[inline(never)]
-    pub(super) fn decided_by_its_leaves(&self, other: &Schema, cx: &Cx<'_>) -> Relation {
+    pub(super) fn decided_by_its_leaves(
+        &self,
+        other: &Schema,
+        cx: &Cx<'_>,
+        read_whole: bool,
+    ) -> Relation {
         if !(self.holds_parts() || other.holds_parts()) {
             return Relation::Unknown;
         }
         let allowance = Budget::new(cx.budget.left().min(respelling()));
         let mut read = cx.within_this_query(&allowance);
         read.reads_leaves = true;
+        if read_whole {
+            read.read_whole = (core::ptr::from_ref(self), core::ptr::from_ref(other));
+        }
         self.is_subtype_rec(other, &mut read)
     }
 
@@ -1104,7 +1129,11 @@ impl Schema {
     /// test.
     #[inline(never)]
     fn a_goal_declined(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
-        if !cx.reads_leaves || self.has_reference() || other.has_reference() {
+        if !cx.reads_leaves
+            || (core::ptr::eq(self, cx.read_whole.0) && core::ptr::eq(other, cx.read_whole.1))
+            || self.has_reference()
+            || other.has_reference()
+        {
             return Relation::Unknown;
         }
         if !spend_at_once(cx.budget, LEAF_READING) {
@@ -2946,6 +2975,9 @@ pub(super) struct Cx<'a> {
     /// Whether a goal the rules decline is read by the sets, where no reference
     /// stands in the way ([`Schema::decided_by_its_leaves`]).
     reads_leaves: bool,
+    /// The pair whose whole the sets have read, which a goal read by the sets does
+    /// not read again; no pair where null.
+    read_whole: (*const Schema, *const Schema),
 }
 
 /// What [`HELD`] keeps of the rules' answers at a query's root: the query's
@@ -3062,6 +3094,7 @@ impl<'a> Cx<'a> {
             visiting: Vec::new(),
             query: Cell::new(0),
             reads_leaves: false,
+            read_whole: (core::ptr::null(), core::ptr::null()),
         }
     }
 

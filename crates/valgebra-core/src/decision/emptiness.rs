@@ -175,7 +175,7 @@ impl Schema {
         );
         let allowance = Budget::new(cx.budget.left());
         rest.is_subtype_rec(inner, &mut cx.within_this_query(&allowance))
-            .or_else(|| rest.decided_by_its_leaves(inner, cx))
+            .or_else(|| rest.decided_by_its_leaves(inner, cx, false))
     }
 
     /// A complement read as the relation it is, at the root of a question every

@@ -13568,6 +13568,54 @@ mod leaves {
         assert_eq!(budget.left(), DECISION_BUDGET - LEAF_READING);
     }
 
+    /// The pair the sets read whole reads alike, so it spends no step and is not
+    /// read again. Named by its address: an equal pair elsewhere in the schema has
+    /// not been asked.
+    #[test]
+    fn a_pair_the_sets_read_whole_is_not_read_again() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        cx.reads_leaves = true;
+        let (narrow, wide) = (pattern("a"), pattern("[ab]"));
+        cx.read_whole = (core::ptr::from_ref(&narrow), core::ptr::from_ref(&wide));
+        assert_eq!(narrow.a_goal_declined(&wide, &mut cx), Relation::Unknown);
+        assert_eq!(budget.left(), DECISION_BUDGET);
+        let elsewhere = wide.clone();
+        assert_eq!(narrow.a_goal_declined(&elsewhere, &mut cx), Relation::Holds);
+    }
+
+    /// A second asking starts past the whole pair's reading, which spends no step
+    /// and so declines alike: two lists of lists around a back edge meet the depth
+    /// bound, and no part of the pair is read by the sets, so the query reads what
+    /// its first asking does.
+    #[test]
+    fn a_second_asking_does_not_read_the_whole_pair_again() {
+        use super::super::goal_tests::goals::pairs_read_by_the_sets;
+        fn nested(depth: usize, at: DefIx) -> Schema {
+            (0..depth).fold(Schema::Ref(at), |inner, _| {
+                Schema::list(SeqShape::homogeneous(inner))
+            })
+        }
+        let defs = [nested(100, DefIx::new(0)), nested(99, DefIx::new(1))];
+        let (mine, theirs) = (Schema::Ref(DefIx::new(0)), Schema::Ref(DefIx::new(1)));
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &defs, &budget);
+        let met = bounds_met();
+        let before = pairs_read_by_the_sets();
+        let first = mine
+            .is_subtype_rec(&theirs, &mut cx)
+            .or_else(|| mine.decided_by_sets(&theirs, &mut cx, true));
+        let read = pairs_read_by_the_sets() - before;
+        assert_eq!(first, Relation::Unknown);
+        assert!(read > 0 && asks_again(met, &budget), "{read}");
+        let before = pairs_read_by_the_sets();
+        assert_eq!(
+            mine.subtype_relation_under(&theirs, &Pure, &defs),
+            Relation::Unknown
+        );
+        assert_eq!(pairs_read_by_the_sets() - before, read);
+    }
+
     /// No step counts a lowering, so this charge is what bounds how many one
     /// asking reads.
     #[test]
