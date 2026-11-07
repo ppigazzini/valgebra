@@ -162,7 +162,7 @@ proptest! {
         // table is available for every draw; a refusal here would be the
         // generator, not the lift.
         let classes = a.table_at(modulus).expect("a period inside the bound");
-        let lifted = IntSet { modulus, classes: classes.into_owned() };
+        let lifted = IntSet { modulus, classes: classes.into_owned().into() };
         prop_assert!(same(&a, &lifted));
         prop_assert_eq!(&a, &lifted);
     }
@@ -381,7 +381,8 @@ fn two_spellings_of_one_set_are_one_set_in_two_places() {
         classes: evens
             .table_at(4)
             .expect("a period inside the bound")
-            .into_owned(),
+            .into_owned()
+            .into(),
     };
     assert!(same(&evens, &at_four), "the two hold the same integers");
     assert_eq!(evens, at_four);
@@ -427,7 +428,8 @@ fn equality_is_not_transitive_where_two_periods_cannot_meet() {
             classes: evens
                 .table_at(period)
                 .expect("a period inside the bound")
-                .into_owned(),
+                .into_owned()
+                .into(),
         }
     };
     // 64 and 162 are each a multiple of two, and meet at 5,184.

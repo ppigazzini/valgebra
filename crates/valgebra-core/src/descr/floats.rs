@@ -37,6 +37,7 @@
 //! [`IntSet`]: super::integers::IntSet
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use super::budget;
 use super::integers::MAX_PERIOD;
@@ -430,7 +431,7 @@ pub(crate) struct FloatSet {
     /// The whole floats, where a step reads them apart. Boxed because a set no
     /// step touched is nearly every set a relation builds, and it pays one
     /// discriminant for this.
-    stepped: Option<Box<Stepped>>,
+    stepped: Option<Arc<Stepped>>,
 }
 
 /// Two sets are equal when they hold the same floats, read at the period where
@@ -599,7 +600,7 @@ impl FloatSet {
         Some(FloatSet {
             spans: Vec::new(),
             nan: false,
-            stepped: Some(Box::new(Stepped { modulus, classes })),
+            stepped: Some(Arc::new(Stepped { modulus, classes })),
         })
     }
 
@@ -701,7 +702,7 @@ impl FloatSet {
         budget::spend_on_a_table(stepped.entries()).then(|| FloatSet {
             spans: fitted(Part::Stepless, op(&my_spans, &their_spans)),
             nan,
-            stepped: Some(Box::new(stepped)),
+            stepped: Some(Arc::new(stepped)),
         })
     }
 
@@ -824,7 +825,7 @@ impl FloatSet {
         FloatSet {
             spans: fitted(Part::Stepless, gaps(&self.spans)),
             nan: !self.nan,
-            stepped: Some(Box::new(Stepped { modulus, classes })),
+            stepped: Some(Arc::new(Stepped { modulus, classes })),
         }
     }
 

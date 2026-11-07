@@ -28,6 +28,7 @@
 //! cannot: see [`IntSet`] for the split and what it costs.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use super::budget;
 use super::interval::IntervalSet;
@@ -65,9 +66,10 @@ pub(crate) struct IntSet {
     /// The period. At least one; a modulus of one is a set with no step, whose
     /// single class is the integers themselves.
     modulus: i64,
-    /// One interval set per residue, indexed by the residue. `classes[r]` holds
+    /// One interval set per residue, indexed by the residue, shared by every
+    /// descriptor holding the set, since no operation edits a table. `classes[r]` holds
     /// `k` exactly when this set holds `r + modulus * k`.
-    classes: Vec<IntervalSet>,
+    classes: Arc<[IntervalSet]>,
 }
 
 /// The largest period this representation materializes.
@@ -121,6 +123,7 @@ impl IntSet {
     /// turn a composition a caller is entitled to write into a panic on the
     /// debug builds every contributor runs.
     fn from_table(modulus: i64, classes: Vec<IntervalSet>) -> Option<IntSet> {
+        let classes: Arc<[IntervalSet]> = classes.into();
         ((1..=MAX_PERIOD).contains(&modulus) && i64::try_from(classes.len()).ok() == Some(modulus))
             .then_some(IntSet { modulus, classes })
     }
@@ -201,7 +204,7 @@ impl IntSet {
     /// where there are more.
     pub(crate) fn values_up_to(&self, cap: usize) -> Option<Vec<i128>> {
         let mut values = Vec::new();
-        for (residue, class) in (0_i128..).zip(&self.classes) {
+        for (residue, class) in (0_i128..).zip(self.classes.iter()) {
             for k in class.values_up_to(cap)? {
                 if values.len() == cap {
                     return None;
