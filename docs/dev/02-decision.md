@@ -1165,6 +1165,13 @@ answers it loses none. `holds_parts` stays as it is for a refinement over a cons
 reading those too moved `Annotated[list[B3], Len(1, 1)]` below `nothing` and read 22.8%
 more on `--decision-matrix`.
 
+**A plain value of a kind is outside a table of another exact type.** A literal pins
+`type(x)`, so `list[str]` is outside `Literal[Color.RED]` on `[]`, and `bool` outside
+`Literal[2**63]` on `True`, where the sets read no such constant
+(`a_plain_value_outside_a_table`). A subject of a builtin kind holds a plain value
+wherever it holds any, the subclass a set may also hold being equal to one. A class
+subject is not read: a member of an `IntEnum` is an `int`, and shares no plain one.
+
 **A position or a clause holding no value is read in the last asking.** `list[t]` for a `t`
 with no finite value holds `[]` alone (`holds_its_prefix_alone_within`), and a clause with
 no value carries no entry [Cas23, fn. 11], where a set reading cuts `t` to a top and finds a
