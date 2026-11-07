@@ -44,6 +44,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a field's name is read as a word of a clause narrowed by a language
 - fix: each key of a parsed object is its own value to the walk's memo
 - fix: a value sharing a sub-object answers as its copy past the walk's bounds
+- fix: the module loads in the main interpreter of a process, once
 
 -->
 
@@ -193,6 +194,13 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **The module loads in the main interpreter of a process, once.** A legacy subinterpreter,
+  which is what `mod_wsgi` runs an application group in, loaded it, and every interpreter after
+  the first to build read that one's `typing`: `Validator(Annotated[str, Regex("a")])` built as
+  `str` and admitted `"b"`, and `Validator(Any)` refused every value. An embedder calling
+  `Py_Initialize` again after `Py_FinalizeEx` ended the process in the next build. Both raise
+  `ImportError` at `import valgebra`; the main interpreter loads it whichever imports first.
 
 - **A value sharing a sub-object answers as its copy past the walk's bounds.** The walk's memo
   answered a definition at a value from any earlier walk of it, and a walk with less of the

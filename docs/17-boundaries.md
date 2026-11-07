@@ -469,6 +469,25 @@ on the installation page says what that costs a long-running process.
 A validator can also be weakly referenced, so a registry keyed by schema can be
 a `WeakValueDictionary` and let its entries go.
 
+## It loads in the main interpreter of a process, once
+
+A schema's forms are read by identity: `Annotated`, `Literal`, `Any`, a
+dataclass's fields and the markers of `annotated_types` are the objects the
+first build found in `typing` and the rest, kept for the life of the process. A
+subinterpreter holds its own copies of those modules, whose forms the kept ones
+are not, so a schema it built would mean something else: a pattern dropped,
+`Any` refusing every value. So `import valgebra` raises `ImportError` in any
+interpreter but the main one, whichever imports first, and in an interpreter an
+embedder starts again after `Py_FinalizeEx`, which would read what the first
+one freed. Importing it again in the interpreter that loaded it -- a reload, a
+cleared `sys.modules` -- works.
+
+Under `mod_wsgi`, whose application groups are subinterpreters by default, run
+the application in the main interpreter with `WSGIApplicationGroup %{GLOBAL}`,
+as other extension modules ask. An isolated subinterpreter, such as one from
+`concurrent.interpreters`, refuses the module on its own: it declares no
+support for one.
+
 ## It does not enforce ordering between separate checks
 
 Two validators are two questions. A constraint that relates *two* values — this

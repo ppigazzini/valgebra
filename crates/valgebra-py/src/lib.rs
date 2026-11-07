@@ -236,6 +236,56 @@ fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<Validator>> {
     Py::new(py, Validator::new(schema, Vec::new(), Vec::new()))
 }
 
+/// Refuse to load anywhere but the main interpreter, and there once a process.
+///
+/// The frontend compares a schema's forms by identity against what it read
+/// of `typing`, `annotated_types`, `dataclasses` and the module's own markers,
+/// and keeps what it read in cells that live as long as the process. A
+/// subinterpreter holds its own `typing`, whose forms those cells do not hold,
+/// so its schemas would mean something else: a pattern dropped, `Any` refusing
+/// every value. An interpreter started again after `Py_FinalizeEx` would read
+/// the cells through objects the first one freed.
+///
+/// The main interpreter is asked of `_thread` (3.12 on) or of
+/// `_xxsubinterpreters` (3.11), and an interpreter with neither, as `PyPy` is,
+/// runs one. A second life of the process is told by a mark on the
+/// interpreter's own `sys`, which an import in the interpreter that loaded the
+/// module carries and an interpreter started again does not, so a reload or a
+/// cleared `sys.modules` goes on working. No `intern!` here: its cell is the
+/// process's, and what it held went with the interpreter this refuses.
+fn the_main_interpreter_once(py: Python<'_>) -> PyResult<()> {
+    static LOADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    const MARK: &str = "_valgebra_loaded_here";
+    let sys = py.import("sys")?;
+    if sys.hasattr(MARK)? {
+        return Ok(());
+    }
+    if !is_the_main_interpreter(py)? || LOADED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return Err(pyo3::exceptions::PyImportError::new_err(
+            "valgebra loads in the main interpreter of a process, once: it reads \
+             `typing` and the rest into cells the process keeps, which a \
+             subinterpreter or an interpreter started again after Py_FinalizeEx \
+             does not share. Under mod_wsgi, run the application in the main \
+             interpreter (WSGIApplicationGroup %{GLOBAL}).",
+        ));
+    }
+    sys.setattr(MARK, true)
+}
+
+/// Whether the running interpreter is the process's main one.
+fn is_the_main_interpreter(py: Python<'_>) -> PyResult<bool> {
+    if let Some(is_main) = py.import("_thread")?.getattr_opt("_is_main_interpreter")? {
+        return is_main.call0()?.is_truthy();
+    }
+    match py.import("_xxsubinterpreters") {
+        Ok(interpreters) => interpreters
+            .call_method0("get_current")?
+            .eq(interpreters.call_method0("get_main")?),
+        Err(err) if err.is_instance_of::<pyo3::exceptions::PyImportError>(py) => Ok(true),
+        Err(err) => Err(err),
+    }
+}
+
 /// The `valgebra._valgebra` extension module.
 ///
 /// `gil_used = false` declares the module free-threading-ready, so a
@@ -252,6 +302,7 @@ fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<Validator>> {
 #[pymodule(gil_used = false)]
 fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
+    the_main_interpreter_once(py)?;
     // The distribution version, from the crate the wheel is built from.
     //
     // `importlib.metadata.version()` answers the same question and costs 20 ms
