@@ -1395,6 +1395,18 @@ def test_zero_is_a_multiple_of_every_float_step_over_the_integers(step: float) -
     assert Validator(multiple).relation_to(str) == "not_subset"
 
 
+# Steps no other test writes.
+@pytest.mark.parametrize("step", [0.4375, 2.75, 0.6875])
+def test_a_refinement_met_with_its_base_holds_what_it_holds(step: float) -> None:
+    """`int & R` is `R` where `R` holds integers alone, so the meet holds `0` too."""
+    refined = Annotated[int, at.MultipleOf(step)]
+    assert Validator(intersection(refined, int)).relation_to(nothing) == "not_subset"
+    assert Validator(intersection(int, union(refined, str))).relation_to(nothing) == (
+        "not_subset"
+    )
+    assert Validator(intersection(str, refined)).relation_to(nothing) == "subset"
+
+
 def test_an_operand_answering_the_remainder_of_zero_is_not_read_as_a_step() -> None:
     """A subclass's `__rmod__` is the operand's, which a relation does not read past."""
 

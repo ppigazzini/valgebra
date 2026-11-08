@@ -15726,3 +15726,68 @@ mod readings_another_route_shadows {
         ));
     }
 }
+
+/// A pool holding a float step, `0.5`, at slot 0, and an exact `Decimal('2.5')` at
+/// slot 1, with a slot 2 it cannot read, as a subclass of either is to the bindings.
+struct Steps;
+impl Constants for Steps {
+    fn operand(&self, index: OperandIx) -> Option<Operand> {
+        match index.get() {
+            0 => Some(Operand::Float(0.5)),
+            1 => Some(Operand::Rational {
+                floor: 2,
+                ceil: 3,
+                below: 2.5,
+                above: 2.5,
+            }),
+            _ => None,
+        }
+    }
+}
+impl LeafRelations for Steps {
+    fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+        None
+    }
+    fn operand_kind(&self, operand: OperandIx) -> Option<Kind> {
+        (operand.get() == 0).then_some(Kind::Float)
+    }
+}
+
+/// `Annotated[int, MultipleOf(step)]`, the step at `slot` of [`Steps`].
+fn an_int_step(slot: usize) -> Schema {
+    Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::MultipleOf(OperandIx::new(slot))].into(),
+    }
+}
+
+/// A meet of a whole kind with members of that kind alone holds what they hold:
+/// `int` met with an `int` refined by a float step holds `0`, as the refinement does,
+/// and `int` holds `bool`. A member of another kind keeps the kind's own reading: `str`
+/// met with the refinement holds nothing.
+#[test]
+fn a_meet_of_a_kind_with_members_of_it_is_the_meet_of_the_members() {
+    let below_nothing =
+        |schema: &Schema| schema.subtype_relation_under(&Schema::Nothing, &Steps, &[]);
+    let meet = |members: Vec<Schema>| Schema::Intersection(members.into());
+    assert_eq!(
+        below_nothing(&an_int_step(0)),
+        Relation::Fails,
+        "the premise: 0 is a value"
+    );
+    assert_eq!(
+        below_nothing(&meet(vec![Schema::Int, an_int_step(0)])),
+        Relation::Fails,
+        "the meet with its base holds 0 too"
+    );
+    assert_eq!(
+        below_nothing(&meet(vec![Schema::Int, Schema::Bool])),
+        Relation::Fails,
+        "an int is a boolean's kind"
+    );
+    assert_ne!(
+        below_nothing(&meet(vec![Schema::Str, an_int_step(0)])),
+        Relation::Fails,
+        "no str is an int"
+    );
+}

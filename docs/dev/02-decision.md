@@ -2010,6 +2010,14 @@ else pays one comparison. `refinement_verdict` reads a union's refined branch th
 way, with what narrows the union. Neither folds a term, and
 [01-schema-ir.md](01-schema-ir.md) says why the constructor does not.
 
+**A meet of a kind with members of that kind is read as those members**
+(`the_rest_of_a_meet_within_a_kind`), after the refinements' reading in the same
+chain: `int` met with `Annotated[int, MultipleOf(0.5)]` holds `0` as the refinement
+does, where the meet declined. A member is of the kind where the kind walk reads no
+other kind in it, which spends no step, and `int` spans `bool`. The meet without the
+kind holds one member fewer, so a meet of kinds ends. It reads `int`, `float`, `str`
+and `bytes`: `bool` does not span `int`, whose values are no booleans.
+
 **A Boolean term of length bounds over one base is read as its lengths**
 (`decision/lengths.rs`). `MinLen` and `MaxLen` over a `str`, a `bytes`, or a
 list or a tuple of one element type with no prefix hold the values of the base

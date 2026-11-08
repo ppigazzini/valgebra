@@ -851,6 +851,7 @@ fn intersection_verdict(meet: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> (
         // that declines on all the rest leaves the readings after it none to
         // decide with.
         Verdict::Unknown => one_refinement_of_its_members(members, cx)
+            .or_else(|| the_rest_of_a_meet_within_a_kind(members, cx))
             .or_else(|| the_empty_container_in_every_member(members))
             .or_else(|| sequences_meeting_in_nothing(members, cx))
             .or_else(|| a_meet_read_by_its_constants(members, cx.oracle, cx.defs))
@@ -2148,4 +2149,39 @@ pub(super) fn intersection_bounds_unsatisfiable(
         .collect();
     let density = density_of(members);
     !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle, density)
+}
+
+/// A meet holding a whole kind beside members of that kind alone is the meet of those
+/// members, `k ∩ r` being `r` where `r ⊆ k` [FCB08, Def. 4.1]. So `int` met with
+/// `Annotated[int, MultipleOf(0.5)]` holds what the refinement holds.
+///
+/// A member is of the kind where the kind walk reads no other in it
+/// ([`Schema::holds_no_kind_beyond`]), which spends no step, and `int` spans `bool`.
+/// Read where the readings before it leave the meet undecided, and of the meet without
+/// the kind, which holds one member fewer, so a meet of kinds ends.
+#[inline(never)]
+fn the_rest_of_a_meet_within_a_kind(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
+    let Some((at, kind)) = members.iter().enumerate().find_map(|(at, member)| {
+        if matches!(
+            member,
+            Schema::Int | Schema::Float | Schema::Str | Schema::Bytes
+        ) {
+            member.type_tag().map(|kind| (at, kind))
+        } else {
+            None
+        }
+    }) else {
+        return Verdict::Unknown;
+    };
+    let rest = || {
+        members
+            .iter()
+            .enumerate()
+            .filter(move |(other, _)| *other != at)
+            .map(|(_, member)| member)
+    };
+    if !rest().all(|member| member.holds_no_kind_beyond(kind, cx.oracle, cx.defs)) {
+        return Verdict::Unknown;
+    }
+    Schema::meet_within(rest().cloned(), cx.defs).verdict_rec(cx)
 }

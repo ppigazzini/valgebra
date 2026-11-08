@@ -754,6 +754,18 @@ impl Schema {
         possibly(self, &mut KindWalk::new(oracle, defs, false))
     }
 
+    /// Whether every value this schema holds is of `kind`, or of a kind a value of
+    /// `kind` also has: the walk above reads no other. `int` spans `bool`, a boolean
+    /// being an integer.
+    pub(super) fn holds_no_kind_beyond(
+        &self,
+        kind: Kind,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+    ) -> bool {
+        self.kinds_possibly_held(oracle, defs) & !sharing(kind) == 0
+    }
+
     /// Whether this schema is a table with no constant of some builtin kind `other`
     /// holds no value of: a plain value of that kind is of no constant's exact type,
     /// so it is outside the table, and outside `other`. A constant of the kind leaves

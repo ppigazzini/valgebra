@@ -1420,6 +1420,13 @@ _DECIDED = [
         Annotated[float, at.MultipleOf(5)],
         id="float-step:no-multiple-between-its-bounds",
     ),
+    # A meet of a kind with members of that kind holds what they hold, `0` here.
+    pytest.param(
+        "refutes",
+        intersection(int, Annotated[int, at.MultipleOf(0.3125)]),
+        str,
+        id="meet:int&float-step!<=str",
+    ),
     # Inclusion in a complement, which is `A ∩ B = ∅` and nothing structural: a
     # complement offers no shape on the right to recurse into.
     pytest.param(

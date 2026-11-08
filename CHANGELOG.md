@@ -63,10 +63,15 @@ answer of its own, or a repair to a change not yet released.
 - fix: an annotation folds a recursion and its complement as its combinator does
 - fix: a refined record or list display prints as the validator it builds
 - fix: a pattern holding a lone surrogate is refused by its surrogate
+- feat: a meet of a kind with members of that kind is read as those members
 
 -->
 
 ### Added
+
+- **A meet of a kind with members of that kind is read as those members.**
+  `intersection(int, Annotated[int, MultipleOf(0.5)])` is `not_subset` of `nothing` on `0`,
+  as the refinement alone is, where the meet stayed `undecided`.
 
 - **A class reached again inside a `type` alias is tied by the alias.** `Box[Tree]`, with
   `type Tree = int | Box[Tree]`, builds the boxes holding a tree, and a dataclass naming itself
