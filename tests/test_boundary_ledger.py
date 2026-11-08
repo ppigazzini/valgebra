@@ -318,8 +318,8 @@ ROWS: dict[str, Row] = {
     ),
     # -- sound but conservative ----------------------------------------------
     "A clause keyed by part of a kind.": Declines(
-        dict,
-        {Literal["a"]: anything, complement(Literal["a"]): anything},
+        Validator({complement(Literal["a"]): int}),
+        {str: str, complement(str): int},
         "a part of the key partition for a key-type holding part of a kind",
         # The entry's own contrast: a complement of a whole kind is the other
         # parts, and the same two clauses over `str` decide.

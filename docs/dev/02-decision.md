@@ -1245,6 +1245,10 @@ with no finite value holds `[]` alone (`holds_its_prefix_alone_within`), and a c
 no value carries no entry [Cas23, fn. 11], where a set reading cuts `t` to a top and finds a
 value. Nor does a clause whose key holds no value, which names no key, and an optional field
 holding no value is never present, so no clause of the supertype has its entry to read.
+A clause whose key no one clause of the supertype holds is covered by several, where the
+keys of the clauses reading its value hold its key between them (`covered_between_them`,
+[Cas23, Lem. 4.7]): `dict[Literal["a"] | P, V]` below `{Literal["a"]: V, P: V}` for a
+pattern `P`, which the set representation leaves to the rules beside a literal.
 Asked in the last asking alone, since a position rarely holds none and the verdict
 costs a goal's steps. `sequences_meeting_in_nothing` reads the other half in an emptiness
 question of any asking: two sequences meet in nothing where a position each of their values

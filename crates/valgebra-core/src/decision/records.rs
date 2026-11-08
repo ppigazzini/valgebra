@@ -410,7 +410,7 @@ pub(super) fn keyed_map_subtype(
                 }
                 answer.holds()
             });
-            if subsumed {
+            if subsumed || (cx.reads_leaves && covered_between_them(mine, db, cx)) {
                 Relation::Holds
             } else {
                 clause_by_key(mine, fa, fb, db, &mut values_asked, cx)
@@ -418,6 +418,22 @@ pub(super) fn keyed_map_subtype(
         }));
         Relation::all([fields_ok, extra_covered, defaults])
     }
+}
+
+/// Whether the clauses of `b` holding this clause's value hold its key between
+/// them: a map is below another one key region at a time [Cas23, Lem. 4.7], so a
+/// key several clauses split is covered where each part lands in a clause reading
+/// its value. `dict[A | B, V]` is `{A: V, B: V}`, and `dict[object, V]` is below
+/// `{str: V, ~str: anything}`. The names `b`'s fields read are held apart by the
+/// fields' own conjunct, as for one clause subsuming this one.
+#[inline(never)]
+fn covered_between_them(mine: &MapClause, db: &[MapClause], cx: &mut Cx<'_>) -> bool {
+    let holding: Vec<Schema> = db
+        .iter()
+        .filter(|theirs| mine.value.is_subtype_rec(&theirs.value, cx).holds())
+        .map(|theirs| theirs.key.clone())
+        .collect();
+    holding.len() > 1 && mine.key.is_subtype_rec(&Schema::union(holding), cx).holds()
 }
 
 /// Whether the catch-all clause `mine` of a subject admits an entry no dict of

@@ -928,8 +928,13 @@ the shape. What is left below is what the descriptor cannot hold.
   refute one key kind at a time: a kind the subject's clause holds whole, read
   by one of the supertype's clauses or by none, names a key whose entry the two
   maps judge apart, so `{str: int}.open()` is outside `{str: int}` on `{7:
-  "x"}`. What comes back "not proven" is a pair whose supertype reads a key
-  kind in part, or with two clauses at once.
+  "x"}`. They prove a clause below the supertype where one of its clauses holds
+  the key and the value, or where the clauses holding the value hold the key
+  between them, so `dict` is below `{Literal["a"]: anything,
+  complement(Literal["a"]): anything}`. What comes back "not proven" is a
+  refutation whose supertype reads a key kind in part, or with two clauses at
+  once: `{complement(Literal["a"]): int}` against `{str: str, complement(str):
+  int}`, which `{"b": 1}` refutes.
 
     The partition is the source's: it treats a record as a quasi-`K`-step
     function, where `K` is a *predefined finite partition* of the key domain
@@ -944,8 +949,8 @@ the shape. What is left below is what the descriptor cannot hold.
     step function. valgebra admits every other such key where the
     source has no part for it: the walk reads it exactly, and the comparison it
     needs is not built. That is a gap rather than a refusal, and what it costs
-    is the proof a pair needs where a key kind is read in part -- which comes
-    back "not proven" even between two spellings of every dict:
+    is the refutation a pair needs where a key kind is read in part -- which
+    comes back "not proven" though one dict settles it:
 
     ```python
     from typing import Literal
@@ -963,12 +968,17 @@ the shape. What is left below is what the descriptor cannot hold.
     # A key kind the supertype reads one way refutes: `{7: "x"}`.
     assert Validator({str: int}).open().relation_to({str: int}) == "not_subset"
 
-    # A complement of a literal holds part of `str`. These two admit every dict.
+    # A complement of a literal holds part of `str`. The clauses holding a value
+    # hold every key between them, so this admits every dict, and is proved to.
     not_a = complement(Validator(Literal["a"]))
     long_way = Validator({Literal["a"]: anything, not_a: anything})
-    every_dict = Validator(dict)
-    assert long_way.is_valid({"a": 1, 7: "x"}) and every_dict.is_valid({"a": 1, 7: "x"})
-    assert every_dict.relation_to(long_way) == "undecided"
+    assert long_way.is_equivalent(dict)
+
+    # A refutation needs the part a key falls in: `{"b": 1}` is in one, not the other.
+    part_of_str = Validator({not_a: int})
+    by_kind = Validator({str: str, not_str: int})
+    assert part_of_str.is_valid({"b": 1}) and not by_kind.is_valid({"b": 1})
+    assert part_of_str.relation_to(by_kind) == "undecided"
     ```
 
     This is the shape `open` writes on a **mapping**: freeing the key-types a

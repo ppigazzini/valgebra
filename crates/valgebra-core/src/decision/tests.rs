@@ -15060,3 +15060,77 @@ mod a_name_as_a_word {
         assert_ne!(bounds_met(), met, "a reading refused meets a bound");
     }
 }
+
+/// A clause of the subject's key covered by several clauses of the supertype.
+mod a_split_key {
+    use super::*;
+
+    /// Two clauses holding the value cover no key they do not hold between them:
+    /// `dict[Literal["a"] | P, int]` is not below `{Literal["a"]: int, Q: int}`
+    /// for two patterns `P` and `Q`, where a word of `P` reaches neither clause.
+    /// The sets leave a pattern beside a literal to the rules, so the pair reaches
+    /// the last asking, where the cover is read.
+    #[test]
+    fn clauses_holding_the_value_cover_only_their_keys() {
+        let mapping = |clauses: Vec<(Schema, Schema)>| {
+            Schema::keyed_map(
+                Vec::new(),
+                clauses
+                    .into_iter()
+                    .map(|(key, value)| MapClause { key, value })
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let pattern =
+            |text: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(text.into())]);
+        let subject = mapping(vec![(
+            Schema::union([Schema::Literal(a_plain_value::WORD), pattern("b")]),
+            Schema::Int,
+        )]);
+        let apart = mapping(vec![
+            (Schema::Literal(a_plain_value::WORD), Schema::Int),
+            (pattern("c"), Schema::Int),
+        ]);
+        assert_ne!(
+            subject.subtype_relation_under(&apart, &a_plain_value::Table, &[]),
+            Relation::Holds
+        );
+    }
+
+    /// A clause's key split between two clauses of the supertype, each reading its
+    /// value, is covered: `dict[Literal["a"] | P, int]` is below `{Literal["a"]: int,
+    /// P: int}` for a pattern `P`, which the sets leave to the rules. A value one
+    /// part's clause refuses is not.
+    #[test]
+    fn a_key_split_between_two_clauses_is_covered() {
+        let mapping = |clauses: Vec<(Schema, Schema)>| {
+            Schema::keyed_map(
+                Vec::new(),
+                clauses
+                    .into_iter()
+                    .map(|(key, value)| MapClause { key, value })
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let word = Schema::Literal(a_plain_value::WORD);
+        let pattern = Schema::refine(Schema::Str, vec![Constraint::Regex("b".into())]);
+        let subject = mapping(vec![(
+            Schema::union([word.clone(), pattern.clone()]),
+            Schema::Int,
+        )]);
+        let split = mapping(vec![
+            (word.clone(), Schema::Int),
+            (pattern.clone(), Schema::Int),
+        ]);
+        let table = a_plain_value::Table;
+        assert_eq!(
+            subject.subtype_relation_under(&split, &table, &[]),
+            Relation::Holds
+        );
+        let refusing = mapping(vec![(word, Schema::Int), (pattern, Schema::Str)]);
+        assert_ne!(
+            subject.subtype_relation_under(&refusing, &table, &[]),
+            Relation::Holds
+        );
+    }
+}

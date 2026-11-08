@@ -48,10 +48,16 @@ answer of its own, or a repair to a change not yet released.
 - fix: what a marker or a class yields is read within the node bound
 - fix: an allocation Python refuses inside a call raises MemoryError
 - feat: a key or an optional field holding no value carries no entry
+- feat: a clause's key split between clauses of a supertype is covered
 
 -->
 
 ### Added
+
+- **A clause's key split between clauses of a supertype is covered.** `dict[Literal["a"] | P,
+  int]` is `subset` of `{Literal["a"]: int, P: int}` for `P = Annotated[str, Regex("b")]`, so
+  a record's `close()` is related back to it, and `Validator(dict[object, S]).open()` of
+  `Validator(dict[str, S]).open()`, where each stayed `undecided`.
 
 - **A clause whose key holds no value and an optional field holding none carry no entry.**
   `dict[intersection(Literal["a"], Literal["b"]), int]` and `dict[intersection(str, int), int]`
