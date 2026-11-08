@@ -527,6 +527,24 @@ int}` admitted `{Plain("a"): "s", Folded("A"): 1}`. So `scan_dict` reads `dict.i
 copy, a list of a tuple per entry: 6% more over a dict of a thousand entries and half a
 microsecond over three, on PyPy alone, which a record's fields, read by lookup, do not pay.
 
+**On PyPy no reading survives a subclass whose `__len__` raises,** and the walk
+does not try one. `cpyext` shows an extension an object by attaching it, and
+attaching an instance of a `dict`, `tuple` or `bytes` subclass calls its own
+`__len__`, at every read that hands the walk an element. Each was built and run
+on PyPy 3.11 against `[D()]` and `{"a": D()}`, `D` a `dict` subclass whose
+`__len__` raises. `PyList_GET_ITEM` hands back a null, and the process ends
+where the walk takes it. `PyList_GetItem` reports the exception, and leaves the
+list's C-level storage holding the null: the next Python code to ask reads a
+length of 4,294,968,136, and the next item read ends the process, so the
+checked read moves the crash past the call rather than ending it.
+`PyIter_Next`, which reads a set, and `PyDict_GetItemWithError`, which reads a
+record's field, raise where `cpyext` declares no exception, which it reports as
+a fatal error and ends the process inside the call. A reading around the attach
+would ask the type of every element from Python before the walk read it, a pass
+over each container on every PyPy walk for a value `cpyext` shows no extension.
+`docs/00-installation.md` states the behavior, and
+`test_a_subclass_whose_len_raises_is_read_by_its_storage` holds CPython's half.
+
 **Every container the walk reads answers this way, and for one reason.** A
 schema over a container denotes what the value *holds*, so the reading of it
 cannot be a method the value chooses: a `str`, `bytes`, `list`, `tuple`, `set`,

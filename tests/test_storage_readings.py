@@ -20,6 +20,7 @@ walk catches is two answers for one value, which the walk page puts first.
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Annotated
 
 import annotated_types as at
@@ -212,6 +213,33 @@ def test_a_subclass_that_overrides_neither_slot_is_read_where_it_lies() -> None:
     assert _both_modes(set[int], QuietSet({"a"})) == (False, False)
     bounded = Annotated[set[int], at.MinLen(2)]
     assert _both_modes(bounded, QuietSet({1, 2})) == (True, True)
+
+
+class RaisingDictLen(dict):
+    """A dict whose `__len__` raises."""
+
+    __slots__ = ()
+
+    def __len__(self) -> int:
+        raise ValueError
+
+
+@pytest.mark.skipif(
+    sys.implementation.name != "cpython",
+    reason="PyPy's cpyext calls the override to show the value to an extension, "
+    "and its raise ends the process (docs/00-installation.md)",
+)
+def test_a_subclass_whose_len_raises_is_read_by_its_storage() -> None:
+    """The storage holds the entries, and an override that raises is not asked.
+
+    Held in a list, under a mapping's clause, in a record's field, and as the
+    value itself: the empty dict is a member of each.
+    """
+    held = RaisingDictLen()
+    assert _both_modes(list[dict[str, int]], [held]) == (True, True)
+    assert _both_modes(dict[str, object], {"a": held}) == (True, True)
+    assert _both_modes({"a": object}, {"a": held}) == (True, True)
+    assert _both_modes(dict[str, int], held) == (True, True)
 
 
 def test_the_two_length_readings_agree_on_one_value() -> None:

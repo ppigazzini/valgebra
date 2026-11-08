@@ -116,6 +116,16 @@ value. CPython's `object.__new__` refuses a class with a constructor of its
 own; PyPy's does not ask, and no code of valgebra's runs to refuse it. Build a
 validator by calling `Validator`.
 
+And one kind of value no extension can be shown there. `cpyext` hands an
+extension an object by attaching it, and attaching an instance of a `dict`,
+`tuple` or `bytes` subclass calls the subclass's own `__len__`. Where that
+raises, nothing valgebra reads survives it: passed as the value itself, the
+object raises the subclass's exception from `validate` or `is_valid`; held in a
+list, a dict, a set or a record's field, it ends the process where the walk
+reads it, or, in a list whose items the walk does not read (`list[object]`),
+raises `SystemError`. CPython reads the storage and asks the type nothing, so
+there each such value is checked by what it holds.
+
 And one relation decides less there. A type defined in C, such as `complex`,
 lays down an instance layout no class can combine with `int`'s, and on CPython
 valgebra reads it off the size of the type's instance:
