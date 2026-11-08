@@ -229,6 +229,23 @@ answer of its own, or a repair to a change not yet released.
 
 ### Security
 
+- **The module loads in the main interpreter of a process, once.** A legacy subinterpreter,
+  which is what `mod_wsgi` runs an application group in, loaded it, and every interpreter after
+  the first to build read that one's `typing`: `Validator(Annotated[str, Regex("a")])` built as
+  `str` and admitted `"b"`, and `Validator(Any)` refused every value. The pattern was dropped so
+  on 0.0.17 through 0.0.24, every published wheel read on CPython 3.12. An embedder calling
+  `Py_Initialize` again after `Py_FinalizeEx` ended the process in the next build, read on
+  0.0.24. Both raise `ImportError` at `import valgebra`; the main interpreter loads it whichever
+  imports first.
+
+- **Each key of a parsed object is its own value to the walk's memo.** `is_valid_json` answered
+  one key of an object with the answer kept for another, where two members of a schema read a
+  recursive key language: `{K: int, complement(K): str}`, for `K = recursive(lambda k:
+  union(Annotated[str, Regex("b+")], [k]))`, admitted `{"b": 0, "0": 0}` and refused
+  `{"b": 0, "0": "x"}`, against `is_valid` of `json.loads` and against `validate_json` on the
+  same text. The answer was wrong on 0.0.19 through 0.0.24, every published wheel read, on
+  CPython and PyPy alike. The memo keys a string by its text.
+
 - **What a relation over a float's bound or a step assumes of a subclass is stated.** A step met
   with bounds is proved empty over the builtin's residues, and a subclass with a `%` of its own
   is admitted by it, and `np.float64` compares an integer past `2**53` rounded where the bound is
@@ -333,13 +350,6 @@ answer of its own, or a repair to a change not yet released.
   exception, and so were a protocol's members and a named tuple's `_fields` given an iterable
   that does not end; a `TypedDict` whose `__required_keys__` never ends never returned. Each raises `ValueError: schema is too large` past 100,000 items.
 
-- **The module loads in the main interpreter of a process, once.** A legacy subinterpreter,
-  which is what `mod_wsgi` runs an application group in, loaded it, and every interpreter after
-  the first to build read that one's `typing`: `Validator(Annotated[str, Regex("a")])` built as
-  `str` and admitted `"b"`, and `Validator(Any)` refused every value. An embedder calling
-  `Py_Initialize` again after `Py_FinalizeEx` ended the process in the next build. Both raise
-  `ImportError` at `import valgebra`; the main interpreter loads it whichever imports first.
-
 - **A value sharing a sub-object answers as its copy past the walk's bounds.** The walk's memo
   answered a definition at a value from any earlier walk of it, and a walk with less of the
   bounds left, which would stop on its own, found the answer instead: against
@@ -349,13 +359,6 @@ answer of its own, or a repair to a change not yet released.
   second list branch reads an inner list again: `[[..., "s"], "s"]` a hundred deep was refused by
   `is_valid_json` and admitted by `validate_json`. An answer is found by a walk with as much of
   each bound left as the kept walk used.
-
-- **Each key of a parsed object is its own value to the walk's memo.** `is_valid_json` answered
-  one key of an object with the answer kept for another, where two members of a schema read a
-  recursive key language: `{K: int, complement(K): str}`, for `K = recursive(lambda k:
-  union(Annotated[str, Regex("b+")], [k]))`, admitted `{"b": 0, "0": 0}` and refused
-  `{"b": 0, "0": "x"}`, against `is_valid` of `json.loads` and against `validate_json` on the
-  same text. The memo keys a string by its text.
 
 - **A refusal names a refined branch's bounds and each clause reading a key.**
   `union(Annotated[int, Ge(10)], Annotated[int, Lt(0)])` read `5` as `expected one of: int, int`,
