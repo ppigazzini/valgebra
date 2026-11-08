@@ -57,6 +57,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a class reached again inside a type alias is tied by the alias
 - fix: a failure inside a key ends its path at the key
 - fix: a key past the digit limit is its hexadecimal text in a path
+- fix: a signal from an element's repr raises out of the message
 
 -->
 
@@ -246,6 +247,15 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A signal from an element's `repr` raises out of the message.** `Validator(int).validate([x])`,
+  for an `x` whose `__repr__` raises `MemoryError` or `RecursionError`, reported `[<X instance at
+  0x...>]` on 0.0.24, since `reprlib`, which renders a container, reads every `Exception` as an
+  element that cannot render; the two signals raise, as they do from the value's own `__repr__`.
+  An element whose `__repr__` raises an ordinary exception prints as `<unrepresentable>`, the
+  word for a value whose `__repr__` raises, with no address. A validator's `repr` raises
+  `MemoryError` where Python cannot give a field name's or a pattern's text room, where it
+  printed Rust's spelling of the text.
 
 - **A key past the digit limit is its hexadecimal text in a path.** `Validator(dict[str,
   int]).validate({10**5000: 1})` refuses the key, and on 0.0.24 its path held the key as an `int`,

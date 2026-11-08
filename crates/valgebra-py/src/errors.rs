@@ -76,14 +76,55 @@ static BOUNDED_REPR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 /// small enough to print renders exactly as `repr` would and only a value that
 /// was going to be cut anyway takes a different path.
 ///
+/// A subclass of `reprlib.Repr`, through the method its documentation names for
+/// one. The base class reads any `Exception` an element's `__repr__` raises as
+/// an element that cannot render, `MemoryError` and `RecursionError` among
+/// them, which the error model raises out of the call. The element's `repr`
+/// runs once, in the subclass: the two signals raise, another exception reads
+/// as [`UNREPRESENTABLE`], as it does for a value outside a container, and a
+/// text past `maxother` goes back through the base class, which cuts it. One
+/// within it is the text, as the base class leaves it, since through the base
+/// class it would cost two Python calls an element: a summary of 32 floats in
+/// 17 µs where it takes 11. Compiled into a namespace, as the error hooks are,
+/// so no module stands in `sys.modules` without a file behind it.
+///
 /// An error building it is the caller's, a signal among them: the cell stays
 /// empty, and the next summary builds it again.
 fn bounded_repr(py: Python<'_>) -> PyResult<&Py<PyAny>> {
     BOUNDED_REPR.get_or_try_init(py, || {
-        let repr = py
-            .import("reprlib")?
-            .getattr(intern!(py, "Repr"))?
-            .call0()?;
+        let namespace = PyDict::new(py);
+        namespace.set_item(intern!(py, "__name__"), "valgebra._summary")?;
+        namespace.set_item(intern!(py, "UNREPRESENTABLE"), UNREPRESENTABLE)?;
+        PyCode::compile(
+            py,
+            c"import builtins, reprlib
+
+class Rendered:
+    __slots__ = ('text',)
+
+    def __init__(self, text):
+        self.text = text
+
+    def __repr__(self):
+        return self.text
+
+class BoundedRepr(reprlib.Repr):
+    def repr_instance(self, x, level):
+        try:
+            text = builtins.repr(x)
+        except (MemoryError, RecursionError):
+            raise
+        except Exception:
+            return UNREPRESENTABLE
+        if len(text) <= self.maxother:
+            return text
+        return super().repr_instance(Rendered(text), level)
+",
+            c"<valgebra summary>",
+            PyCodeInput::File,
+        )?
+        .run(Some(&namespace), None)?;
+        let repr = namespace.as_any().get_item("BoundedRepr")?.call0()?;
         for (limit, value) in [
             ("maxlevel", 12_usize),
             ("maxtuple", 32),

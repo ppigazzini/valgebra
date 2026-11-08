@@ -691,6 +691,47 @@ def test_a_fatal_signal_while_a_refusal_is_written_propagates(
         Validator(Annotated[list[int], at.MinLen(carrier(ValueError("boom")))])  # ty: ignore[invalid-argument-type]
 
 
+@pytest.mark.parametrize("signal", FATAL)
+def test_a_fatal_signal_from_an_elements_repr_propagates(
+    signal: type[BaseException],
+) -> None:
+    """A message renders a container's elements, and an element's `__repr__` may raise.
+
+    `reprlib`, which renders a container within its bounds, reads any
+    `Exception` from an element as one that cannot render, `MemoryError` and
+    `RecursionError` among them; the two raise out, as they do from the value's
+    own `__repr__`.
+    """
+    with pytest.raises(signal):
+        Validator(int).validate([_Repr(signal())])
+
+
+def test_an_element_whose_repr_raises_is_unrepresentable() -> None:
+    """An ordinary exception is an element that cannot render, as a value is.
+
+    The element's `repr` runs once, and a text it returns is cut as `reprlib`
+    cuts one: a middle elided, then the whole summary held to its length.
+    """
+    calls = []
+
+    class Counted:
+        def __repr__(self) -> str:
+            calls.append(None)
+            raise ValueError
+
+    class Long:
+        def __repr__(self) -> str:
+            return "x" * 200
+
+    with pytest.raises(ValidationError) as info:
+        Validator(int).validate([Counted()])
+    assert info.value.value == "[<unrepresentable>]"
+    assert len(calls) == 1
+    with pytest.raises(ValidationError) as info:
+        Validator(int).validate([Long(), 1])
+    assert info.value.value == "[" + "x" * 38 + "..." + "x" * 38 + "..."
+
+
 def _testcapi_refusing() -> typing.Any:
     """Return `_testcapi` where it refuses allocations on request, else `None`."""
     try:
@@ -710,7 +751,7 @@ import contextlib, dataclasses, json, sys
 from typing import Annotated
 import annotated_types as at
 import _testcapi
-from valgebra import ValidationError, Validator
+from valgebra import Regex, ValidationError, Validator
 
 @dataclasses.dataclass
 class Spot:
@@ -718,6 +759,16 @@ class Spot:
 
 REFUSED = Validator({"a": list[int], "b": Spot})
 BAD = {"a": [1, "x"], "b": Spot(x="y")}
+# A field's name and a pattern are spelled by Python's own repr of a str: a
+# refusal there is no other spelling of the schema, so the text is the one an
+# unrefused call gives, or the call raises.
+SHOWN = Validator({"a": list[int], "b": Annotated[str, Regex("ab")]})
+TEXT = repr(SHOWN)
+
+def shown():
+    text = repr(SHOWN)
+    if text != TEXT:
+        raise AssertionError(text)
 
 def errors_of():
     try:
@@ -731,7 +782,7 @@ CALLS = {
     "validate_json": lambda: REFUSED.validate_json('{"a": [1, "x"], "b": 2}'),
     "load": lambda: Validator({"a": list[int]}).load('{"a": [1, 2, 3]}'),
     "relation_to": lambda: REFUSED.relation_to({"a": list[int | str], "b": Spot}),
-    "repr": lambda: repr(REFUSED),
+    "repr": shown,
     "errors": errors_of,
 }
 run = CALLS[sys.argv[1]]
