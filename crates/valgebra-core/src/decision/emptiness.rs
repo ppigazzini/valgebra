@@ -2049,7 +2049,7 @@ pub(super) fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) ->
 /// [`read_empty`], and a sequence's tail by `tail_holds_none`, which the
 /// caller names: the rules, for a refinement's own emptiness, or `read_empty`
 /// for a reading that spends no step.
-fn lengths_miss_the_shape(
+pub(super) fn lengths_miss_the_shape(
     base: &Schema,
     constraints: &Constraints,
     cx: &mut Cx<'_>,
@@ -2132,7 +2132,10 @@ fn repeated_element(base: &Schema) -> Option<&Schema> {
 /// inside a member (say under a union arm) is not collected here; the decision
 /// stays sound, since missing a contradiction only forgoes reporting emptiness,
 /// never reports a non-empty intersection empty.
-fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
+pub(super) fn intersection_bounds_unsatisfiable(
+    members: &[Schema],
+    oracle: &dyn LeafRelations,
+) -> bool {
     // Gather the top-level refine members' constraints by reference — no clone, so
     // a `Regex` constraint's pattern string is not copied per intersection node.
     let merged: Vec<&Constraint> = members

@@ -15591,3 +15591,138 @@ mod a_length_past_a_table {
         assert!(!one.holds_more_words_than(1_114_112));
     }
 }
+
+/// Readings asked directly, each a mechanism a later reading answers the same
+/// pairs by another route: through the relation alone none of them is seen.
+mod readings_another_route_shadows {
+    use super::*;
+
+    /// The bounds of a meet's refined members read together: `int >= 3` and
+    /// `int <= 2` hold no value between them, and a meet with no refined
+    /// member has no bounds to read. The sets read the same pair, so the
+    /// relation alone does not show this reading.
+    #[test]
+    fn a_meets_refined_bounds_are_read_together() {
+        struct Two;
+        impl Constants for Two {
+            fn operand(&self, index: OperandIx) -> Option<Operand> {
+                [2, 3]
+                    .get(index.get())
+                    .map(|value| Operand::Integer(*value))
+            }
+        }
+        impl LeafRelations for Two {
+            fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+                None
+            }
+            fn operand_kind(&self, index: OperandIx) -> Option<Kind> {
+                (index.get() < 2).then_some(Kind::Int)
+            }
+            fn compare(&self, left: OperandIx, right: OperandIx) -> Option<core::cmp::Ordering> {
+                Some(left.get().cmp(&right.get()))
+            }
+        }
+        let at_least_three = refine(Schema::Int, Constraint::Ge(OperandIx::new(1)));
+        let at_most_two = refine(Schema::Int, Constraint::Le(OperandIx::new(0)));
+        assert!(emptiness::intersection_bounds_unsatisfiable(
+            &[at_least_three.clone(), at_most_two],
+            &Two
+        ));
+        assert!(!emptiness::intersection_bounds_unsatisfiable(
+            &[at_least_three, Schema::Int],
+            &Two
+        ));
+        assert!(!emptiness::intersection_bounds_unsatisfiable(
+            &[Schema::Int, Schema::Str],
+            &Two
+        ));
+    }
+
+    fn word(at: usize) -> Schema {
+        Schema::Literal(ConstIx::new(at))
+    }
+
+    fn refine(base: Schema, constraint: Constraint) -> Schema {
+        Schema::refine(base, vec![constraint])
+    }
+
+    /// A subject below a table is one whose meet with the table's complement is
+    /// empty, and a meet that is not is no proof: `a | b` against `a` meets
+    /// `¬a` in `b`.
+    #[test]
+    fn a_meet_with_the_tables_complement_proves_only_where_it_is_empty() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let both = Schema::Union(vec![word(0), word(1)].into());
+        assert_ne!(both.decided_as_respelled(&word(0), &cx), Relation::Holds);
+    }
+
+    /// A collection holds the empty one whatever its element, and no bound on
+    /// how many: one value at least.
+    #[test]
+    fn a_collection_counts_one_value_at_least() {
+        let oracle = a_plain_value::Table;
+        assert_eq!(
+            emptiness::value_count_bounds(&Schema::set(Schema::Int), &oracle),
+            (1, usize::MAX)
+        );
+    }
+
+    /// A set of an empty element holds the empty set alone, so a length of one
+    /// at least misses its shape.
+    #[test]
+    fn a_set_of_nothing_is_missed_by_a_length_of_one() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let constraints: crate::ir::Constraints = vec![Constraint::MinLen(1)].into();
+        assert!(emptiness::lengths_miss_the_shape(
+            &Schema::set(Schema::Nothing),
+            &constraints,
+            &mut cx,
+            |_, _| false
+        ));
+        assert!(!emptiness::lengths_miss_the_shape(
+            &Schema::set(Schema::Int),
+            &constraints,
+            &mut cx,
+            |_, _| false
+        ));
+    }
+
+    /// A sized base whose bounds admit zero holds the empty value, which a
+    /// supertype refusing zero refuses: `Annotated[set[int], MinLen(0)]` against
+    /// `Annotated[set[int], MinLen(1)]`.
+    #[test]
+    fn the_empty_value_refused_is_read_through_a_refinement() {
+        let sets = Schema::set(Schema::Int);
+        let any = refine(sets.clone(), Constraint::MinLen(0));
+        let some = refine(sets, Constraint::MinLen(1));
+        assert!(any.the_empty_refused(&some));
+        assert!(!some.the_empty_refused(&any));
+    }
+
+    /// A field two records share is refuted by the sets where its types share
+    /// no value, and not where they agree.
+    #[test]
+    fn a_shared_field_is_refuted_where_its_types_part() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let field = |schema: Schema| {
+            vec![Field {
+                name: "x".into(),
+                schema,
+                required: true,
+            }]
+        };
+        assert!(records::a_shared_field_refuted_by_the_sets(
+            &field(Schema::Int),
+            &field(Schema::Str),
+            &cx
+        ));
+        assert!(!records::a_shared_field_refuted_by_the_sets(
+            &field(Schema::Int),
+            &field(Schema::Int),
+            &cx
+        ));
+    }
+}

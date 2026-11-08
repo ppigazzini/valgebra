@@ -331,7 +331,7 @@ impl Schema {
     /// base is sized: `Annotated[set[int], MinLen(0)]` holds `set()`, which
     /// `MinLen(1)` refuses, as `set[int]` does, and `Annotated[dict,
     /// MaxLen(0)]` holds `{}`, which `{"a": int}` refuses.
-    fn the_empty_refused(&self, other: &Schema) -> bool {
+    pub(super) fn the_empty_refused(&self, other: &Schema) -> bool {
         self.type_tag().is_some_and(|kind| {
             self.holds_the_exact_empty(kind) == Some(true)
                 && other.holds_the_exact_empty(kind) == Some(false)
