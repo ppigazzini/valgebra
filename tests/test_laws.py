@@ -10,6 +10,7 @@ them is searched for. The semantic decision (`is_equivalent`) is cross-checked
 against membership separately in the subtyping suite.
 """
 
+import typing
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
@@ -522,6 +523,33 @@ def test_construction_folds_a_union_or_a_meet_and_its_complement(
     assert hash(top) == hash(anything)
     met = intersection(*members)
     assert intersection(met, complement(met)) == nothing
+
+
+_FOLDED = [
+    recursive(lambda t: union(int, list[t])),  # ty: ignore[invalid-type-form]
+    recursive(lambda t: union(None, {"next": t})),
+    Validator(int),
+]
+_FOLDED_SPELLINGS = st.sampled_from(
+    _FOLDED + [complement(member) for member in _FOLDED]
+)
+
+
+@given(left=_FOLDED_SPELLINGS, right=_FOLDED_SPELLINGS)
+def test_an_annotation_folds_what_its_combinator_folds(
+    left: Validator, right: Validator
+) -> None:
+    """`Annotated[A, B]` is the meet and `Union[A, B]` the join, however spelled.
+
+    The complement law reads a recursive member through its definition, which
+    the annotation's build holds as the combinator's does, so `K & ~K` is the
+    bottom and `K | ~K` the top whichever constructor writes them.
+    """
+    met = Validator(Annotated[left, right])  # ty: ignore[invalid-type-form]
+    assert met == intersection(left, right)
+    # The typing spelling is the one under test, so not `left | right`.
+    joined = Validator(typing.Union[left, right])  # noqa: UP007  # ty: ignore[invalid-type-form]
+    assert joined == union(left, right)
 
 
 _MARKER = st.sampled_from([at.Ge, at.Gt, at.Le, at.Lt, at.MultipleOf])

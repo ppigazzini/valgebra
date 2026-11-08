@@ -226,7 +226,10 @@ pub(super) fn build_refine(
     for set in &sets {
         members.push(build_schema(set, lits, defs)?);
     }
-    Ok(Schema::meet(members))
+    // Within the definitions the build holds, as `intersection` folds: a
+    // reference is a set only through its definition, and the complement law
+    // read without them left `K & ~K` standing for a recursive `K`.
+    Ok(Schema::meet_within(members, defs))
 }
 
 /// The group Python orders `operand` within, or `None` for a value of no group.

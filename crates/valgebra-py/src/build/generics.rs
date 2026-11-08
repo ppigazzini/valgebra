@@ -98,7 +98,9 @@ pub(super) fn build_parametrized(
         for arg in args.iter() {
             members.push(build_type_argument(&arg, lits, defs)?);
         }
-        return Ok(Schema::union(members));
+        // Within the build's definitions, as `union` folds, so `K | ~K` is the
+        // top for a recursive `K` as it is for `int`.
+        return Ok(Schema::union_within(members, defs));
     }
     if is_literal_origin(origin)? {
         // Literal args are constant values; each becomes a literal, unioned when

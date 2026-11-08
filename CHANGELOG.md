@@ -60,6 +60,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a signal from an element's repr raises out of the message
 - fix: a recursion with an arm narrowed past words is refused as a map key
 - fix: a class applied past its type parameters is refused
+- fix: an annotation folds a recursion and its complement as its combinator does
 
 -->
 
@@ -249,6 +250,12 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **An annotation folds a recursion and its complement as its combinator does.** For a
+  recursive `K`, `intersection(complement(K), K)` is `nothing` and `union(complement(K), K)` is
+  `anything`, and `Annotated[complement(K), Validator(K)]` and `Union[complement(K), K]` stood as
+  written: the complement law reads a recursion through its definition, which the annotation's
+  build held and did not pass. Each spelling of one meet or one join compares equal.
 
 - **A class applied past its type parameters is refused.** For a `NamedTuple` declaring no
   parameter, `Point[str]` is an alias `tuple`'s own subscription makes, and its validator was
