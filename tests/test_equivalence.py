@@ -24,7 +24,14 @@ import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, Validator, complement, intersection, union
+from valgebra import (
+    ValidationError,
+    Validator,
+    complement,
+    intersection,
+    nothing,
+    union,
+)
 
 # Atoms span the scalar nodes, the top, the gradual node, and a spread of typed
 # literal singletons.
@@ -124,6 +131,31 @@ def test_is_valid_agrees_with_validate(spec: object, value: object) -> None:
     except ValidationError:
         slow = False
     assert fast == slow
+
+
+@given(left=_schemas(), right=_schemas())
+def test_four_spellings_of_one_inclusion_never_part(
+    left: object, right: object
+) -> None:
+    """`a <= b` asked four ways, each of which may decline: no two answers part.
+
+    The complements reversed, the meet with the complement read for emptiness,
+    and the join read against `b` are each the same inclusion, so where two of
+    them decide, they decide alike. One declining where another decides is a
+    reading the first lacks, which costs an answer; two deciding apart would be
+    one of them wrong.
+    """
+    a, b = Validator(left), Validator(right)
+    spelled = {
+        "a <= b": a.relation_to(b),
+        "~b <= ~a": complement(b).relation_to(complement(a)),
+        "a & ~b <= nothing": intersection(a, complement(b)).relation_to(nothing),
+        "a | b <= b": union(a, b).relation_to(b),
+    }
+    decided = {
+        name: answer for name, answer in spelled.items() if answer != "undecided"
+    }
+    assert len(set(decided.values())) <= 1, f"{a!r} <= {b!r}: {decided}"
 
 
 def test_two_wide_literal_sets_are_decided_as_sets_not_pair_by_pair() -> None:
