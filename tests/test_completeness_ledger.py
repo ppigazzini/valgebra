@@ -1427,6 +1427,13 @@ _DECIDED = [
         str,
         id="meet:int&float-step!<=str",
     ),
+    # Zero is a multiple of an exact `Fraction` or `Decimal` step.
+    pytest.param(
+        "refutes",
+        Annotated[int, at.MultipleOf(Fraction(-13, 3))],
+        str,
+        id="step:exact-rational!<=str",
+    ),
     # Inclusion in a complement, which is `A ∩ B = ∅` and nothing structural: a
     # complement offers no shape on the right to recurse into.
     pytest.param(

@@ -48,6 +48,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from fractions import Fraction
 from typing import (
     Annotated,
     Any,
@@ -199,8 +200,8 @@ ROWS: dict[str, Row] = {
         nothing,
         "subset",
     ),
-    "Zero under a float step.": Decides(
-        Annotated[int, at.MultipleOf(0.8125)],
+    "Zero under a step.": Decides(
+        Annotated[int, at.MultipleOf(Fraction(-11, 3))],
         str,
         "not_subset",
     ),

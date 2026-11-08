@@ -15791,3 +15791,21 @@ fn a_meet_of_a_kind_with_members_of_it_is_the_meet_of_the_members() {
         "no str is an int"
     );
 }
+
+/// Zero is a multiple of an exact `Fraction` or `Decimal` step, `0 % q` being an
+/// exact zero, and a step the pool hands over as no exact rational declines.
+#[test]
+fn zero_is_a_multiple_of_an_exact_rational_step() {
+    let below_nothing =
+        |schema: &Schema| schema.subtype_relation_under(&Schema::Nothing, &Steps, &[]);
+    assert_eq!(
+        below_nothing(&an_int_step(1)),
+        Relation::Fails,
+        "an exact Decimal step"
+    );
+    assert_eq!(
+        below_nothing(&an_int_step(2)),
+        Relation::Unknown,
+        "a step read as nothing"
+    );
+}

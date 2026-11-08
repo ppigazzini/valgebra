@@ -1395,6 +1395,18 @@ def test_zero_is_a_multiple_of_every_float_step_over_the_integers(step: float) -
     assert Validator(multiple).relation_to(str) == "not_subset"
 
 
+# Steps no other test writes, none a float equals.
+@pytest.mark.parametrize("step", [Fraction(-7, 3), Fraction(7, 3), Decimal("-2.7")])
+def test_zero_is_a_multiple_of_an_exact_rational_step_over_the_integers(
+    step: Fraction | Decimal,
+) -> None:
+    """`0 % q` is an exact zero for an exact `Fraction` or `Decimal`."""
+    multiple = Annotated[int, at.MultipleOf(step)]
+    assert Validator(multiple).is_valid(0)
+    assert Validator(multiple).relation_to(nothing) == "not_subset"
+    assert Validator(multiple).relation_to(str) == "not_subset"
+
+
 # Steps no other test writes.
 @pytest.mark.parametrize("step", [0.4375, 2.75, 0.6875])
 def test_a_refinement_met_with_its_base_holds_what_it_holds(step: float) -> None:

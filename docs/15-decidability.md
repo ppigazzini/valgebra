@@ -176,10 +176,11 @@ answers `"undecided"`.
   class only through `bool`'s own order, `int` and `object`, and `intersection(K, bool)`
   is empty for a class with a plain metaclass. A metaclass of its own or a registered
   virtual subclass answers otherwise, and declines.
-- **Zero under a float step.** Zero is a multiple of every float step a build admits,
-  so `Annotated[int, MultipleOf(0.5)]` is `not_subset` of `nothing` and of `str`, on `0`.
-  A step of another kind declines here: a `float` subclass's `__rmod__` answers the
-  remainder of an integer and may refuse zero, and no kind tells a `Decimal` from one.
+- **Zero under a step.** Zero is a multiple of every step a build admits, `0 % q`
+  being an exact zero for a `float`, a `Fraction` and a `Decimal` alike, so
+  `Annotated[int, MultipleOf(0.5)]` and `Annotated[int, MultipleOf(Fraction(1, 3))]` are
+  `not_subset` of `nothing` and of `str`, on `0`. A step of another type declines here:
+  a subclass's `__rmod__` answers the remainder of an integer and may refuse zero.
 - **Divisibility between two moduli**, where it holds. Every multiple of `a` is
   a multiple of `b` when `b` divides `a`, so the two steps settle the inclusion
   between them and the size of either is beside the point: `MultipleOf(5000)`

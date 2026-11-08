@@ -22,7 +22,9 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 
 use crate::descr::classes::Reach;
-use crate::descr::lower::{Constants, an_empty_reading_stands, floats_meet, lower, read_widened};
+use crate::descr::lower::{
+    Constants, Operand, an_empty_reading_stands, floats_meet, lower, read_widened,
+};
 use crate::ir::{
     Attribute, ClassIx, ConstIx, Constraint, Constraints, Field, MapClause, REACHED, Schema,
 };
@@ -1721,11 +1723,15 @@ fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations
             Verdict::Inhabited
         };
     }
-    // Zero is a multiple of every float step a build admits, `0 % 0.5` being `0.0`.
-    // An operand of no exact builtin type declines here: a `float` subclass's
-    // `__rmod__` answers the remainder of an integer, and may refuse zero.
+    // Zero is a multiple of every float step a build admits, `0 % 0.5` being `0.0`,
+    // and of an exact `Fraction` or `Decimal`, which the pool hands over as one
+    // (`Operand::Rational`), `0 % q` being an exact zero. An operand of no exact
+    // type declines here: a subclass's `__rmod__` answers the remainder of an
+    // integer, and may refuse zero.
     if constraints.iter().all(|c| {
-        matches!(c, Constraint::MultipleOf(step) if oracle.operand_kind(*step) == Some(Kind::Float))
+        matches!(c, Constraint::MultipleOf(step)
+            if oracle.operand_kind(*step) == Some(Kind::Float)
+                || matches!(oracle.operand(*step), Some(Operand::Rational { .. })))
     }) {
         return Verdict::Inhabited;
     }

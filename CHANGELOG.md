@@ -64,10 +64,15 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refined record or list display prints as the validator it builds
 - fix: a pattern holding a lone surrogate is refused by its surrogate
 - feat: a meet of a kind with members of that kind is read as those members
+- feat: zero is a multiple of an exact Fraction or Decimal step
 
 -->
 
 ### Added
+
+- **Zero is a multiple of an exact `Fraction` or `Decimal` step.**
+  `Annotated[int, MultipleOf(Decimal("2.5"))]` and `Annotated[int, MultipleOf(Fraction(1, 3))]`
+  are `not_subset` of `nothing` and of `str` on `0`, where they stayed `undecided`.
 
 - **A meet of a kind with members of that kind is read as those members.**
   `intersection(int, Annotated[int, MultipleOf(0.5)])` is `not_subset` of `nothing` on `0`,
