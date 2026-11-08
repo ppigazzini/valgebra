@@ -1410,6 +1410,18 @@ under the same sets shares the number, and the memo is emptied at
 `READINGS_HELD` answers. `a_query_keeps_its_readings_to_itself` and
 `the_readings_held_are_bounded` in `decision/tests.rs` hold the two claims.
 
+**A goal the last asking hands the sets is read once a query.** `a_goal_declined`
+reads each goal the rules decline with no reference on either side by the sets,
+and a query repeats those goals: an equivalence of two recursions over lists of
+patterns asked the sets of 8 pairs 346 times, 160 million instructions where one
+reading apiece takes a few. The pair's answer is a function of the pair, the pool
+and the definitions, with nothing open, so it is held beside the query under its
+number (`Leaves` in `decision.rs`), emptied at the same bound, and the steps are
+spent before it is looked up, so a pair read back is charged as one read: the memo
+changes no answer and no allowance. Where no pair repeats, the key's two copies and
+its hash read the relation matrix +0.49%.
+`a_declined_goal_is_read_by_the_sets_once_a_query` holds it.
+
 **A meet's verdict is read once a query where it rests on nothing.** A query
 asks one meet many times over where its rules decline the goals reaching it, and
 `held_verdict` in `decision/emptiness.rs` reads it once. The verdict is held

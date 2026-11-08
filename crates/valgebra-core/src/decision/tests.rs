@@ -7101,6 +7101,43 @@ fn a_value_of_no_kind_refutes_past_a_cut() {
     assert_eq!(pairs_read_by_the_sets() - before, 1);
 }
 
+/// A goal the last asking hands the sets is read once a query, and charged as read
+/// each time it is asked, so the memo changes no answer and no allowance; another
+/// query reads it again.
+#[test]
+fn a_declined_goal_is_read_by_the_sets_once_a_query() {
+    use super::goal_tests::goals::pairs_read_by_the_sets;
+    let word = |pattern: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(pattern.into())]);
+    let (subject, supertype) = (word("a+"), word("b+"));
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    cx.reads_leaves = true;
+    let before = pairs_read_by_the_sets();
+    let first = subject.a_goal_declined(&supertype, &mut cx);
+    let once = DECISION_BUDGET - budget.left();
+    // A second pair between the two asks: the memo holds both.
+    let between = word("c+");
+    assert_eq!(subject.a_goal_declined(&between, &mut cx), Relation::Fails);
+    let again = subject.a_goal_declined(&supertype, &mut cx);
+    assert_eq!(first, Relation::Fails, "the sets refute it");
+    assert_eq!(again, first, "the memo's answer is the reading's");
+    assert_eq!(pairs_read_by_the_sets() - before, 2, "each pair read once");
+    assert_eq!(
+        DECISION_BUDGET - budget.left(),
+        3 * once,
+        "charged each time"
+    );
+    let other = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &other);
+    cx.reads_leaves = true;
+    assert_eq!(subject.a_goal_declined(&supertype, &mut cx), first);
+    assert_eq!(
+        pairs_read_by_the_sets() - before,
+        3,
+        "another query reads it again"
+    );
+}
+
 /// A meet two of whose members share no value is below anything, read before
 /// a member is asked against the supertype: a float and a mapping meet in
 /// nothing, so the meet is below a fixpoint of lists and mappings in one step

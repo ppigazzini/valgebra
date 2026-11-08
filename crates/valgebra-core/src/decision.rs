@@ -1172,6 +1172,10 @@ impl Schema {
     /// holds the value a refutation stands on, so no witness is asked of it. Out of
     /// line, as a declined goal is the path this is on: the rules' answers read one
     /// test.
+    ///
+    /// Read once a query and held ([`Leaves`]), and charged each time it is asked,
+    /// so the memo changes no answer and no allowance: a query relating two
+    /// recursions over lists of patterns asked the sets of 8 pairs 346 times.
     #[inline(never)]
     fn a_goal_declined(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
         if !cx.reads_leaves
@@ -1185,7 +1189,18 @@ impl Schema {
             a_bound_is_met();
             return Relation::Unknown;
         }
-        self.descriptor_contained_in(other, cx.oracle, cx.defs)
+        let key = (cx.query(), self.clone(), other.clone());
+        if let Some(answer) = LEAVES.with_borrow(|held| held.get(&key).copied()) {
+            return answer;
+        }
+        let answer = self.descriptor_contained_in(other, cx.oracle, cx.defs);
+        LEAVES.with_borrow_mut(|held| {
+            if held.len() >= READINGS_HELD {
+                held.clear();
+            }
+            held.insert(key, answer);
+        });
+        answer
     }
 
     /// A side proved empty settles the pair without the difference. A supertype with
@@ -3123,11 +3138,18 @@ const MEMBERS_HELD: usize = u64::BITS as usize;
 /// the finished queries' answers occupy and changes no answer. What is held is the answer and never a descriptor: a
 /// descriptor of a few hundred atoms is what a reading builds to throw away.
 ///
-/// Only emptiness is held. It is the reading the goals repeat -- the meet of a
-/// record's kept members, the inner set of a complement -- while a pair placed
-/// by the sets is asked once a query, where a memo is a hash and a copy of two
-/// schemas for nothing.
+/// Emptiness is held here. It is the reading the goals repeat -- the meet of a
+/// record's kept members, the inner set of a complement -- and the pairs the last
+/// asking reads by the sets are held beside it ([`Leaves`]).
 type Readings = FxHashMap<(u64, Schema), bool>;
+
+/// The sets' answers to the goals the last asking hands them
+/// ([`Schema::a_goal_declined`]), by the query and the pair, held for the reason
+/// [`Readings`] is and emptied at the same bound. A pair with no reference on either
+/// side is read by the sets with nothing open, so its answer rests on no open
+/// hypothesis: it is a function of the pair, the pool and the definitions, all fixed
+/// for the query, and a failed disjunct has nothing in it to roll back.
+type Leaves = FxHashMap<(u64, Schema, Schema), Relation>;
 
 /// The most answers the memo holds before it is emptied.
 ///
@@ -3140,6 +3162,8 @@ const READINGS_HELD: usize = 4096;
 thread_local! {
     /// The readings of the queries on this thread, by query number.
     static READINGS: RefCell<Readings> = RefCell::new(Readings::default());
+    /// The pairs the last askings on this thread read by the sets, by query number.
+    static LEAVES: RefCell<Leaves> = RefCell::new(Leaves::default());
     /// The query whose narrowed meet is being asked on this thread, or zero
     /// where none is ([`narrowed_meet_below`]). Held beside the query for the
     /// reason [`Readings`] is, and by number, so a query a callback starts
