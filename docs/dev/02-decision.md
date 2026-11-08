@@ -1713,6 +1713,17 @@ such a goal answers by the two memberships alone and is never refuted, so the
 members after it change nothing, and each would scan the supertype's branches
 -- a union of four thousand records against another compares sixteen million
 pairs for the answer the first decline gave.
+
+**A meet is placed by its members before a union's branches, and the order is
+measured.** `meet_below` asks each member below the supertype, then the meet below
+each branch of a union supertype. Asked the other way, `A <= (A & ~B) | (A & B)`
+over the JSON value, the meet whole below the branch `A & B`, is proved in 0.4 ms,
+where each member asked alone below the whole union spends over 120,000 steps
+declining and leaves the law short of steps. On the same 60,000 drawn pairs the
+other way loses a refutation and takes 75 ms over a pair that took none; asked first
+under the asking's allowance (`respelling()`) and again after the members, it loses
+four and reads the relation matrix +20%, a goal asked twice. The law stays with the
+query's budget, the one answer of the drawn pairs 0.0.24 gave and the tree does not.
 `a_union_stops_at_a_decline_its_budget_cannot_follow` counts the goals.
 
 **Neither bounds the stack, so a third count does.** A path is finite and can
