@@ -162,9 +162,10 @@ pub(crate) fn key_segment(key: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PathSegment {
             return PathSegment::Key(Arc::from(text.as_ref()));
         }
     } else if let Ok(number) = key.cast::<PyInt>() {
-        // Every `int`, whatever its size, and `bool` with them: `d[True]` and
-        // `d[1]` are one entry in Python, so the integer indexes back down to
-        // the value while `'True'` indexed nothing at all.
+        // Every `int`, and `bool` with them: `d[True]` and `d[1]` are one entry
+        // in Python, so the integer indexes back down to the value while
+        // `'True'` indexed nothing at all. One past the digit limit reaches the
+        // caller as its hexadecimal text, which the binding keeps.
         if let Ok(small) = number.extract::<i64>() {
             return PathSegment::IntKey(small);
         }

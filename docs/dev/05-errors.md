@@ -80,7 +80,7 @@ reason the path is usable on a dict:
 |---|---|
 | `Key(Arc<str>)` | a string key. Shared rather than owned, so a record's failure path carries the name the schema already declares instead of allocating one per failing field |
 | `IntKey(i64)` | an integer key. Separate from `Key` because `d[2]` and `d["2"]` are different entries of one dict, and rendering the integer as its text would make them indistinguishable |
-| `BigIntKey(String)` | an integer key past `i64`. Python's integers are unbounded and a dict may be keyed by any of them; the core holds no Python object, so the digits travel and the binding rebuilds the `int`. |
+| `BigIntKey(String)` | an integer key past `i64`. Python's integers are unbounded and a dict may be keyed by any of them; the core holds no Python object, so the digits travel and the binding rebuilds the `int`. Past the interpreter's digit limit the digits are hexadecimal, and the binding's tuple holds them as text: an `int` there is one `json.dumps` and `repr` refuse, and every item is JSON-serializable |
 | `Index(usize)` | a **position** in a sequence, which is not a key at all |
 | `Entered` | the key before it, entered by a failure **inside** it. The binding's tuple ends there, since no subscript reaches into a key, and the location writes the segments after it as the key's own, `('x',), key[0]`, apart from `('x',)[0]` in its value. It is no level of the value, so `PathSegment::steps` leaves it out where a union explains its deepest branch; and it holds nothing, since a variant holding a segment made the type recursive and its drop a call at every level an explaining walk pops (+2.07% on the record explain shape). `entered_the_key` in the record walk marks the key once its own walk has failed inside it |
 

@@ -206,24 +206,26 @@ def test_a_big_integer_key_is_named_by_its_stored_digits() -> None:
         assert info.value.errors[0]["path"] == (2**70,)
 
 
-def test_an_integer_key_past_the_digit_limit_is_carried_as_an_integer() -> None:
+def test_an_integer_key_past_the_digit_limit_is_its_hexadecimal_text() -> None:
     """Python converts at most 4,300 decimal digits by default, and keys may be longer.
 
-    `int.__repr__` raises past the limit, and the key's `repr` with it, so a
-    key read for its decimal digits alone is named `'<unrepresentable>'`, a
-    string that indexes nothing. Past the limit the digits are hexadecimal,
-    which the limit does not bind, and the path holds the key.
+    `int.__repr__` raises past the limit, and so does the standard library's
+    JSON encoder, which writes an integer in decimal: a path holding the key
+    made `json.dumps(err.errors)` and `repr(err.errors)` raise. Past the limit
+    the key's digits are hexadecimal, which the limit does not bind, and the
+    path holds them as text, which the message writes too. It indexes nothing,
+    and no JSON document holds such a key.
     """
     key = 10**5000
-    holder = {key: "x"}
-    with pytest.raises(ValidationError) as info:
-        Validator(dict[int, int]).validate(holder)
-    path, message = info.value.errors[0]["path"], info.value.errors[0]["message"]
-    assert isinstance(path, tuple)
-    assert isinstance(message, str)
-    (segment,) = path
-    assert holder[segment] == "x"
-    assert message.startswith("at [0x")
+    for signed in (key, -key):
+        with pytest.raises(ValidationError) as info:
+            Validator(dict[int, int]).validate({signed: "x"})
+        (error,) = info.value.errors
+        digits = format(signed, "#x")
+        assert error["path"] == (digits,)
+        assert str(error["message"]).startswith(f"at [{digits}]: ")
+        assert json.loads(json.dumps(info.value.errors))[0]["path"] == [digits]
+        assert digits in repr(info.value.errors)
 
 
 @pytest.mark.skipif(

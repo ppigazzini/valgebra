@@ -559,12 +559,18 @@ fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py,
         let item = match segment {
             PathSegment::Key(key) => (&**key).into_pyobject(py)?.into_any(),
             PathSegment::IntKey(key) => (*key).into_pyobject(py)?.into_any(),
+            // Past the digit limit the digits are hexadecimal, and they stay
+            // text: an `int` there is one the standard library's JSON encoder,
+            // which writes decimal, and `repr` both refuse, and every item is
+            // JSON-serializable. No JSON document holds such a key.
+            PathSegment::BigIntKey(key) if key.contains('x') => {
+                key.as_str().into_pyobject(py)?.into_any()
+            }
             // Back to the `int` it came from: a caller indexes with the key, not
-            // with its digits. Base 0 reads the literal as Python does, so a key
-            // carried in hexadecimal past the digit limit reads back too.
+            // with its digits.
             PathSegment::BigIntKey(key) => py
                 .get_type::<pyo3::types::PyInt>()
-                .call1((key.as_str(), 0))?
+                .call1((key.as_str(),))?
                 .into_any(),
             PathSegment::Index(index) => (*index).into_pyobject(py)?.into_any(),
             // The path ends at a key a failure is inside: no subscript reaches

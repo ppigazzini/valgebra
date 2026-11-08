@@ -19,9 +19,13 @@ A `ValidationError` exposes:
   - `path` — the location of the offending value from the root, a tuple of
     string keys, integer keys and integer indices (empty at the root). A string
     key is itself, in full, and an **integer key is itself as an integer** —
-    whatever its size, and `True`/`False` with them, since `d[True]` and `d[1]`
-    are one entry — so walking the path back down reaches the value: `d[2]` and
-    `d["2"]` are different entries and the path says which. A key that is
+    within the interpreter's limit on the decimal digits it converts
+    (`sys.set_int_max_str_digits`), and `True`/`False` with them, since
+    `d[True]` and `d[1]` are one entry — so walking the path back down reaches
+    the value: `d[2]` and `d["2"]` are different entries and the path says
+    which. A key past that limit is its hexadecimal text, `'0x...'`: the
+    standard library's JSON encoder writes an integer in decimal and refuses
+    one past the limit, and no JSON document holds such a key. A key that is
     neither, and a string holding a lone surrogate, has no spelling here and
     appears as its `repr` — naming the key rather than being one a caller can
     index back with. That entry is text, so it can equal a string key's:

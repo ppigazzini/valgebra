@@ -333,8 +333,10 @@ pub enum PathSegment {
     /// walking back down. Carried as its digits, a Python integer literal,
     /// because the core holds no Python object and has no big integer of its
     /// own: decimal, and `0x` hexadecimal past the interpreter's limit on the
-    /// decimal digits it converts. The binding turns it back into the `int` it
-    /// came from, which is the only form a caller can index with.
+    /// decimal digits it converts. The binding turns decimal digits back into
+    /// the `int` they came from, which is the only form a caller can index
+    /// with, and keeps hexadecimal ones as text, since the standard library's
+    /// JSON encoder and `repr` refuse an `int` past the limit.
     BigIntKey(String),
     /// A sequence, tuple, or set position.
     Index(usize),

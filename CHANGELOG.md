@@ -56,6 +56,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a word's length range is outside a table holding fewer constants
 - feat: a class reached again inside a type alias is tied by the alias
 - fix: a failure inside a key ends its path at the key
+- fix: a key past the digit limit is its hexadecimal text in a path
 
 -->
 
@@ -245,6 +246,12 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A key past the digit limit is its hexadecimal text in a path.** `Validator(dict[str,
+  int]).validate({10**5000: 1})` refuses the key, and on 0.0.24 its path held the key as an `int`,
+  which `json.dumps(err.errors)` and `repr(err.errors)` refuse past the interpreter's limit on the
+  decimal digits it converts. The path holds the key's hexadecimal text, `'0x31e2...'`, as the
+  message writes it; the text indexes nothing, and no JSON document holds such a key.
 
 - **A failure inside a key ends its path at the key.** `dict[tuple[int, ...], list[int]]` refuses
   `{("x",): ["y"]}` at position 0 of the key and at position 0 of its value, and on 0.0.24 both
