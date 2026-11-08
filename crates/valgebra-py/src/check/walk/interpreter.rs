@@ -482,6 +482,77 @@ fn a_failure_inside_a_key_marks_the_key_entered() {
     });
 }
 
+/// A key that is no exact `str` reaches a declared name where its hash and its
+/// `==` both say so, as the dict's own lookup does. Beside the field's own
+/// entry, a subclass key equal to another word, or hashing like the name and
+/// equal to another word, is a key the record does not declare, read by its
+/// clause, even where its value is the very object the field's entry holds.
+#[test]
+fn a_key_of_a_str_subclass_reaches_a_name_by_its_hash_and_its_equality() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Plain(str):\n\
+              \x20   pass\n\
+              class Colliding(str):\n\
+              \x20   def __hash__(self):\n\
+              \x20       return hash('a')\n",
+            c"reached_by.py",
+            c"reached_by",
+        )
+        .expect("the module runs");
+        // `{"a": int, str: str}`: a key the record does not declare is read by
+        // the clause, which refuses the `int` held under it, so where the key
+        // lands decides the answer.
+        let record = Schema::keyed_map(
+            vec![Field {
+                name: "a".into(),
+                schema: Schema::Int,
+                required: true,
+            }],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Str,
+            }],
+        );
+        let beside_the_field = |class: &str, word: &str| {
+            let key = module
+                .getattr(class)
+                .expect("the class")
+                .call1((word,))
+                .expect("a key");
+            // One value object under both keys, so the entry the name finds
+            // holds the very value the stray key does, and only where the key
+            // lands tells them apart.
+            let one = 1i64.into_pyobject(py).expect("an int").into_any();
+            let held = PyDict::new(py);
+            held.set_item("a", &one).expect("the field's entry");
+            held.set_item(key, &one).expect("a hashable key");
+            assert_eq!(held.len(), 2, "two entries");
+            holds(py, &record, held.as_any(), &[], &[])
+        };
+        assert!(
+            !beside_the_field("Plain", "b"),
+            "a subclass equal to no name"
+        );
+        assert!(
+            !beside_the_field("Colliding", "z"),
+            "a hash like the name's is no equality"
+        );
+        let held = PyDict::new(py);
+        let named = module
+            .getattr("Plain")
+            .expect("the class")
+            .call1(("a",))
+            .expect("a key");
+        held.set_item(named, 1).expect("a hashable key");
+        assert!(
+            holds(py, &record, held.as_any(), &[], &[]),
+            "equal to the name"
+        );
+    });
+}
+
 /// A meet collects every member's failure until one rejects the value
 /// *itself*, and then stops: what a later member would say describes a value
 /// already known to be the wrong kind of thing. A member that fails *inside*
