@@ -593,7 +593,12 @@ universe whatever else is in it, and stopping on the "whatever else" misses it â
 so the same three members read as the universe in one order and as unknown in
 another. The **complete** reading walks every member and carries what they name
 between them, which no pairwise step can, and it is asked once, for a pair every
-rule has already declined. A query that decides never pays for it.
+rule has already declined. A query that decides never pays for it. A union's
+verdict is split the same way: every asking but the last stops at the first member
+not proven empty, and the last reads on to a member holding a value, which a
+refutation of the union stands on. The members' order is their pooled constants',
+so without it a refutation turned on which constant was pooled first; read on in
+every asking, it cost a JSON value's law six times its instructions.
 
 It is asked of a **union** and of nothing else, because a union is the only
 shape that folds a member list and so the only one with a stop to read past. A

@@ -557,13 +557,7 @@ impl Schema {
                     let (member, member_region) = m.empty_and_region(cx);
                     verdict = Verdict::any([verdict, member].into_iter());
                     region = region.union(member_region);
-                    // A member that is not proven empty and an opaque region are
-                    // both absorbing: no later member can make the union empty,
-                    // and none can make the region known. The stop is on "not
-                    // proven empty" rather than "proven inhabited": reading
-                    // further to strengthen an `Unknown` into an `Inhabited`
-                    // would spend budget on a question the caller does not ask.
-                    if verdict != Verdict::Empty && region.is_absorbing() {
+                    if a_union_reads_no_further(verdict, region, cx.reads_leaves) {
                         break;
                     }
                 }
@@ -1691,6 +1685,22 @@ fn refinement_verdict(base: &Schema, constraints: &Constraints, cx: &mut Cx<'_>)
         return Verdict::Unknown;
     }
     verdict
+}
+
+/// Whether a union's fold stops after the members read so far, whose verdict and
+/// region it holds.
+///
+/// A member that is not proven empty and an opaque region are both absorbing: no
+/// later member can make the union empty, and none can make the region known. The
+/// stop is on "not proven empty" rather than "proven inhabited", since reading
+/// further to strengthen an `Unknown` into an `Inhabited` spends steps on members
+/// dearer than the question. The last asking reads on to a member holding a value,
+/// which is what a refutation of the union stands on: the members' order is their
+/// pooled constants', not their reading's.
+#[inline]
+fn a_union_reads_no_further(verdict: Verdict, region: Regions, last_asking: bool) -> bool {
+    region.is_absorbing()
+        && (verdict == Verdict::Inhabited || (verdict != Verdict::Empty && !last_asking))
 }
 
 /// Whether an order bound over `int` is met by an integer, asked of the oracle.

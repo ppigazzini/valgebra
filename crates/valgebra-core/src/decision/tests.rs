@@ -1404,6 +1404,33 @@ fn a_meet_of_closed_maps_is_inhabited_where_its_keys_meet() {
     assert_eq!(rules_verdict(&meet, &defs).0, Verdict::Inhabited);
 }
 
+/// The last asking reads a union past a member it cannot settle to one holding a
+/// value, which a refutation of the union stands on, whichever its members' order:
+/// the order is their pooled constants', not their reading's.
+#[test]
+fn the_last_asking_reads_a_union_past_a_member_it_cannot_settle() {
+    let opaque = Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+    };
+    assert_ne!(
+        rules_verdict(&opaque, &[]).0,
+        Verdict::Inhabited,
+        "the premise"
+    );
+    for members in [
+        vec![opaque.clone(), Schema::Str],
+        vec![Schema::Str, opaque.clone()],
+    ] {
+        let record = closed(vec![field("b", Schema::Union(members.into()), true)]);
+        assert_eq!(
+            record.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+            Relation::Fails,
+            "{record:?}"
+        );
+    }
+}
+
 /// A meet the keys of its closed maps would name a value for is not named one
 /// where a member is no closed map.
 ///

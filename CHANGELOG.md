@@ -65,10 +65,15 @@ answer of its own, or a repair to a change not yet released.
 - fix: a pattern holding a lone surrogate is refused by its surrogate
 - feat: a meet of a kind with members of that kind is read as those members
 - feat: zero is a multiple of an exact Fraction or Decimal step
+- feat: the last asking reads a union past a member it cannot settle
 
 -->
 
 ### Added
+
+- **A union holds a value whichever member its constants list first.** A record whose field
+  is `intersection(X, B) | intersection(X, complement(B))` is `not_subset` of `nothing` on a
+  value of `X & B`, where it read `undecided` when the other branch came first.
 
 - **Zero is a multiple of an exact `Fraction` or `Decimal` step.**
   `Annotated[int, MultipleOf(Decimal("2.5"))]` and `Annotated[int, MultipleOf(Fraction(1, 3))]`
