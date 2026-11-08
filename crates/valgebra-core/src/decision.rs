@@ -1406,13 +1406,21 @@ impl Schema {
             .or_else(|| inner.is_subtype_rec(&self.clone().complement(), cx))
             .or_else(|| Relation::proven(meet.empty_under(cx)))
             .or_else(|| meet.below_the_set_it_complements(cx))
+            .or_else(|| {
+                Relation::proven(
+                    matches!(meet, Schema::Union(_)) && meet.read_as_a_relation_empty(cx),
+                )
+            })
     }
 
     /// The pair asked of its parts, where both deciders declined it whole.
     ///
     /// A union subject is below a supertype where each member is, and outside
     /// it where one member is [BBC+26, (anyOf-l)], so each member is asked as
-    /// a pair of its own, by both deciders and by its own parts. The rules
+    /// a pair of its own, by both deciders and by every reading past them
+    /// ([`decided_past_the_whole_pair`](Self::decided_past_the_whole_pair)):
+    /// a word is outside a float step by its kind, which a member's own parts do
+    /// not read. The rules
     /// distribute the union already; what this adds is the set representation
     /// asked of one member, where asked of the whole pair it is refused past
     /// its node bound: a union of seven tagged records against seven decides a
@@ -1449,9 +1457,11 @@ impl Schema {
     /// adds is the set representation asked of one member, where a member that
     /// runs a callback -- a predicate, a class whose `isinstance` is code --
     /// refuses the whole meet a lowering: `int` is outside `Ge(0)` at `-1`, and
-    /// so outside `Ge(0)` met with a predicate. A meet of sets was read whole,
-    /// and is not read again a member at a time, which would lower each member
-    /// for an answer the whole reading did not find.
+    /// so outside `Ge(0)` met with a predicate. A meet of sets is read a member
+    /// at a time too: the whole reading declines where one member's recursion
+    /// stops it, and that member alone may be refuted, as `list[int]` is outside
+    /// `complement(list[J]) | Annotated[list, MaxLen(2)]` met with the JSON values
+    /// `J`.
     ///
     /// A record against a record is asked a shared field at a time by the set
     /// representation, which the pair is past the node bound of where it is
@@ -1499,7 +1509,7 @@ impl Schema {
                         Relation::proven(cx.denotes_no_value(member))
                     }
                 })
-                .or_else(|| member.decided_by_parts(other, cx, false))
+                .or_else(|| member.decided_past_the_whole_pair(other, cx, by_branch))
             }));
         }
         if let (Schema::KeyedMap { fields: fa, .. }, Schema::KeyedMap { fields: fb, .. }) =
@@ -1512,12 +1522,6 @@ impl Schema {
             };
         }
         if let Schema::Intersection(members) = other {
-            if members
-                .iter()
-                .all(|member| denotes_a_set_within(member, cx.oracle, cx.defs))
-            {
-                return Relation::Unknown;
-            }
             let held = cx.held_below(self, members);
             return Relation::all(members.iter().enumerate().map(|(at, member)| {
                 match held {

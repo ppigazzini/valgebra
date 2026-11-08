@@ -6876,9 +6876,9 @@ fn a_meet_supertypes_members_are_asked_once_a_query() {
 /// member at the root of the query rather than asking them again: each
 /// member's goal against the supertype is asked once a query. The member the
 /// rules placed -- a predicate's refinement, which is a branch of the
-/// supertype -- is read as placed, and the member they declined is read by the
-/// set representation alone, which a supertype holding a predicate leaves
-/// open.
+/// supertype -- is read as placed, and the member they declined is read past
+/// the whole pair: `a+` is below the `a*` branch, which the narrowed pair
+/// reads, and `str` is below no branch, which nothing reads.
 #[test]
 fn a_union_subjects_members_are_asked_once_a_query() {
     let refine = |base: Schema, constraint| Schema::Refine {
@@ -6889,15 +6889,15 @@ fn a_union_subjects_members_are_asked_once_a_query() {
     let words = refine(Schema::Str, Constraint::Regex("a*".into()));
     let supertype = Schema::Union(vec![opaque.clone(), words].into());
     let a_plus = refine(Schema::Str, Constraint::Regex("a+".into()));
-    for members in [
-        vec![opaque.clone(), Schema::Str],
-        vec![opaque.clone(), a_plus],
+    for (members, read) in [
+        (vec![opaque.clone(), Schema::Str], Relation::Unknown),
+        (vec![opaque.clone(), a_plus], Relation::Holds),
     ] {
         let subject = Schema::Union(members.clone().into());
         let (answer, asked) = goal_tests::goals::tabled(|| {
             subject.subtype_relation_under(&supertype, &NoLeafRelations, &[])
         });
-        assert_eq!(answer, Relation::Unknown, "{subject:?}");
+        assert_eq!(answer, read, "{subject:?}");
         for member in members {
             assert_eq!(
                 asked.get(&(member.clone(), supertype.clone())),
@@ -15131,6 +15131,98 @@ mod a_split_key {
         assert_ne!(
             subject.subtype_relation_under(&refusing, &table, &[]),
             Relation::Holds
+        );
+    }
+}
+
+/// A meet supertype read a member at a time, where the pair whole declines.
+mod a_part_at_a_time {
+    use super::*;
+
+    /// A union of two complements of the universe is empty, each member read as
+    /// the complement of the universe it is. `L ∪ ¬(tuple[int] ∩ tuple[str])`
+    /// holds every value, its meet holding none, and beside a literal no
+    /// constant oracle lowers, the sets read neither complement: each is asked as
+    /// the universe below its inner set.
+    #[test]
+    fn a_union_of_complements_of_the_universe_is_empty() {
+        let none = Schema::Intersection(
+            vec![
+                Schema::tuple(SeqShape::fixed([Schema::Int])),
+                Schema::tuple(SeqShape::fixed([Schema::Str])),
+            ]
+            .into(),
+        );
+        let universe = |at: usize| {
+            Schema::Union(vec![Schema::Literal(ConstIx::new(at)), none.clone().complement()].into())
+        };
+        let union = Schema::Union(vec![universe(1).complement(), universe(2).complement()].into());
+        assert!(union.is_empty_with(&NoLeafRelations, &[]));
+        // And the relation below `nothing` reads one of them the same way.
+        assert_eq!(
+            universe(1).complement().subtype_relation_under(
+                &Schema::Nothing,
+                &NoLeafRelations,
+                &[]
+            ),
+            Relation::Holds
+        );
+    }
+
+    /// The respelled reading asks a complement below `nothing` as the universe
+    /// below its inner set, here a reference to the universe, which no other
+    /// respelling of it reads.
+    #[test]
+    fn a_complement_below_nothing_is_respelled_as_the_universe_below_its_inner_set() {
+        let defs = [Schema::ANYTHING];
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&NoLeafRelations, &defs, &budget);
+        let none = Schema::Complement(Arc::new(Schema::Ref(DefIx::new(0))));
+        assert_eq!(
+            none.decided_as_respelled(&Schema::Nothing, &cx),
+            Relation::Holds
+        );
+    }
+
+    /// The JSON values, `μj. None | bool | int | float | str | list[j] | dict[str, j]`.
+    fn json() -> (Schema, Vec<Schema>) {
+        let at = Schema::Ref(DefIx::new(0));
+        let body = Schema::union([
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            Schema::list(SeqShape::homogeneous(at.clone())),
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: at.clone(),
+                }],
+            ),
+        ]);
+        (at, vec![body])
+    }
+
+    /// A meet of sets the whole reading declines, one member of which refutes
+    /// alone: `list[int]` holds `[1, 1, 1]`, outside a list of at most two met
+    /// with the JSON values, and inside both of a list of one.
+    #[test]
+    fn a_meet_of_sets_is_refuted_by_one_member() {
+        let (json, defs) = json();
+        let list_of = |element: Schema| Schema::list(SeqShape::homogeneous(element));
+        let at_most_two = Schema::refine(list_of(Schema::ANYTHING), vec![Constraint::MaxLen(2)]);
+        let guard = Schema::union([list_of(json.clone()).complement(), at_most_two]);
+        let meet = Schema::Intersection(vec![guard, json].into());
+        assert_eq!(
+            list_of(Schema::Int).subtype_relation_under(&meet, &Pure, &defs),
+            Relation::Fails
+        );
+        let one = Schema::refine(list_of(Schema::Int), vec![Constraint::MaxLen(1)]);
+        assert_ne!(
+            one.subtype_relation_under(&meet, &Pure, &defs),
+            Relation::Fails
         );
     }
 }

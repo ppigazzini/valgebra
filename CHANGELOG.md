@@ -49,10 +49,17 @@ answer of its own, or a repair to a change not yet released.
 - fix: an allocation Python refuses inside a call raises MemoryError
 - feat: a key or an optional field holding no value carries no entry
 - feat: a clause's key split between clauses of a supertype is covered
+- feat: a meet supertype and a union subject are read a member at a time
 
 -->
 
 ### Added
+
+- **A meet supertype and a union subject are read a member at a time.**
+  `list[int]` is `not_subset` of `intersection(union(complement(list[J]), Annotated[list,
+  MaxLen(2)]), J)` for the JSON values `J`, on `[1, 1, 1]`, and `union(Annotated[str,
+  Regex("a")], Annotated[float, MultipleOf(0.5)])` of `Annotated[float, MultipleOf(0.5)]`, on
+  `"a"`, where each stayed `undecided` with a member refuted.
 
 - **A clause's key split between clauses of a supertype is covered.** `dict[Literal["a"] | P,
   int]` is `subset` of `{Literal["a"]: int, P: int}` for `P = Annotated[str, Regex("b")]`, so

@@ -116,11 +116,30 @@ impl Schema {
                 if (matches!(self, Schema::Intersection(_))
                     && self.below_the_set_it_complements(cx).holds())
                     || (matches!(self, Schema::Complement(_))
-                        && self.complement_of_the_universe(cx).holds()) =>
+                        && self.complement_of_the_universe(cx).holds())
+                    || (matches!(self, Schema::Union(_)) && self.read_as_a_relation_empty(cx)) =>
             {
                 Verdict::Empty
             }
             verdict => verdict,
+        }
+    }
+
+    /// Whether a set the emptiness readings left open is empty as a relation
+    /// reads it: a meet holding a complement below the set it complements, a
+    /// complement of the universe, and a union whose every member is one of
+    /// these or read empty, as the relation below `nothing` reads a union a
+    /// member at a time. Out of line behind the discriminant test its callers
+    /// ask, so a question about any other schema pays the one test.
+    #[inline(never)]
+    pub(super) fn read_as_a_relation_empty(&self, cx: &mut Cx<'_>) -> bool {
+        match self {
+            Schema::Intersection(_) => self.below_the_set_it_complements(cx).holds(),
+            Schema::Complement(_) => self.complement_of_the_universe(cx).holds(),
+            Schema::Union(members) => members.iter().all(|member| {
+                member.emptiness_under(cx) == Verdict::Empty || member.read_as_a_relation_empty(cx)
+            }),
+            _ => false,
         }
     }
 

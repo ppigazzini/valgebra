@@ -1699,6 +1699,25 @@ _DECIDED = [
         complement(Annotated[str, Regex("x"), at.MaxLen(0)]),
         id="str:the-complement-of-forty-patterns<=the-complement-of-an-empty-pattern",
     ),
+    # A meet supertype is refuted where one member is: `[1, 1, 1]` is outside a
+    # list of at most two, the guard a compiler from JSON Schema writes met with
+    # the JSON values, though the meet whole stops the set reading at `_JSON`.
+    pytest.param(
+        "refutes",
+        list[int],
+        intersection(
+            union(complement([_JSON]), Annotated[list[Any], at.MaxLen(2)]), _JSON
+        ),
+        id="meet:list[int]!<=(~list[J]|list<=2)&J",
+    ),
+    # A union subject is refuted where one member is, by any reading of the
+    # member past the pair: a word is outside a step over the floats.
+    pytest.param(
+        "refutes",
+        union(Annotated[str, Regex("a")], Annotated[float, at.MultipleOf(0.5)]),
+        Annotated[float, at.MultipleOf(0.5)],
+        id="union:word|step!<=step",
+    ),
 ]
 
 # The shapes a translation from JSON Schema writes: the JSON universe, the number
