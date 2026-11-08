@@ -1258,7 +1258,11 @@ through the record otherwise may stand on a `str` subclass's key, which a field 
 without the map's clauses of constants the record never spells
 (`a_map_below_its_clauses_the_subject_spells`): a map without a clause is narrower, so the
 proof stands, and the sets read a `Literal` key as every key equal to it, which on the
-supertype's side costs them the proof the clause does not bear on.
+supertype's side costs them the proof the clause does not bear on. A pair asked through a
+complement is read by the parts of the pair it turns to: `¬a ⊆ ¬b` by the parts of
+`b ⊆ a` [FCB08, §4.1], and a meet `a ∧ ¬b` as empty where the sets place `a` below the
+branches of `b` it meets (`below_the_branches_it_meets`), a branch sharing no value with
+`a` deciding nothing and perhaps refusing the sets a lowering.
 Asked in the last asking alone, since a position rarely holds none and the verdict
 costs a goal's steps. `sequences_meeting_in_nothing` reads the other half in an emptiness
 question of any asking: two sequences meet in nothing where a position each of their values

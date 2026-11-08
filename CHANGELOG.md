@@ -52,10 +52,16 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet supertype and a union subject are read a member at a time
 - feat: a mapping of words under a length counting each is their record
 - feat: a supertype's clause of constants its subject never spells is beside it
+- feat: a pair asked through a complement is read by the parts it turns to
 
 -->
 
 ### Added
+
+- **A pair asked through a complement is read by the parts it turns to.** For `B =
+  union(Annotated[int, Ge(2)], Annotated[int, Le(3)], Annotated[dict, MaxLen(2)])`, which `int`
+  is `subset` of, `complement(B)` is `subset` of `complement(int)` and `intersection(int,
+  complement(B))` of `nothing`, where each stayed `undecided`.
 
 - **A supertype's clause of constants its subject never spells is beside it.**
   `dict[Annotated[str, Regex("c")], str]` is `subset` of `{"c?": int | None | str, Literal["a"]:

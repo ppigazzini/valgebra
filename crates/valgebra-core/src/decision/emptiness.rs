@@ -172,9 +172,11 @@ impl Schema {
     /// The steps are an allowance of its own, charged to nothing, so they
     /// starve no reading after it; the rules it asks never ask it again, so a
     /// query asks it a fixed number of times and spends at most that multiple
-    /// of its budget. The relation's set readings are not asked here: they
-    /// reach this reading again through the respellings, each time under steps
-    /// of its own and at no depth, and drawn questions overflowed the stack.
+    /// of its budget. The relation's readings past the sets are not asked here:
+    /// they reach this reading again through the respellings, each time under
+    /// steps of its own and at no depth, and drawn questions overflowed the
+    /// stack. The sets themselves are, of the branches of `I` the rest meets
+    /// ([`Schema::below_the_branches_it_meets`]), which reach nothing.
     /// Out of line behind the discriminant test its callers ask, so a question
     /// about any schema but a meet pays the one test.
     #[inline(never)]
@@ -202,6 +204,9 @@ impl Schema {
         let allowance = Budget::new(cx.budget.left());
         rest.is_subtype_rec(inner, &mut cx.within_this_query(&allowance))
             .or_else(|| rest.decided_by_its_leaves(inner, cx, false))
+            .or_else(|| {
+                rest.below_the_branches_it_meets(inner, &mut cx.within_this_query(&allowance))
+            })
     }
 
     /// What the rules read of this refinement, and where they read nothing and the

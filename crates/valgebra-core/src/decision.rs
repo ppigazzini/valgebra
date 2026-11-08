@@ -1486,6 +1486,11 @@ impl Schema {
             a_bound_is_met();
             return Relation::Unknown;
         }
+        // `¬a ⊆ ¬b` is `b ⊆ a` [FCB08, §4.1], whose parts the rules' contravariant
+        // arm does not ask.
+        if let (Schema::Complement(a), Schema::Complement(b)) = (self, other) {
+            return b.decided_by_parts(a, cx, by_branch);
+        }
         // A mapping of words under a length counting each is below its record,
         // and holds the record's plain values: a proof through the record stands,
         // and so does the record's value against the empty set. Any other
@@ -1883,6 +1888,28 @@ impl Schema {
         let complements = flat_members(members).map(|member| member.clone().complement());
         let meet = Schema::meet_within(complements, cx.defs);
         meet.is_empty_rec(cx) || cx.denotes_no_value(&meet)
+    }
+
+    /// `self` below the branches of a union it shares a value with, read by the
+    /// set representation alone: a branch sharing no value with `self` decides
+    /// nothing of the inclusion, and may be one the sets cannot lower. No reading
+    /// past the sets is asked, so a caller that the respellings reach is not
+    /// reached again: `int ∧ ¬(Ge(2) ∪ Le(3) ∪ Annotated[dict, MaxLen(2)])` is
+    /// empty where `int` is below the two bounds.
+    #[inline(never)]
+    pub(super) fn below_the_branches_it_meets(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        let Schema::Union(branches) = other else {
+            return Relation::Unknown;
+        };
+        let met: Vec<Schema> = branches
+            .iter()
+            .filter(|branch| !self.shares_no_value_with(branch, cx))
+            .cloned()
+            .collect();
+        if met.len() == branches.len() {
+            return Relation::Unknown;
+        }
+        self.descriptor_contained_in(&Schema::union(met), cx.oracle, cx.defs)
     }
 
     /// Whether `self` and `other` share no value, which is what decides `self ⊆

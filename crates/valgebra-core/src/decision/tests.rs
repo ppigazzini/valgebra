@@ -15454,3 +15454,74 @@ mod an_unspelled_clause {
         );
     }
 }
+
+/// A pair asked through a complement, read by the parts of the pair it turns to.
+mod a_turned_pair {
+    use super::*;
+
+    /// Two integer bounds, `2` and `3`, compared as Python compares them.
+    struct Bounds;
+    impl Constants for Bounds {
+        fn operand(&self, index: OperandIx) -> Option<Operand> {
+            [2, 3]
+                .get(index.get())
+                .map(|value| Operand::Integer(*value))
+        }
+    }
+    impl LeafRelations for Bounds {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn operand_kind(&self, index: OperandIx) -> Option<Kind> {
+            (index.get() < 2).then_some(Kind::Int)
+        }
+        fn compare(&self, left: OperandIx, right: OperandIx) -> Option<core::cmp::Ordering> {
+            Some(left.get().cmp(&right.get()))
+        }
+    }
+
+    /// `int >= 2 | int <= 3 | Annotated[dict, MaxLen(2)]`: the two bounds cover
+    /// the integers, and the dict branch holds none, which the sets cannot read
+    /// for the length over a map of anything.
+    fn covering() -> Schema {
+        let bound = |constraint| Schema::refine(Schema::Int, vec![constraint]);
+        let dicts = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::ANYTHING,
+                value: Schema::ANYTHING,
+            }],
+        );
+        Schema::union([
+            bound(Constraint::Ge(OperandIx::new(0))),
+            bound(Constraint::Le(OperandIx::new(1))),
+            Schema::refine(dicts, vec![Constraint::MaxLen(2)]),
+        ])
+    }
+
+    /// `¬B ⊆ ¬int` is `int ⊆ B`, which the parts of that pair decide.
+    #[test]
+    fn a_complement_below_a_complement_is_read_turned() {
+        let covering = covering();
+        assert_eq!(
+            Schema::Int.subtype_relation_under(&covering, &Bounds, &[]),
+            Relation::Holds
+        );
+        assert_eq!(
+            covering
+                .complement()
+                .subtype_relation_under(&Schema::Int.complement(), &Bounds, &[]),
+            Relation::Holds
+        );
+    }
+
+    /// `int ∧ ¬B` is empty where `int ⊆ B`, the branch sharing no integer left out.
+    #[test]
+    fn a_meet_with_a_complement_is_read_below_the_branches_it_meets() {
+        let meet = Schema::Intersection(vec![Schema::Int, covering().complement()].into());
+        assert_eq!(
+            meet.subtype_relation_under(&Schema::Nothing, &Bounds, &[]),
+            Relation::Holds
+        );
+    }
+}
