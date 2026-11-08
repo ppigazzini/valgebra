@@ -183,7 +183,17 @@ fn render_at(
                 })
                 .collect::<PyResult<Vec<_>>>()?;
             in_reading_order(&mut markers);
-            let mut parts = vec![r(base)?];
+            // A display is no type, and Python 3.11's `typing` refuses one as
+            // `Annotated`'s base (`'dict' object has no attribute
+            // '__module__'`), which 3.12 takes. Printed as the validator it
+            // builds, it reads back on every interpreter, as the same schema.
+            let base = r(base)?;
+            let base = if base.starts_with('{') || base.starts_with('[') {
+                format!("Validator({base})")
+            } else {
+                base
+            };
+            let mut parts = vec![base];
             parts.extend(markers.into_iter().map(|(_, text)| text));
             format!("Annotated[{}]", parts.join(", "))
         }

@@ -79,7 +79,9 @@ call it is, its back edge bound to a name the rest of the render does not print,
 so a class named `X` in the body is not read back as the back edge; an open
 record as the catch-all entry it carries, the nullary product as `tuple[()]`, a
 union holding a record or a list display as the `union(...)` call, since `|`
-between two dicts is Python's merge, and a key and a constant by Python's own
+between two dicts is Python's merge, a record or a list display refined as the
+validator it builds, `Annotated[Validator({'a': int}), MinLen(1)]`, since Python
+3.11's `typing` refuses a display as `Annotated`'s base, and a key and a constant by Python's own
 `repr`, whole — so it can be pasted into a session that holds the names it
 prints and read back. A refinement marker prints by its bare name, `Ge(0)` rather than
 `at.Ge(0)`, so that session imports each marker by name, as

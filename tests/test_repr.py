@@ -95,6 +95,9 @@ _ROUNDTRIP_NS = {
     "intersection": intersection,
     "complement": complement,
     "recursive": recursive,
+    # A record or a fixed list refined prints as the validator it builds, which
+    # Python 3.11's `typing` takes as `Annotated`'s base where a display is not.
+    "Validator": Validator,
 }
 
 # The round-trippable subset: every form whose repr re-parses to the same schema.
@@ -153,6 +156,8 @@ ROUNDTRIP_SCHEMAS = [
     Annotated[str, Regex("\x07+")],
     Annotated[str, Regex("a'b")],
     Annotated[str, Regex("\u00e9+")],
+    Annotated[Validator({"a": int}), at.MinLen(1)],  # ty: ignore[invalid-type-form]
+    Annotated[Validator([int, str]), at.MinLen(1)],  # ty: ignore[invalid-type-form]
     # A union holding a display prints as the call: `|` between two dicts is
     # Python's merge, which read the two records back as one, and beside a list
     # it is a `TypeError`.
@@ -853,6 +858,21 @@ def test_a_union_renders_its_literals_after_the_sets_they_sit_beside() -> None:
     assert repr(Validator(union(2, 1, list[int]))) == repr(
         Validator(union(1, 2, list[int]))
     )
+
+
+def test_a_refined_display_prints_as_the_validator_it_builds() -> None:
+    """A record or a fixed list is no type, which Python 3.11 refuses as a base.
+
+    `Annotated[{'a': int}, MinLen(1)]` reads back from 3.12 on and raises on
+    3.11; spelled through the validator it reads back on every interpreter.
+    A base that is a type prints as itself.
+    """
+    record = Validator(Annotated[Validator({"a": int}), at.MinLen(1)])  # ty: ignore[invalid-type-form]
+    assert repr(record) == "Annotated[Validator({'a': int}), MinLen(1)]"
+    fixed = Validator(Annotated[Validator([int, str]), at.MinLen(1)])  # ty: ignore[invalid-type-form]
+    assert repr(fixed) == "Annotated[Validator([int, str]), MinLen(1)]"
+    listed = Validator(Annotated[list[int], at.MinLen(1)])
+    assert repr(listed) == "Annotated[list[int], MinLen(1)]"
 
 
 def test_a_refinement_of_a_refined_validator_prints_as_one_and_reads_back() -> None:

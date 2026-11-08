@@ -61,6 +61,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a recursion with an arm narrowed past words is refused as a map key
 - fix: a class applied past its type parameters is refused
 - fix: an annotation folds a recursion and its complement as its combinator does
+- fix: a refined record or list display prints as the validator it builds
 
 -->
 
@@ -250,6 +251,12 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A refined record or list display prints as the validator it builds.** `repr` of
+  `Validator(Annotated[Validator({"a": int}), MinLen(1)])` was `Annotated[{'a': int}, MinLen(1)]`,
+  which Python 3.11's `typing` refuses to read back (`'dict' object has no attribute
+  '__module__'`) where 3.12 reads it. It prints `Annotated[Validator({'a': int}), MinLen(1)]`, which
+  reads back as the same schema on every interpreter, and so does a fixed list.
 
 - **An annotation folds a recursion and its complement as its combinator does.** For a
   recursive `K`, `intersection(complement(K), K)` is `nothing` and `union(complement(K), K)` is
