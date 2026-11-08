@@ -213,6 +213,12 @@ impl Schema {
         cx: &mut Cx<'_>,
     ) -> Verdict {
         let verdict = refinement_verdict(base, constraints, cx);
+        if verdict == Verdict::Unknown
+            && cx.reads_leaves
+            && let Some(record) = super::records::the_record_a_count_requires(self, cx)
+        {
+            return record.verdict_rec(cx);
+        }
         if verdict == Verdict::Unknown && cx.reads_leaves {
             return self.a_value_the_sets_read(cx);
         }

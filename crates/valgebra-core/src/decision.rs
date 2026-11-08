@@ -1486,6 +1486,20 @@ impl Schema {
             a_bound_is_met();
             return Relation::Unknown;
         }
+        // A mapping of words under a length counting each is below its record,
+        // and holds the record's plain values: a proof through the record stands,
+        // and so does the record's value against the empty set. Any other
+        // refutation through it may stand on a key that reads a field and not a
+        // `Literal`, and proves nothing of the mapping.
+        if matches!(self, Schema::Refine { .. })
+            && let Some(record) = records::the_record_a_count_requires(self, cx)
+        {
+            return if matches!(other, Schema::Nothing) {
+                Relation::of_mismatch(record.verdict_rec(cx))
+            } else {
+                record.is_subtype_rec(other, cx).proof_only()
+            };
+        }
         if let Schema::Union(members) = self {
             // The supertype is every member's, so it is lowered once: where it
             // refuses, every member's pair refuses on it, after a build of the

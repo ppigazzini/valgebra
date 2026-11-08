@@ -19,7 +19,7 @@ use rustc_hash::FxHashMap;
 
 use crate::descr::lower::key_cover;
 use crate::descr::maps::{KEY_KINDS, Label, PARTS, key_slot};
-use crate::ir::{Attribute, Field, MapClause, Schema};
+use crate::ir::{Attribute, Constraint, Field, MapClause, Schema};
 use crate::kind::Kind;
 use crate::oracle::denotes_a_set_within;
 use crate::verdict::{Relation, Verdict};
@@ -418,6 +418,54 @@ pub(super) fn keyed_map_subtype(
         }));
         Relation::all([fields_ok, extra_covered, defaults])
     }
+}
+
+/// The record a mapping keyed by words is, under a length that counts every word:
+/// each value then holds each name. A `Literal` key is its exact type and a field
+/// reads every key equal to its name, so the mapping is below the record, and a
+/// plain value of the record, whose keys are exact, is a value of the mapping.
+/// `None` for any other subject: a field beside the clauses, a key holding a kind
+/// or a name twice, a key of another kind, or a constraint past the count.
+pub(super) fn the_record_a_count_requires(subject: &Schema, cx: &Cx<'_>) -> Option<Schema> {
+    let Schema::Refine { base, constraints } = subject else {
+        return None;
+    };
+    let Schema::KeyedMap { fields, defaults } = &**base else {
+        return None;
+    };
+    if !fields.is_empty() || defaults.is_empty() {
+        return None;
+    }
+    let mut named: Vec<Field> = Vec::new();
+    for clause in defaults.iter() {
+        let (labels, parts) = key_cover(&clause.key, cx.oracle)?;
+        if !parts.is_empty() {
+            return None;
+        }
+        for label in labels {
+            let Label::Word(word, Kind::Str) = label else {
+                return None;
+            };
+            let name = String::from_utf8(word).ok()?;
+            if named.iter().any(|field| *field.name == *name) {
+                return None;
+            }
+            named.push(Field {
+                name: name.into(),
+                schema: clause.value.clone(),
+                required: true,
+            });
+        }
+    }
+    let count = named.len();
+    let counted = constraints.iter().all(|constraint| match constraint {
+        Constraint::MinLen(least) => *least <= count,
+        Constraint::MaxLen(most) => *most >= count,
+        _ => false,
+    }) && constraints
+        .iter()
+        .any(|constraint| matches!(constraint, Constraint::MinLen(least) if *least == count));
+    counted.then(|| Schema::keyed_map(named, Vec::new()))
 }
 
 /// Whether the clauses of `b` holding this clause's value hold its key between

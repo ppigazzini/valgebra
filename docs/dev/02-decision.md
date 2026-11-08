@@ -1249,6 +1249,12 @@ A clause whose key no one clause of the supertype holds is covered by several, w
 keys of the clauses reading its value hold its key between them (`covered_between_them`,
 [Cas23, Lem. 4.7]): `dict[Literal["a"] | P, V]` below `{Literal["a"]: V, P: V}` for a
 pattern `P`, which the set representation leaves to the rules beside a literal.
+A mapping keyed by words under a length that counts every word is the record of those
+names (`the_record_a_count_requires`): each value holds each name, so a proof through the
+record stands, and the record's plain values, whose keys are exact, are the mapping's, so
+it holds a value and is refuted against the empty set or another kind on one. A refutation
+through the record otherwise may stand on a `str` subclass's key, which a field reads and a
+`Literal` does not, and is not taken.
 Asked in the last asking alone, since a position rarely holds none and the verdict
 costs a goal's steps. `sequences_meeting_in_nothing` reads the other half in an emptiness
 question of any asking: two sequences meet in nothing where a position each of their values

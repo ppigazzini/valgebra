@@ -50,10 +50,16 @@ answer of its own, or a repair to a change not yet released.
 - feat: a key or an optional field holding no value carries no entry
 - feat: a clause's key split between clauses of a supertype is covered
 - feat: a meet supertype and a union subject are read a member at a time
+- feat: a mapping of words under a length counting each is their record
 
 -->
 
 ### Added
+
+- **A mapping of words under a length counting each is their record.** `Annotated[dict[Literal["a"],
+  int], MinLen(1)]` is `subset` of `{"a": int}` and `not_subset` of `nothing`, and
+  `Annotated[dict[Literal["a", "b"], int], MinLen(2)]` is `subset` of `{"a": int, "b": int}`,
+  where each stayed `undecided`.
 
 - **A meet supertype and a union subject are read a member at a time.**
   `list[int]` is `not_subset` of `intersection(union(complement(list[J]), Annotated[list,

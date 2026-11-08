@@ -15226,3 +15226,107 @@ mod a_part_at_a_time {
         );
     }
 }
+
+/// A mapping keyed by words under a length that counts every word, read as the
+/// record of those names.
+mod a_counted_mapping {
+    use super::*;
+
+    /// A map with a field beside its clauses is no mapping of words: the count
+    /// counts the field's name too, and the record of the clauses alone would
+    /// leave it out.
+    #[test]
+    fn a_field_beside_the_clauses_is_no_record() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let fielded = Schema::refine(
+            Schema::keyed_map(
+                vec![Field {
+                    name: "c".into(),
+                    schema: Schema::Int,
+                    required: true,
+                }],
+                vec![MapClause {
+                    key: word(0),
+                    value: Schema::Int,
+                }],
+            ),
+            vec![Constraint::MinLen(1)],
+        );
+        assert!(records::the_record_a_count_requires(&fielded, &cx).is_none());
+    }
+
+    fn word(at: usize) -> Schema {
+        Schema::Literal(ConstIx::new(at))
+    }
+
+    /// `dict[key, int]` under these constraints.
+    fn mapping(key: Schema, constraints: Vec<Constraint>) -> Schema {
+        Schema::refine(
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key,
+                    value: Schema::Int,
+                }],
+            ),
+            constraints,
+        )
+    }
+
+    /// `{name: int, ...}`, each required.
+    fn record(names: &[&str]) -> Schema {
+        Schema::keyed_map(
+            names
+                .iter()
+                .map(|name| Field {
+                    name: (*name).into(),
+                    schema: Schema::Int,
+                    required: true,
+                })
+                .collect::<Vec<_>>(),
+            Vec::new(),
+        )
+    }
+
+    fn relation(subject: &Schema, other: &Schema) -> Relation {
+        subject.subtype_relation_under(other, &a_plain_value::Table, &[])
+    }
+
+    /// Every value holds each word the length counts, so the mapping is below the
+    /// record of the words, and holds a value, which a refutation against another
+    /// kind stands on.
+    #[test]
+    fn a_length_counting_every_word_is_the_record() {
+        let one = mapping(word(0), vec![Constraint::MinLen(1)]);
+        assert_eq!(relation(&one, &record(&["a"])), Relation::Holds);
+        assert_eq!(relation(&one, &Schema::Nothing), Relation::Fails);
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        assert_eq!(relation(&one, &ints), Relation::Fails);
+        let exactly = mapping(word(0), vec![Constraint::MinLen(1), Constraint::MaxLen(1)]);
+        assert_eq!(relation(&exactly, &record(&["a"])), Relation::Holds);
+        let two = mapping(
+            Schema::union([word(0), word(1)]),
+            vec![Constraint::MinLen(2)],
+        );
+        assert_eq!(relation(&two, &record(&["a", "b"])), Relation::Holds);
+    }
+
+    /// A length short of the words leaves a value missing one, and the record is
+    /// not read: the pair stays the rules' as it was.
+    #[test]
+    fn a_length_short_of_the_words_is_no_record() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let short = mapping(
+            Schema::union([word(0), word(1)]),
+            vec![Constraint::MinLen(1)],
+        );
+        assert!(records::the_record_a_count_requires(&short, &cx).is_none());
+        assert_ne!(relation(&short, &record(&["a", "b"])), Relation::Holds);
+        let kind = mapping(Schema::Str, vec![Constraint::MinLen(1)]);
+        assert!(records::the_record_a_count_requires(&kind, &cx).is_none());
+        let counted = mapping(word(0), vec![Constraint::MinLen(1)]);
+        assert!(records::the_record_a_count_requires(&counted, &cx).is_some());
+    }
+}
