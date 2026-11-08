@@ -251,6 +251,14 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         NotImplementedError,
         "cannot constrain a schema",
     ),
+    # Text, but not UTF-8 text: a lone surrogate is a code point no UTF-8
+    # spells, and it is named rather than sent back to write a str it is.
+    (
+        "a pattern holding a lone surrogate",
+        Annotated[str, vg.Regex("a\ud800")],
+        NotImplementedError,
+        "holds a lone surrogate",
+    ),
     # A length no value can have. The marker holds it; the schema cannot.
     (
         "a negative length",

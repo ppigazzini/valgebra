@@ -62,6 +62,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a class applied past its type parameters is refused
 - fix: an annotation folds a recursion and its complement as its combinator does
 - fix: a refined record or list display prints as the validator it builds
+- fix: a pattern holding a lone surrogate is refused by its surrogate
 
 -->
 
@@ -251,6 +252,11 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A pattern holding a lone surrogate is refused by its surrogate.** `Annotated[str,
+  Regex("\ud800")]` was refused with "a pattern is matched against text, so write the pattern as a
+  str", which it is. The message names the lone surrogate, a code point no UTF-8 text holds, which
+  the pattern engine reads alone.
 
 - **A refined record or list display prints as the validator it builds.** `repr` of
   `Validator(Annotated[Validator({"a": int}), MinLen(1)])` was `Annotated[{'a': int}, MinLen(1)]`,
