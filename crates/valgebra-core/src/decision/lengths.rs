@@ -71,6 +71,34 @@ impl Schema {
 }
 
 impl ByLength<'_> {
+    /// Whether this term holds more words than `constants` constants are: a
+    /// length of a `str` or a `bytes` holds the alphabet to its power in words,
+    /// so where the term holds a length past what that many constants can name,
+    /// one of its words is no constant of them. A code point is a `str`'s
+    /// letter, lone surrogates included, and a byte a `bytes`'s.
+    pub(super) fn holds_more_words_than(&self, constants: usize) -> bool {
+        let letters: u128 = match self.base {
+            Some(Schema::Str) => 0x11_0000,
+            Some(Schema::Bytes) => 256,
+            _ => return false,
+        };
+        let Ok(constants) = u128::try_from(constants) else {
+            return false;
+        };
+        let mut length: i64 = 1;
+        let mut words = letters;
+        while words <= constants {
+            length += 1;
+            words = words.saturating_mul(letters);
+        }
+        !self
+            .lengths
+            .intersect(&lengths_held())
+            .intersect(&lengths_up_to(REACHED))
+            .intersect(&IntervalSet::between(Some(length), None))
+            .is_empty()
+    }
+
     /// Nothing: no length, and no value beyond a base.
     fn nothing() -> Self {
         ByLength {

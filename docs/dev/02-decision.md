@@ -1262,7 +1262,11 @@ supertype's side costs them the proof the clause does not bear on. A pair asked 
 complement is read by the parts of the pair it turns to: `¬a ⊆ ¬b` by the parts of
 `b ⊆ a` [FCB08, §4.1], and a meet `a ∧ ¬b` as empty where the sets place `a` below the
 branches of `b` it meets (`below_the_branches_it_meets`), a branch sharing no value with
-`a` deciding nothing and perhaps refusing the sets a lowering.
+`a` deciding nothing and perhaps refusing the sets a lowering. A word's length range
+holds more words than a table of constants where one of its lengths does
+(`holds_more_words_than`): a code point is 1,114,112 words and a byte 256, so
+`Annotated[str, MinLen(1), MaxLen(1000)]` is outside `Literal["a"]` where the automaton
+counting to the state bound stops between 512 and 600.
 Asked in the last asking alone, since a position rarely holds none and the verdict
 costs a goal's steps. `sequences_meeting_in_nothing` reads the other half in an emptiness
 question of any asking: two sequences meet in nothing where a position each of their values

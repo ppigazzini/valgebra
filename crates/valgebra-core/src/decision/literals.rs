@@ -259,15 +259,35 @@ pub(super) fn misses_a_fresh_object(schema: &Schema) -> bool {
 /// Every kind but `None` and `bool` has infinitely many such values no two of
 /// which are equal -- `0`, `1`, `2`; `""`, `"a"`, `"aa"`; `()`, `((),)` -- and
 /// a constant equals at most one of them, so the set misses one, and a subject
-/// holding the kind whole holds that value outside it. Which constants the set
-/// holds is not asked, so no oracle is.
+/// holding the kind whole holds that value outside it. A refinement of a word's
+/// length holds a value outside the set where one of its lengths holds more
+/// words than the set has constants ([`ByLength::holds_more_words_than`]): one
+/// code point is 1,114,112 words. Which constants the set holds is not asked,
+/// so no oracle is.
 ///
-/// Out of line, asked by the arm a literal supertype reaches and by the union
-/// arm once its branches have declined, so a pair of any other shape pays
-/// nothing for it.
+/// Out of line, asked by the arm a literal supertype reaches, by the union arm
+/// once its branches have declined, and by the refinement arm, so a pair of any
+/// other shape pays nothing for it.
+///
+/// [`ByLength::holds_more_words_than`]: super::lengths::ByLength::holds_more_words_than
 #[inline(never)]
 pub(super) fn spills_past_a_table(subject: &Schema, other: &Schema, cx: &Cx<'_>) -> bool {
-    finite_set(other).is_some() && subject.holds_a_boundless_kind_whole(cx)
+    finite_set(other).is_some_and(|table| {
+        subject.holds_a_boundless_kind_whole(cx)
+            || (matches!(subject, Schema::Refine { .. })
+                && subject
+                    .read_as_lengths()
+                    .is_some_and(|read| read.holds_more_words_than(table.len())))
+    })
+}
+
+/// [`spills_past_a_table`] as the answer it gives: a refutation, or none.
+pub(super) fn spilled_past_a_table(subject: &Schema, other: &Schema, cx: &Cx<'_>) -> Relation {
+    if spills_past_a_table(subject, other, cx) {
+        Relation::Fails
+    } else {
+        Relation::Unknown
+    }
 }
 
 /// [`spills_past_a_table`] for a union supertype, as the answer it gives: a

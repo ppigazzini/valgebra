@@ -53,10 +53,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a mapping of words under a length counting each is their record
 - feat: a supertype's clause of constants its subject never spells is beside it
 - feat: a pair asked through a complement is read by the parts it turns to
+- feat: a word's length range is outside a table holding fewer constants
 
 -->
 
 ### Added
+
+- **A word's length range is outside a table holding fewer constants.**
+  `Annotated[str, MinLen(1), MaxLen(1000)]` is `not_subset` of `Literal["a"]`, on `"b"`, where
+  it stayed `undecided` past a `MaxLen` of 512.
 
 - **A pair asked through a complement is read by the parts it turns to.** For `B =
   union(Annotated[int, Ge(2)], Annotated[int, Le(3)], Annotated[dict, MaxLen(2)])`, which `int`

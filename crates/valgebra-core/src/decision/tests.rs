@@ -15525,3 +15525,69 @@ mod a_turned_pair {
         );
     }
 }
+
+/// A word's length range against a table of constants, by how many words a
+/// length holds.
+mod a_length_past_a_table {
+    use super::*;
+
+    /// The spill reads a refinement of a word's length, which its two arms hand
+    /// it, and nothing else by its lengths: a union of two is read by its
+    /// branches, each a refinement, though its lengths spill too.
+    #[test]
+    fn the_spill_reads_a_refinement_alone_by_its_lengths() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let table = Schema::Literal(a_plain_value::WORD);
+        let refined = words(Schema::Str, 2, 3);
+        assert!(literals::spills_past_a_table(&refined, &table, &cx));
+        let joined = Schema::Union(vec![words(Schema::Str, 0, 0), refined].into());
+        assert!(
+            joined.read_as_lengths().is_some(),
+            "the premise: its lengths read"
+        );
+        assert!(!literals::spills_past_a_table(&joined, &table, &cx));
+    }
+
+    fn words(base: Schema, least: usize, most: usize) -> Schema {
+        Schema::refine(
+            base,
+            vec![Constraint::MinLen(least), Constraint::MaxLen(most)],
+        )
+    }
+
+    /// One length of a `str` holds more words than a table of one constant, and a
+    /// range past the automaton's state bound is refuted by that count alone.
+    #[test]
+    fn a_length_range_holding_more_words_than_a_table_is_outside_it() {
+        let table = Schema::Literal(a_plain_value::WORD);
+        let oracle = a_plain_value::Table;
+        for most in [1, 1000] {
+            assert_eq!(
+                words(Schema::Str, 1, most).subtype_relation_under(&table, &oracle, &[]),
+                Relation::Fails,
+                "{most}"
+            );
+        }
+    }
+
+    /// The count, read off the lengths: a `bytes` of length two holds 65,536
+    /// words and one of length three 16,777,216.
+    #[test]
+    fn a_length_holds_the_alphabet_to_its_power_in_words() {
+        let two = words(Schema::Bytes, 2, 2);
+        let two = two.read_as_lengths().expect("a length bound");
+        assert!(two.holds_more_words_than(65_535));
+        assert!(!two.holds_more_words_than(65_536));
+        let three = words(Schema::Bytes, 2, 3);
+        let three = three.read_as_lengths().expect("a length bound");
+        assert!(three.holds_more_words_than(65_536));
+        let empty = words(Schema::Str, 0, 0);
+        let empty = empty.read_as_lengths().expect("a length bound");
+        assert!(!empty.holds_more_words_than(0));
+        let one = words(Schema::Str, 1, 1);
+        let one = one.read_as_lengths().expect("a length bound");
+        assert!(one.holds_more_words_than(1_114_111));
+        assert!(!one.holds_more_words_than(1_114_112));
+    }
+}

@@ -37,7 +37,7 @@ use constraints::constraint_entailed;
 use emptiness::{ReadBack, class_with_attributes, narrowed_meet, the_rules_find_a_value};
 use literals::{
     a_union_spilled_past_as_a_table, finite_meet_below, finite_set, finite_set_below,
-    spills_past_a_table, the_constant_speaks_for_the_literal,
+    spilled_past_a_table, spills_past_a_table, the_constant_speaks_for_the_literal,
 };
 use products::{linear_subtype, seq_splits_across_union};
 use readings::{outside_every_kind, refuted_by_a_multiple, tables_disjoint, tag_pairs};
@@ -2818,7 +2818,8 @@ impl Schema {
             // unproven is a pair with no rule of its own.
             (Schema::Refine { .. }, _) => self
                 .left_reduces_below(other, cx)
-                .or_else(|| self.unstructured(other, cx)),
+                .or_else(|| self.unstructured(other, cx))
+                .or_else(|| spilled_past_a_table(self, other, cx)),
             (_, Schema::Literal(_)) if spills_past_a_table(self, other, cx) => Relation::Fails,
             _ => self.unstructured(other, cx),
         }
