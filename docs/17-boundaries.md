@@ -186,8 +186,10 @@ assert not page.is_valid([{"id": 1}, {"id": "two"}])
 
 What bounds it is Python's own recursion limit and the native stack, not a
 valgebra bound: the walk's depth guard is per call, so each re-entry starts a
-fresh walk on top of the frames the last one holds. On the main thread a
-predicate that re-enters without a base case raises `RecursionError`. The
+fresh walk on top of the frames the last one holds. On the main thread of
+CPython a predicate that re-enters without a base case raises
+`RecursionError`; on PyPy the process ends in PyPy's own stack check, inside
+`cpyext`, with no nesting between the calls. The
 native frames between two Python calls are not what the recursion limit
 counts, though, so where each re-entry walks levels of nesting, or on a thread
 with a small stack, the native stack can run out first and the process ends.
