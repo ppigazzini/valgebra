@@ -442,6 +442,46 @@ fn a_refusal_names_each_clause_reading_a_key() {
     });
 }
 
+/// A failure inside a key is marked as the key entered, right after it: the
+/// path a caller reads ends at the key and the message names the place in it.
+/// A failure of the key's value, and one of the key as a whole, carry no mark.
+#[test]
+fn a_failure_inside_a_key_marks_the_key_entered() {
+    Python::attach(|py| {
+        let keyed_by = |key: Schema| {
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key,
+                    value: Schema::Int,
+                }],
+            )
+        };
+        let tuples = keyed_by(Schema::tuple(SeqShape::homogeneous(Schema::Int)));
+        let held = PyDict::new(py);
+        let key = PyTuple::new(py, ["x"]).expect("a tuple");
+        held.set_item(&key, "y").expect("a hashable key");
+        let (valid, violations) = explain(py, &tuples, held.as_any(), &[], &[]);
+        assert!(!valid);
+        let paths: Vec<Vec<PathSegment>> = violations.iter().map(|v| v.path.clone()).collect();
+        let named = PathSegment::Key("('x',)".into());
+        assert_eq!(
+            paths,
+            vec![
+                vec![named.clone(), PathSegment::Entered, PathSegment::Index(0)],
+                vec![named],
+            ]
+        );
+        let ints = keyed_by(Schema::Int);
+        let held = PyDict::new(py);
+        held.set_item("a", 1).expect("a str key");
+        let (valid, violations) = explain(py, &ints, held.as_any(), &[], &[]);
+        assert!(!valid);
+        let paths: Vec<Vec<PathSegment>> = violations.iter().map(|v| v.path.clone()).collect();
+        assert_eq!(paths, vec![vec![PathSegment::Key("a".into())]]);
+    });
+}
+
 /// A meet collects every member's failure until one rejects the value
 /// *itself*, and then stops: what a later member would say describes a value
 /// already known to be the wrong kind of thing. A member that fails *inside*

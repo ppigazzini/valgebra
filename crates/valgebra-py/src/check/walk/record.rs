@@ -18,7 +18,7 @@ use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyDict, PyString};
 use rustc_hash::FxHashMap;
-use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema, quoted};
+use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema, Violation, quoted};
 
 use super::scalar::{Scalar, admitted_quietly, scalar_admits, scalar_member, scalar_of};
 #[cfg(PyPy)]
@@ -1592,6 +1592,19 @@ fn refused_by_each(schemas: &[&Schema], value: &Value<'_, '_>, frame: &mut Frame
     super::refused_as_a_union(schemas.iter().copied(), value, frame);
 }
 
+/// Mark the key at `at` as [`PathSegment::Entered`] in each failure from
+/// `reported` on that its walk found inside it: the path a caller walks ends
+/// at the key, since no subscript reaches into one, and the message names the
+/// place in it. A failure of the key as a whole is at the key, and stays as it
+/// is.
+fn entered_the_key(out: &mut [Violation], reported: usize, at: usize) {
+    for violation in out.iter_mut().skip(reported) {
+        if violation.path.len() > at + 1 {
+            violation.path.insert(at + 1, PathSegment::Entered);
+        }
+    }
+}
+
 /// Report each key a record does not declare and no clause of it covers: the
 /// key, and its value, against the clause where the record has one, and the
 /// key alone where it is closed.
@@ -1635,8 +1648,11 @@ fn undeclared_explained(
             // violations against it (the homogeneous-mapping error). The two are
             // two failures, so a mode that stops at the first reports the key
             // alone.
+            let at = frame.path.len();
             frame.path.push(key_segment(key, ctx));
+            let reported = frame.out.len();
             member(&clause.key, &Value::Py(key), frame);
+            entered_the_key(frame.out, reported, at);
             if !ctx.mode.stops_at_first() || frame.out.is_empty() {
                 member(&clause.value, &Value::Py(val), frame);
             }

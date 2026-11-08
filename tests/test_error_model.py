@@ -130,6 +130,56 @@ def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_not_spelled() ->
     assert info.value.errors[0]["path"] == ("2",)
 
 
+def test_a_failure_inside_a_key_ends_its_path_at_the_key() -> None:
+    """A key holds no place a path reaches, so a failure inside one stops at it.
+
+    `{("x",): ["y"]}` fails at position 0 of the key and at position 0 of its
+    value. The key's failure ends at the key, and its message names the place
+    in it, so the two items are apart in the path and in the message.
+    """
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[tuple[int, ...], list[int]]).validate({("x",): ["y"]})
+    in_the_key, in_the_value = info.value.errors
+    assert in_the_key["path"] == ("('x',)",)
+    assert in_the_key["value"] == "'x'"
+    assert in_the_key["message"] == (
+        "at ('x',), key[0]: expected int, got 'x' [int_type]"
+    )
+    assert in_the_value["path"] == ("('x',)", 0)
+    assert in_the_value["message"] == "at ('x',)[0]: expected int, got 'y' [int_type]"
+    # A record's clause reads its keys the same way, under a field of its own.
+    with pytest.raises(ValidationError) as info:
+        Validator({"m": {"a": int, tuple[int, int]: str}}).validate(
+            {"m": {"a": 1, ("q", 2): "s"}}
+        )
+    (error,) = info.value.errors
+    assert error["path"] == ("m", "('q', 2)")
+    assert error["message"] == (
+        "at m[\"('q', 2)\"], key[0]: expected int, got 'q' [int_type]"
+    )
+    # A key failing as a whole is at the key, where it always was.
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[int, str]).validate({"a": "b"})
+    assert info.value.errors[0]["path"] == ("a",)
+    assert info.value.errors[0]["message"] == "at a: expected int, got 'a' [int_type]"
+
+
+def test_a_union_reads_a_failure_inside_a_key_as_deep_as_one_in_its_value() -> None:
+    """The mark a key's failure carries is no level of the value.
+
+    A union explains the branch that went deepest, the first on a tie. Inside
+    the key and inside its value, both failures are two levels down, so the
+    record, the first branch, explains, as it does with no mark at all.
+    """
+    record = Validator(dict[tuple[str, ...], list[int]])
+    meet = intersection(dict[tuple[int, ...], list[str]], Annotated[dict, at.MinLen(1)])
+    with pytest.raises(ValidationError) as info:
+        union(record, meet).validate({("x",): ["y"]})
+    (error,) = info.value.errors
+    assert error["path"] == ("('x',)", 0)
+    assert error["message"] == "at ('x',)[0]: expected int, got 'y' [int_type]"
+
+
 def test_a_big_integer_key_is_named_by_its_stored_digits() -> None:
     """The digits come from the storage, as a small integer's value does.
 

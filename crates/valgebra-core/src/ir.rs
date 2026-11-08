@@ -338,6 +338,25 @@ pub enum PathSegment {
     BigIntKey(String),
     /// A sequence, tuple, or set position.
     Index(usize),
+    /// The key before it, entered by a failure inside it: a position of a
+    /// tuple key, say. A path a caller walks back down ends at the key, since
+    /// no subscript reaches into one, and the message writes the segments after
+    /// it as the key's own location, `('x',), key[0]`, apart from `('x',)[0]`,
+    /// the same position of the key's value. It is no step of the walk, so
+    /// [`PathSegment::steps`] leaves it out. It holds nothing, which keeps a
+    /// segment's drop the inline one a walk pays at every level.
+    Entered,
+}
+
+impl PathSegment {
+    /// How many levels into the value `path` goes: its segments, but each
+    /// [`PathSegment::Entered`], which marks a key and is no level.
+    #[must_use]
+    pub fn steps(path: &[PathSegment]) -> usize {
+        path.iter()
+            .filter(|segment| !matches!(segment, PathSegment::Entered))
+            .count()
+    }
 }
 
 /// The clause list an open record carries, allocated once for the process.

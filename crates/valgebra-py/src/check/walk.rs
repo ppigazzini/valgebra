@@ -1159,7 +1159,7 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         };
         let first = branch.first();
         let progress = first
-            .map_or(base_depth, |v| v.path.len())
+            .map_or(base_depth, |v| PathSegment::steps(&v.path))
             .saturating_sub(base_depth);
         if declined.is_none() && first.is_some_and(|v| walk_declined(v.code)) {
             declined = Some(branch.clone());

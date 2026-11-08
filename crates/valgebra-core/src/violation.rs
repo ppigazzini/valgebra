@@ -57,6 +57,10 @@ impl Violation {
                 PathSegment::IntKey(key) => write!(out, "[{key}]")?,
                 PathSegment::BigIntKey(key) => write!(out, "[{key}]")?,
                 PathSegment::Index(index) => write!(out, "[{index}]")?,
+                // A comma and a space end the key's location: a key holding a
+                // space is written as a subscript, so the pair never reads as
+                // part of one.
+                PathSegment::Entered => out.write_str(", key")?,
             }
             first = false;
         }

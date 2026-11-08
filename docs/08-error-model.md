@@ -27,7 +27,10 @@ A `ValidationError` exposes:
     index back with. That entry is text, so it can equal a string key's:
     `{None: "x"}` and `{"None": "x"}` both fail at `("None",)`. A caller
     walking a path back down over keys of other types tells the two apart by
-    the container, where `"None"` is no key of the first.
+    the container, where `"None"` is no key of the first. A failure inside a
+    key -- at a position of a tuple key -- has no place a path can name, since
+    no subscript reaches into a key: its path ends at the key, and the message
+    names the place in it.
   - `message` — the rendered one-line human message, `at <location>: expected
     <expected>, got <value> [<code>]`. The location writes a key as itself and
     an index or an integer key in brackets, `items[2].id`, an integer longer
@@ -37,11 +40,34 @@ A `ValidationError` exposes:
     character — is written as a subscript of its Python literal, `['a.b']`, so
     no two string or integer keys read alike and the message stays on one
     line. A key of any other type is written as its `repr`, and reads as the
-    string key with that text.
+    string key with that text. A place inside a key follows the key and `,
+    key`: `('x',), key[0]` is position 0 of the key, and `('x',)[0]` position 0
+    of its value.
   - `expected` — a short label of the expected set (e.g. `int`).
   - `value` — a repr-style summary of the offending value.
 - `message`, `code`, `path`, `expected`, `value` — scalar convenience
   attributes mirroring the first item. `str(exc)` is a summary of every failure.
+
+A key and its value can fail at the same position, and the two items are apart
+in the path and in the message:
+
+```python
+from valgebra import ValidationError, Validator
+
+raised = False
+try:
+    Validator(dict[tuple[int, ...], list[int]]).validate({("x",): ["y"]})
+except ValidationError as err:
+    raised = True
+    in_the_key, in_the_value = err.errors
+    assert in_the_key["path"] == ("('x',)",)
+    assert in_the_key["message"] == (
+        "at ('x',), key[0]: expected int, got 'x' [int_type]"
+    )
+    assert in_the_value["path"] == ("('x',)", 0)
+    assert in_the_value["message"] == "at ('x',)[0]: expected int, got 'y' [int_type]"
+assert raised
+```
 
 Every one of the six is present on every `ValidationError`, however it was made.
 The model describes *failures*, so an error you construct yourself reports none

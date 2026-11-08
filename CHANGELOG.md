@@ -55,6 +55,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a pair asked through a complement is read by the parts it turns to
 - feat: a word's length range is outside a table holding fewer constants
 - feat: a class reached again inside a type alias is tied by the alias
+- fix: a failure inside a key ends its path at the key
 
 -->
 
@@ -244,6 +245,12 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A failure inside a key ends its path at the key.** `dict[tuple[int, ...], list[int]]` refuses
+  `{("x",): ["y"]}` at position 0 of the key and at position 0 of its value, and on 0.0.24 both
+  items held the path `("('x',)", 0)`, a place in the value. The key's item ends at the key,
+  `("('x',)",)`, since no subscript reaches into a key, and its message names the place in it:
+  `at ('x',), key[0]: expected int, got 'x' [int_type]`.
 
 - **An allocation Python refuses inside a call raises `MemoryError`.** Where the interpreter
   could not give memory to an object valgebra builds -- a schema's, a report's, a parsed

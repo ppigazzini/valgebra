@@ -510,6 +510,42 @@ fn location_renders_keys_indices_and_their_mix() {
     );
 }
 
+/// A place inside a key is written after the key and `, key`, apart from the
+/// same place in the key's value, which follows the key directly.
+#[test]
+fn a_place_inside_a_key_is_written_after_the_key() {
+    let at = |path: Vec<PathSegment>| {
+        Violation {
+            code: "x",
+            path,
+            expected: String::new(),
+            value_summary: String::new(),
+        }
+        .location()
+    };
+    let key = || PathSegment::Key("('x',)".into());
+    assert_eq!(
+        at(vec![key(), PathSegment::Entered, PathSegment::Index(0)]),
+        "('x',), key[0]"
+    );
+    assert_eq!(at(vec![key(), PathSegment::Index(0)]), "('x',)[0]");
+    // A key holding a space is a subscript, so its text never reads as the
+    // place it is entered at.
+    let spaced = vec![
+        PathSegment::Key("m".into()),
+        PathSegment::Key("(1, 'z')".into()),
+        PathSegment::Entered,
+        PathSegment::Key("y".into()),
+    ];
+    assert_eq!(at(spaced.clone()), "m[\"(1, 'z')\"], key.y");
+    assert_eq!(
+        at(vec![PathSegment::Key("a, key[0]".into())]),
+        "['a, key[0]']"
+    );
+    // The mark is no level of the value: the path goes three deep.
+    assert_eq!(PathSegment::steps(&spaced), 3);
+}
+
 /// A key that is not a bare name is written as a subscript of its quoted text.
 ///
 /// Bare, the key `"a.b"` would read as the path `a` then `b`, `"[0]"` as the

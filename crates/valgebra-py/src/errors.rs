@@ -567,6 +567,9 @@ fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py,
                 .call1((key.as_str(), 0))?
                 .into_any(),
             PathSegment::Index(index) => (*index).into_pyobject(py)?.into_any(),
+            // The path ends at a key a failure is inside: no subscript reaches
+            // into a key, and the message names the place in it.
+            PathSegment::Entered => break,
         };
         items.push(item);
     }
