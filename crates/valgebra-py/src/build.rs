@@ -1686,9 +1686,14 @@ enum Constant {
     NoneType,
     Bool(bool),
     Int(i64),
-    /// An `int` past the key above, by its hexadecimal digits, which take no time
-    /// a value's size does not and read no limit on a conversion's digits.
-    WideInt(Arc<str>),
+    /// A value by a text its type spells exactly. An `int` past the key above, by its
+    /// hexadecimal digits, which take no time a value's size does not and read no
+    /// limit on a conversion's digits; and an exact `Fraction` or `Decimal` equal to
+    /// itself, by its `repr`: its type, its value, and a `Decimal`'s exponent, which
+    /// `Decimal("1.0") == Decimal("1.00")` does not read and `%` does. The two texts
+    /// never meet, a `repr` holding a capital and a parenthesis and the digits
+    /// neither.
+    Text(Arc<str>),
     /// A float by its bits, with the one value whose bits are not its identity
     /// folded: `0.0 == -0.0`, so the two are one constant. A `nan` never reaches
     /// here -- it equals nothing, itself included, so it is keyed by address.
@@ -1724,10 +1729,7 @@ fn constant_of(obj: &Bound<'_, PyAny>) -> Constant {
                             .ok()
                             .and_then(|text| text.to_str().ok().map(Arc::from))
                     })
-                    .map_or_else(
-                        || Constant::Address(obj.as_ptr() as usize),
-                        Constant::WideInt,
-                    )
+                    .map_or_else(|| Constant::Address(obj.as_ptr() as usize), Constant::Text)
             },
             Constant::Int,
         );
@@ -1746,7 +1748,27 @@ fn constant_of(obj: &Bound<'_, PyAny>) -> Constant {
     if let Ok(raw) = obj.cast_exact::<PyBytes>() {
         return Constant::Bytes(Arc::from(raw.as_bytes()));
     }
+    // A class or a callable, which a build pools by the thousand, is no number: read
+    // off its type's slot before the modules are asked for the two classes.
+    if !obj.is_callable()
+        && let Some(key) = rational_key(obj, &ty)
+    {
+        return key;
+    }
     address
+}
+
+/// The key of an exact `Fraction` or `Decimal` equal to itself, its `repr`: its
+/// type, its value and a `Decimal`'s exponent. `None` for any other object, and for
+/// a `nan` or a signaling one, which equals nothing. Out of line: rare beside the
+/// scalars [`constant_of`] reads first, and every build reads that.
+#[inline(never)]
+fn rational_key(obj: &Bound<'_, PyAny>, ty: &Bound<'_, PyType>) -> Option<Constant> {
+    if !(crate::oracle::is_exact_rational(ty).unwrap_or(false) && obj.eq(obj).unwrap_or(false)) {
+        return None;
+    }
+    let text = obj.repr().ok()?;
+    Some(Constant::Text(Arc::from(text.to_str().ok()?)))
 }
 
 /// The items of an iterable a class or a marker supplies, refused past as many

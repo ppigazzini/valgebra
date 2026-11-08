@@ -66,6 +66,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet of a kind with members of that kind is read as those members
 - feat: zero is a multiple of an exact Fraction or Decimal step
 - feat: the last asking reads a union past a member it cannot settle
+- fix: an exact Fraction or Decimal pools by value
 
 -->
 
@@ -267,6 +268,10 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **Two equal `Fraction` or `Decimal` constants built apart are one.** Two validators of
+  `Annotated[int, MultipleOf(Decimal("0.7"))]`, each built with its own `Decimal`, relate
+  `subset` both ways and are equivalent, where they compared `==` and read `undecided`.
 
 - **A pattern holding a lone surrogate is refused by its surrogate.** `Annotated[str,
   Regex("\ud800")]` was refused with "a pattern is matched against text, so write the pattern as a

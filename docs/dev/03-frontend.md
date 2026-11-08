@@ -657,10 +657,13 @@ lits.intern_predicate(func) // a user callback
 
 Each returns its own index type. The private `intern` beneath them deduplicates
 through a hashed map keyed by what the object is as a constant -- an exact
-builtin scalar by its type and value, anything else by its address -- so
-compiling a wide `Literal[...]` or merging many validators stays linear rather
-than quadratic. The address key is stable because every interned value is kept
-alive by the pool.
+builtin scalar by its type and value, an exact `Fraction` or `Decimal` equal to
+itself by its `repr`, anything else by its address -- so compiling a wide
+`Literal[...]` or merging many validators stays linear rather than quadratic. The
+`repr` holds a `Decimal`'s exponent, which `%` reads and `==` does not, so
+`Decimal("1.0")` and `Decimal("1.00")` stay two constants; a `nan`, a signaling one
+whose `==` raises, and a subclass, whose `==` is its own, keep their addresses. The
+address key is stable because every interned value is kept alive by the pool.
 
 **A relation reads each validator's keys once.** Relating two validators pools
 the other side's constants into a pool seeded with the subject's, and reading a

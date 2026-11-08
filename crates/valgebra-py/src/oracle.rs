@@ -358,7 +358,7 @@ const STDLIB_VALUE_TYPES: &[(&str, &[&str])] = &[
 ];
 
 /// Whether `ty` is exactly `fractions.Fraction` or `decimal.Decimal`.
-fn is_exact_rational(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+pub(crate) fn is_exact_rational(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     Ok(is_stdlib_class(ty, "fractions", "Fraction")? || is_stdlib_class(ty, "decimal", "Decimal")?)
 }
 

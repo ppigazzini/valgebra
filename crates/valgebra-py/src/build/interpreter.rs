@@ -1867,6 +1867,65 @@ fn a_constant_pools_by_value_only_where_equality_is_pythons() {
     });
 }
 
+/// An exact `Fraction` or `Decimal` pools by its `repr`: its type, its value, and a
+/// `Decimal`'s exponent, which `%` reads and `==` does not. Two equal ones built apart
+/// are one slot; `Decimal("1.0")` and `Decimal("1.00")` are two; and a `nan`, a
+/// signaling one whose `==` raises, and a subclass, whose `==` is its own, keep their
+/// addresses.
+#[test]
+fn an_exact_rational_pools_by_its_repr() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"from decimal import Decimal\n\
+              from fractions import Fraction\n\
+              class Dec(Decimal):\n\
+              \x20   pass\n",
+            c"rationals.py",
+            c"rationals",
+        )
+        .expect("the module compiles");
+        let names = module.dict();
+        let eval = |source: &str| {
+            py.eval(&CString::new(source).expect("no nul"), Some(&names), None)
+                .expect("the expression evaluates")
+        };
+        let mut pool = Pool::default();
+        let mut slot = |source: &str| pool.intern_const(&eval(source));
+        assert_eq!(
+            slot("Decimal('1.5')"),
+            slot("Decimal('1.5')"),
+            "one Decimal built twice"
+        );
+        assert_eq!(
+            slot("Fraction(5, 2)"),
+            slot("Fraction(10, 4)"),
+            "one Fraction spelled twice"
+        );
+        assert_ne!(
+            slot("Decimal('1.0')"),
+            slot("Decimal('1.00')"),
+            "two exponents"
+        );
+        assert_ne!(
+            slot("Decimal('NaN')"),
+            slot("Decimal('NaN')"),
+            "a nan equals nothing"
+        );
+        assert_ne!(
+            slot("Decimal('sNaN')"),
+            slot("Decimal('sNaN')"),
+            "a signaling nan's == raises"
+        );
+        assert_ne!(
+            slot("Dec('2')"),
+            slot("Dec('2')"),
+            "a subclass keeps its address"
+        );
+        assert_ne!(slot("Fraction(5, 2)"), slot("Decimal('2.5')"), "two types");
+    });
+}
+
 /// An exact builtin scalar is read as its constant before the dispatch, and
 /// only an exact one: a subclass -- an `IntEnum` member, a `str` subclass -- a
 /// container and `None` are left to the arms that read them, and a validator

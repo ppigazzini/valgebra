@@ -1407,6 +1407,20 @@ def test_zero_is_a_multiple_of_an_exact_rational_step_over_the_integers(
     assert Validator(multiple).relation_to(str) == "not_subset"
 
 
+# Values no other test writes, none a float equals.
+@pytest.mark.parametrize("make", [lambda: Decimal("0.7"), lambda: Fraction(7, 3)])
+def test_two_equal_rational_steps_built_apart_relate_as_one(
+    make: Callable[[], Fraction | Decimal],
+) -> None:
+    """A `Fraction` or `Decimal` step is a value, so equal validators answer alike."""
+    one = _fresh(lambda: Annotated[int, at.MultipleOf(make())])
+    other = _fresh(lambda: Annotated[int, at.MultipleOf(make())])
+    assert one == other
+    assert one.relation_to(other) == "subset"
+    assert other.relation_to(one) == "subset"
+    assert one.is_equivalent(other)
+
+
 # Steps no other test writes.
 @pytest.mark.parametrize("step", [0.4375, 2.75, 0.6875])
 def test_a_refinement_met_with_its_base_holds_what_it_holds(step: float) -> None:
