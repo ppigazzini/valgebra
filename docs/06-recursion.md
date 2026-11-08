@@ -107,11 +107,43 @@ mypy refuses the same shape at its definition.
 A class whose own type appears in a field is recursive in the same way, and a
 class definition has no place to tie the fixpoint, so building a validator for
 one is refused with a message pointing here -- a dataclass, a `NamedTuple` and a
-`TypedDict` alike. `recursive` spells the shape as containers instead: the
-record below admits the nested dicts a recursive `TypedDict` describes, and
-refuses every instance of the dataclass, which is not a dict. No form spells
-"an instance of `Node` whose `next` is the fixpoint", so a self-referential
-dataclass or `NamedTuple` cannot be deep-checked here.
+`TypedDict` alike. A `type` alias is that place. A field naming the class
+through an alias opens the alias, the class is read once more inside it, and
+its fields reach the alias again while it is open, which is the alias's back
+edge, so the instances are checked in depth:
+
+```python
+import json
+from dataclasses import dataclass
+
+from valgebra import Validator
+
+type Rest = Node | None
+
+
+@dataclass
+class Node:
+    value: int
+    rest: Rest
+
+
+nodes = Validator(Node)
+assert nodes.is_valid(Node(1, Node(2, None)))
+wrong = json.loads('{"value": "a", "rest": null}')  # nothing checks what `value` holds
+assert not nodes.is_valid(Node(1, Node(**wrong)))
+```
+
+A generic class applied to an alias that names it is the same knot:
+`Box[Tree]`, with `type Tree = int | Box[Tree]`, is the boxes holding a tree.
+The refusal stands for a class that names itself with no alias in between,
+`next: Node | None`, since nothing ties that cycle.
+
+On 3.11, which has no `type` statement, `recursive` spells the shape as
+containers instead: the record below admits the nested dicts a recursive
+`TypedDict` describes, and refuses every instance of the dataclass, which is
+not a dict. No `recursive` body spells "an instance of `Node` whose `next` is
+the fixpoint", so there a self-referential dataclass or `NamedTuple` cannot be
+deep-checked.
 
 ```python
 from __future__ import annotations

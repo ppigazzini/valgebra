@@ -757,9 +757,19 @@ generator of its own, refused on [01-schema-ir.md](01-schema-ir.md).
 ## Recursion is tied by `recursive` or by an alias
 
 A class whose own type appears in its fields is recursive, and the frontend
-refuses to chase it — a depth guard bounds `build_schema` and returns a message
-naming `recursive(...)` as the way to express it. The bound exists so that case
-fails cleanly instead of overflowing the native stack.
+refuses to chase it. `ClassScope` in `build.rs` holds each class whose fields
+are being built on `OPEN_CLASSES`, with its type arguments and the count of
+aliases open where its fields began, and refuses a class reached again under
+equal arguments at that same count, with a message naming `recursive(...)` as
+the way to express it: no alias opened in between, so the same hints are built
+again and nothing ties the cycle. Reached at a higher count, the class is read
+inside an alias opened since, and is built once more; its fields reach that
+alias again while it is open, which is the alias's back edge, so `Box[Tree]`
+with `type Tree = int | Box[Tree]` ends there. The count is a stack height, so
+an equal one means no alias opened since rather than the same number opened
+elsewhere. A class reached under other arguments is another build, and the
+depth bound refuses one that never repeats, cleanly instead of overflowing the
+native stack.
 
 A PEP 695 alias is its own binder, so the fixpoint it names needs no call.
 `tie_alias` in `build.rs` stands a token for the alias while its body is

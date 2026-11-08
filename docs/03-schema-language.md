@@ -1151,8 +1151,10 @@ no such footgun.
 
 !!! note "Recursive classes"
     A class whose own type appears in a field (a tree node, a linked list) is
-    recursive and cannot compile directly — express it with
-    [`recursive`](06-recursion.md), which ties the fixpoint explicitly.
+    recursive and cannot compile directly unless the field names it through a
+    `type` alias, which ties the fixpoint
+    ([recursion](06-recursion.md#why-classes-need-it)); otherwise express it
+    with [`recursive`](06-recursion.md), which ties the fixpoint explicitly.
 
 !!! note "Bare classes, callables, and the runtime boundary"
     A class the tables above do not read by its declaration is an `isinstance`

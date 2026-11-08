@@ -54,10 +54,17 @@ answer of its own, or a repair to a change not yet released.
 - feat: a supertype's clause of constants its subject never spells is beside it
 - feat: a pair asked through a complement is read by the parts it turns to
 - feat: a word's length range is outside a table holding fewer constants
+- feat: a class reached again inside a type alias is tied by the alias
 
 -->
 
 ### Added
+
+- **A class reached again inside a `type` alias is tied by the alias.** `Box[Tree]`, with
+  `type Tree = int | Box[Tree]`, builds the boxes holding a tree, and a dataclass naming itself
+  through `type Rest = Node | None` is checked in depth, where each was refused as a class reached
+  again while its own fields are being built. A class naming itself with no alias between is
+  refused, since nothing ties that cycle.
 
 - **A word's length range is outside a table holding fewer constants.**
   `Annotated[str, MinLen(1), MaxLen(1000)]` is `not_subset` of `Literal["a"]`, on `"b"`, where

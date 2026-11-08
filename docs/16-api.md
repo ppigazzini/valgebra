@@ -185,7 +185,7 @@ checking](18-static-checking.md)).
 | --- | --- | --- |
 | `NotImplementedError` | The spec names a form with no decidable runtime membership. | `Sequence[int]`, `Mapping[str, int]`, a `TypeVar`, `Final`, `ClassVar` |
 | `NotImplementedError` | A callable that is not a class, or the annotation `Validator[T]`, stands where a schema goes. The message names the spelling that was meant: `Annotated[T, fn]` or `Literal[fn]` for a callable, the schema or a compiled validator for `Validator[T]`. | `Validator(fn)`, `intersection(Record, fn)`, `list[fn]`, `Validator(Validator[int])` |
-| `NotImplementedError` | A class is reached again, under the type arguments it is applied to, while its own fields are being built. | a self-referential dataclass, `TypedDict` or protocol, whose field type names the class |
+| `NotImplementedError` | A class is reached again, under the type arguments it is applied to, while its own fields are being built, with no `type` alias opened since. | a self-referential dataclass, `TypedDict` or protocol, whose field type names the class with no alias between |
 | `ValueError` | A schema crosses a size bound: depth, definitions, or nodes, whether a sequence of calls built it or an annotation spells it. | growing a schema in a loop with `\|`, `union` or `intersection`; opening one near the node bound; `list[list[...]]` nested past `MAX_SCHEMA_DEPTH` |
 | `ValueError` | A marker's value cannot denote a set. | `MultipleOf(0)` |
 | `ValueError` | A `recursive` body is not contractive — its back edge is not under a structural constructor. | `recursive(lambda s: s)` |
@@ -193,8 +193,9 @@ checking](18-static-checking.md)).
 
 The form row and the class row are **different refusals** that share a
 class. The first is about the *form* and no depth would help it; the second is
-a class whose field type names the class again, which never bottoms out and is
-refused where it is reached rather than at a depth. The `ValueError` depth row
+a class whose field type names the class again with no `type` alias between,
+which never bottoms out and is refused where it is reached rather than at a
+depth; an alias between ties the cycle where the fields reach it again. The `ValueError` depth row
 is one bound, `MAX_SCHEMA_DEPTH`, on a schema a sequence of calls built and on
 one an annotation spells -- the frontend descends one level past it, so the
 message names the bound and the schema past it is refused rather than

@@ -3,7 +3,7 @@ import json
 import sys
 import threading
 from collections.abc import Callable
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 import annotated_types as at
 import pytest
@@ -284,10 +284,14 @@ def test_a_recursive_definition_is_built_in_the_normal_form() -> None:
 # PEP 695 is 3.12+ syntax, so the alias is written in a source string rather than
 # in this module: a `type` statement here would be a SyntaxError on 3.11 before
 # any skip could apply.
-def _alias(source: str, name: str) -> object:
-    namespace: dict[str, object] = {}
+def _defined(source: str, **names: object) -> dict[str, Any]:
+    namespace: dict[str, Any] = dict(names)
     exec(source, namespace)  # noqa: S102 - the syntax under test, not user input
-    return namespace[name]
+    return namespace
+
+
+def _alias(source: str, name: str) -> object:
+    return _defined(source)[name]
 
 
 @pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
@@ -349,6 +353,79 @@ def test_two_aliases_spelled_alike_are_one_definition() -> None:
     assert repr(joined) == "recursive(lambda X: int | list[X])"
     twice = Validator(list[left] | dict[str, left])  # ty: ignore[invalid-type-form]
     assert twice == union(list[left], dict[str, left])  # ty: ignore[invalid-type-form]
+
+
+_BOXES = """
+from dataclasses import dataclass
+
+@dataclass
+class Box[T]:
+    item: T
+
+type Tree = int | Box[Tree]
+"""
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
+def test_a_class_reached_again_inside_an_alias_is_tied_by_the_alias() -> None:
+    """`Box[Tree]` reaches `Box[Tree]` again inside `Tree`, which it opened.
+
+    Read once more there, the class's fields reach `Tree` while it is open,
+    which is the alias's back edge, so the build ends, and it is the set the
+    annotation writes: the boxes holding a tree.
+    """
+    defined = _defined(_BOXES)
+    box, tree = defined["Box"], defined["Tree"]
+    boxes = Validator(box[tree])
+    assert boxes.is_valid(box(1))
+    assert boxes.is_valid(box(box(1)))
+    assert not boxes.is_valid(box("s"))
+    assert not boxes.is_valid(box(box("s")))
+    assert not boxes.is_valid(1)
+    assert boxes.relation_to(tree) == "subset"
+    assert Validator(tree).relation_to(boxes) == "not_subset"
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
+def test_a_class_naming_itself_through_an_alias_is_checked_in_depth() -> None:
+    linked = _defined(
+        "from dataclasses import dataclass\n"
+        "type Rest = Node | None\n"
+        "@dataclass\n"
+        "class Node:\n"
+        "    value: int\n"
+        "    rest: Rest\n"
+    )["Node"]
+    nodes = Validator(linked)
+    assert nodes.is_valid(linked(1, linked(2, None)))
+    assert not nodes.is_valid(linked(1, linked("a", None)))
+    assert not nodes.is_valid(linked(1, 2))
+    # With no base case the alias ties a fixpoint no finite value is in, as the
+    # same body written with `recursive` does.
+    loop = _defined(
+        "from dataclasses import dataclass\n"
+        "type Again = Loop\n"
+        "@dataclass\n"
+        "class Loop:\n"
+        "    again: Again\n"
+    )["Loop"]
+    assert Validator(loop).is_empty()
+
+
+@dataclasses.dataclass
+class _Cell:
+    nxt: "_Cell | None" = None
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
+def test_a_class_reached_again_with_no_alias_opened_since_is_refused() -> None:
+    # An alias open around the whole class ties nothing inside it: the class
+    # names itself with no alias between, and is refused where it is reached.
+    outer = _defined("type Outer = list[_Cell]", _Cell=_Cell)["Outer"]
+    with pytest.raises(
+        NotImplementedError, match="reached again while its own fields are being built"
+    ):
+        Validator(outer)
 
 
 def test_a_fixpoint_is_decided_against_the_kinds_its_body_admits() -> None:

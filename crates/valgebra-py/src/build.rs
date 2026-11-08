@@ -64,18 +64,25 @@ thread_local! {
 struct OpenClass {
     address: usize,
     arguments: Option<Py<PyTuple>>,
+    /// How many aliases stood open where its fields began. Reached again with
+    /// one opened since, the class is read inside an alias its own fields reach
+    /// again, which ties the cycle there.
+    aliases: usize,
 }
 
 /// One class's fields being built, held open on [`OPEN_CLASSES`] until they
 /// are and given back as it was however the build ends.
 ///
 /// A class reached again while its own fields are being built, applied to the
-/// same arguments, is built from the same hints again, so the build never
-/// bottoms out. It is refused where it is reached, as the form the frontend
-/// does not take that it is: an alias ties such a fixpoint, and a class is
-/// written with `recursive(...)` to tie one. Applied to other arguments it is
-/// another build, which may end, and the depth bound refuses it where it does
-/// not.
+/// same arguments, with no alias opened in between, is built from the same
+/// hints again, so the build never bottoms out. It is refused where it is
+/// reached, as the form the frontend does not take that it is: an alias ties
+/// such a fixpoint, and a class is written with `recursive(...)` to tie one.
+/// Reached inside an alias opened since its fields began, as `Box[Tree]` with
+/// `type Tree = int | Box[Tree]` reaches `Box`, it is built once more: its
+/// fields reach that alias again while it is open, the alias's back edge, and
+/// the cycle is tied there. Applied to other arguments it is another build,
+/// which may end, and the depth bound refuses either where it does not.
 pub(super) struct ClassScope;
 
 impl ClassScope {
@@ -85,11 +92,12 @@ impl ClassScope {
     ) -> PyResult<ClassScope> {
         let py = class.py();
         let address = class.as_ptr() as usize;
+        let aliases = OPEN_ALIASES.with_borrow(Vec::len);
         // Compared outside the borrow, as an open alias is: an equality is
         // Python code, and code that builds a validator would borrow the list.
         let open: Vec<Option<Py<PyTuple>>> = OPEN_CLASSES.with_borrow(|open| {
             open.iter()
-                .filter(|entry| entry.address == address)
+                .filter(|entry| entry.address == address && entry.aliases == aliases)
                 .map(|entry| entry.arguments.as_ref().map(|held| held.clone_ref(py)))
                 .collect()
         });
@@ -111,6 +119,7 @@ impl ClassScope {
             open.push(OpenClass {
                 address,
                 arguments: arguments.map(|these| these.clone().unbind()),
+                aliases,
             });
         });
         Ok(ClassScope)

@@ -2289,6 +2289,41 @@ fn a_build_begun_inside_a_build_counts_from_nought_and_gives_the_counts_back() {
     });
 }
 
+/// A class reached again while its own fields are built, with no alias opened
+/// in between, is refused where it is reached; reached inside an alias opened
+/// since, the alias ties the cycle and the class builds.
+#[test]
+fn a_class_reached_again_is_refused_unless_an_alias_opened_since_ties_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"from __future__ import annotations\n\
+              import dataclasses\n\
+              @dataclasses.dataclass\n\
+              class Node:\n\
+              \x20   nxt: Node | None = None\n",
+            c"reached_again.py",
+            c"reached_again",
+        )
+        .expect("the module runs");
+        let node = module.getattr("Node").expect("the class");
+        let mut pool = Pool::default();
+        let refused = build_schema(&node, &mut pool, &mut Vec::new())
+            .expect_err("a class naming itself with no alias between");
+        assert!(refused.is_instance_of::<PyNotImplementedError>(py));
+        assert!(refused.to_string().contains("reached again"), "{refused}");
+        if !Since(12).met(py) {
+            return;
+        }
+        let tied = "(lambda ns: (exec('import dataclasses\\n\
+                    type Rest = Linked | None\\n\
+                    @dataclasses.dataclass\\n\
+                    class Linked:\\n\
+                    \x20   nxt: Rest', ns), ns['Linked'])[1])({})";
+        assert!(built(py, tied).is_ok(), "the alias ties the cycle");
+    });
+}
+
 /// A bound or a step of exactly `int`, `float` or `bool` is placed in the
 /// `numbers` registers without asking an ABC, whose question is a Python
 /// function called once a bound; a bound or a step of any other type is asked,

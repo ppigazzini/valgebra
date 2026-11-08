@@ -29,8 +29,11 @@ written by the developer and is trusted.
   deeper one meets the frontend's first, with the same type. A self-referential
   class does not get there: it is refused with `NotImplementedError` where it is
   reached again while its own fields are being built, under the type arguments
-  it is applied to, because its field type names the class and the build never
-  bottoms out; model it with [`recursive`](06-recursion.md) instead.
+  it is applied to and with no `type` alias opened since, because its field type
+  names the class and the build never bottoms out; model it with
+  [`recursive`](06-recursion.md) instead. An alias opened since ties the cycle
+  where the fields reach it again
+  ([recursion](06-recursion.md#why-classes-need-it)).
 - **Schema construction size.** Every way of growing a schema — the `Validator`
   constructor, the `|` operator, `union`, `intersection`, `complement`,
   `recursive`, and the record transforms — is bounded at construction, so no sequence of
