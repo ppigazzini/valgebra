@@ -691,19 +691,32 @@ def test_a_fatal_signal_while_a_refusal_is_written_propagates(
         Validator(Annotated[list[int], at.MinLen(carrier(ValueError("boom")))])  # ty: ignore[invalid-argument-type]
 
 
+#: Each container a message renders through `reprlib`, holding the element.
+_HOLDERS: dict[str, Callable[[object], object]] = {
+    "list": lambda element: [element],
+    "tuple": lambda element: (element,),
+    "dict value": lambda element: {"a": element},
+    "dict key": lambda element: {element: 1},
+    "set": lambda element: {element},
+    "frozenset": lambda element: frozenset({element}),
+    "nested": lambda element: {"a": [(element,)]},
+}
+
+
+@pytest.mark.parametrize("holder", list(_HOLDERS))
 @pytest.mark.parametrize("signal", FATAL)
 def test_a_fatal_signal_from_an_elements_repr_propagates(
-    signal: type[BaseException],
+    signal: type[BaseException], holder: str
 ) -> None:
     """A message renders a container's elements, and an element's `__repr__` may raise.
 
     `reprlib`, which renders a container within its bounds, reads any
     `Exception` from an element as one that cannot render, `MemoryError` and
     `RecursionError` among them; the two raise out, as they do from the value's
-    own `__repr__`.
+    own `__repr__`, from every container it renders and at any depth.
     """
     with pytest.raises(signal):
-        Validator(int).validate([_Repr(signal())])
+        Validator(int).validate(_HOLDERS[holder](_Repr(signal())))
 
 
 def test_an_element_whose_repr_raises_is_unrepresentable() -> None:
