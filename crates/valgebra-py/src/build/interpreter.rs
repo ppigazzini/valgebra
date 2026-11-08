@@ -2003,6 +2003,37 @@ fn a_pool_seeded_by_shared_keys_pools_as_one_seeded_by_rebuilding() {
     });
 }
 
+/// A class applied to more arguments than it declares parameters is refused:
+/// `tuple`'s own subscription makes `Point[str]` for a named tuple declaring
+/// none, which no field of it has a place for.
+#[test]
+fn a_class_applied_past_its_parameters_is_refused() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"import typing\n\
+              class Point(typing.NamedTuple):\n\
+              \x20   x: int\n\
+              APPLIED = Point[str]\n",
+            c"applied_past.py",
+            c"applied_past",
+        )
+        .expect("the module runs");
+        let applied = module.getattr("APPLIED").expect("the alias");
+        let mut pool = Pool::default();
+        let refused = build_schema(&applied, &mut pool, &mut Vec::new())
+            .expect_err("an argument no parameter takes");
+        assert!(
+            refused
+                .to_string()
+                .contains("takes no type argument, and is applied to 1"),
+            "{refused}"
+        );
+        let bare = module.getattr("Point").expect("the class");
+        assert!(build_schema(&bare, &mut Pool::default(), &mut Vec::new()).is_ok());
+    });
+}
+
 /// A key schema narrowed past a language of `str` keys is refused, at any depth a
 /// connective can hide the narrowing, and one a language reads builds.
 #[test]

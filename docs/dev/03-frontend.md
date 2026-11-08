@@ -852,6 +852,15 @@ regressing: `test_the_class_alone_admits_an_instance_whatever_its_fields_hold`
 in `tests/test_classes.py` holds `Validator(Box)` to refusing `Box("x")`. The
 class alone is `instance_of(C)`.
 
+**Reading a class applied past its parameters as the class bare.** `tuple`'s own
+`__class_getitem__` takes any arguments, so `Point[str]` is an alias for a
+`NamedTuple` declaring no parameter, and `Scopes::of` read the arguments its
+parameters name and dropped the rest: `Validator(Point[str]) == Validator(Point)`,
+and `Point("s")` refused against the `str` it was given. Every other count a
+class takes is refused by `typing` at the subscript, and an alias's surplus by
+its name. `test_a_class_applied_past_its_parameters_is_refused` in
+`tests/test_generic_classes.py` holds the refusal.
+
 **A marker that widens: `Annotated[Box, Nominal]`.** pydantic's `InstanceOf`
 is this shape. Metadata here narrows its base or is ignored, so `Annotated[T,
 ...]` is never wider than `T`: `test_a_validator_in_the_metadata_is_met_with_the_base`

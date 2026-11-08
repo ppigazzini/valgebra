@@ -59,6 +59,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a key past the digit limit is its hexadecimal text in a path
 - fix: a signal from an element's repr raises out of the message
 - fix: a recursion with an arm narrowed past words is refused as a map key
+- fix: a class applied past its type parameters is refused
 
 -->
 
@@ -248,6 +249,11 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A class applied past its type parameters is refused.** For a `NamedTuple` declaring no
+  parameter, `Point[str]` is an alias `tuple`'s own subscription makes, and its validator was
+  `Point`'s, dropping the argument: `Validator(Point[str]) == Validator(Point)`. It raises
+  `NotImplementedError` naming the count, as an alias applied past its parameters does.
 
 - **A recursion with an arm narrowed past words is refused as a map key.** `dict[recursive(lambda
   t: union(Annotated[int, Ge(0)], tuple[t, ...])), int]` built, where a key narrowed by a number's

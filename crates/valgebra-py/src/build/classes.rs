@@ -776,6 +776,17 @@ impl<'py> Scopes<'py> {
             }
             arguments.push(argument);
         }
+        // Past the parameters, once each is known to take one type: a list of
+        // types takes any count, and is refused above for its kind.
+        if let Some(applied) = applied
+            && applied.len() > parameters.len()
+        {
+            return Err(applied_past_its_parameters(
+                ty,
+                parameters.len(),
+                applied.len(),
+            )?);
+        }
         let mut scopes = Self {
             read: Scope {
                 class: ty.clone(),
@@ -893,6 +904,28 @@ impl<'py> Scopes<'py> {
         });
         Ok(true)
     }
+}
+
+/// The refusal of a class applied to more arguments than it declares
+/// parameters. `typing` refuses the count of a generic class at the subscript,
+/// and `tuple`'s own subscription takes any, so a named tuple declaring none is
+/// applied to one, `Point[str]`, which no field of it has a place for.
+#[cold]
+fn applied_past_its_parameters(
+    ty: &Bound<'_, PyType>,
+    declared: usize,
+    given: usize,
+) -> PyResult<PyErr> {
+    let takes = match declared {
+        0 => "no type argument".to_owned(),
+        1 => "1 type argument".to_owned(),
+        count => format!("{count} type arguments"),
+    };
+    Ok(not_implemented(format!(
+        "{} takes {takes}, and is applied to {given}: no field of it has a place for \
+         the rest, so write it with as many as it declares",
+        super::declared_name(ty.as_any())?
+    )))
 }
 
 /// A class's `__parameters__`, or none where it has no such attribute.

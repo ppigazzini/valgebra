@@ -1022,7 +1022,10 @@ parameter before it, which the same application binds, as PEP 696 reads it: with
 so does a base applied short, which Python hands back with the default as
 written. A parameter with no default is refused where the class is written bare
 and a field names it, and so is a class two bases reach under two arguments,
-since a field it declares would name two types. A generic class whose fields are
+since a field it declares would name two types. So is a class applied to more
+arguments than it declares parameters: `Point[str]`, for a `NamedTuple`
+declaring none, is an alias `tuple`'s own subscription makes whatever the class
+declares, and no field of `Point` has a place for `str`. A generic class whose fields are
 not read -- one `isinstance` alone answers -- gains nothing from an argument,
 and is refused applied
 ([above](#the-forms-that-are-refused-rather-than-read-as-a-literal)).

@@ -12,6 +12,7 @@ the tests, and their annotations are read as the objects they name.
 
 import dataclasses
 import sys
+import types
 import typing
 
 import pytest
@@ -285,6 +286,36 @@ def test_a_qualifier_as_a_type_argument_is_refused() -> None:
             Validator(form)
     assert Validator(Holds[int]).is_valid({"a": 1})
     assert not Validator(Holds[int]).is_valid({})
+
+
+def test_a_class_applied_past_its_parameters_is_refused() -> None:
+    """`tuple`'s own subscription takes any count, past what a class declares.
+
+    A `NamedTuple` declaring no parameter is a `tuple` subclass, so `Point[str]`
+    is a runtime alias whatever `Point` declares, and the argument reached no
+    field: the validator was `Point`'s, and refused `Point("s")`. A surplus
+    beside a parameter is refused alike, and the class bare reads as it did.
+    """
+
+    class Point(typing.NamedTuple):
+        x: int
+
+    class Pair(typing.NamedTuple, typing.Generic[T]):
+        x: T
+
+    surplus = types.GenericAlias(Pair, (int, str))
+    for form, takes in (
+        (Point[str], "Point takes no type argument, and is applied to 1"),
+        (surplus, "Pair takes 1 type argument, and is applied to 2"),
+    ):
+        with pytest.raises(
+            NotImplementedError, match="no field of it has a place for the rest"
+        ) as refused:
+            Validator(form)
+        assert str(refused.value).startswith(takes)
+    assert Validator(Point).is_valid(Point(1))
+    assert Validator(Pair[int]).is_valid(Pair(1))
+    assert not Validator(Pair[int]).is_valid(Pair("s"))
 
 
 def test_a_class_binding_a_list_of_types_or_a_signature_is_refused() -> None:
