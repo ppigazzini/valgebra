@@ -468,6 +468,65 @@ pub(super) fn the_record_a_count_requires(subject: &Schema, cx: &Cx<'_>) -> Opti
     counted.then(|| Schema::keyed_map(named, Vec::new()))
 }
 
+/// A record below a map, read by the sets against the map without its clauses of
+/// constants the record never spells: no field of the record names one, and no
+/// clause of it shares a key with one. A map without a clause is narrower, since
+/// a key its other clauses read is read by the join of their values, so a proof
+/// of that pair stands. The sets read a `Literal` key as every key equal to its
+/// constant, which on the supertype's side costs them the proof the clause does
+/// not bear on.
+#[inline(never)]
+pub(super) fn a_map_below_its_clauses_the_subject_spells(
+    fa: &[Field],
+    da: &[MapClause],
+    fb: &[Field],
+    db: &[MapClause],
+    subject: &Schema,
+    cx: &mut Cx<'_>,
+) -> Relation {
+    let mut kept = Vec::with_capacity(db.len());
+    for theirs in db {
+        if !names_no_key_of(theirs, fa, da, cx) {
+            kept.push(theirs.clone());
+        }
+    }
+    if kept.len() == db.len() {
+        return Relation::Unknown;
+    }
+    let narrowed = Schema::keyed_map(fb.to_vec(), kept);
+    subject
+        .descriptor_contained_in(&narrowed, cx.oracle, cx.defs)
+        .proof_only()
+}
+
+/// Whether this clause of a supertype names constants alone, none of them a field
+/// of the subject, and none a key of a clause of the subject. A constant is one
+/// value, so it is outside a key exactly where it is refuted below it, by the
+/// rules or by the sets, which read a word against a pattern.
+pub(super) fn names_no_key_of(
+    theirs: &MapClause,
+    fa: &[Field],
+    da: &[MapClause],
+    cx: &mut Cx<'_>,
+) -> bool {
+    let Some(constants) = finite_set(&theirs.key) else {
+        return false;
+    };
+    let Some((labels, _)) = key_cover(&theirs.key, cx.oracle) else {
+        return false;
+    };
+    !fa.iter()
+        .any(|field| labels.contains(&Label::str(&field.name)))
+        && da.iter().all(|mine| {
+            constants.iter().all(|constant| {
+                constant
+                    .is_subtype_rec(&mine.key, cx)
+                    .or_else(|| constant.descriptor_contained_in(&mine.key, cx.oracle, cx.defs))
+                    == Relation::Fails
+            })
+        })
+}
+
 /// Whether the clauses of `b` holding this clause's value hold its key between
 /// them: a map is below another one key region at a time [Cas23, Lem. 4.7], so a
 /// key several clauses split is covered where each part lands in a clause reading

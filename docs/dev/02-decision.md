@@ -1254,7 +1254,11 @@ names (`the_record_a_count_requires`): each value holds each name, so a proof th
 record stands, and the record's plain values, whose keys are exact, are the mapping's, so
 it holds a value and is refuted against the empty set or another kind on one. A refutation
 through the record otherwise may stand on a `str` subclass's key, which a field reads and a
-`Literal` does not, and is not taken.
+`Literal` does not, and is not taken. A record below a map is asked of the sets once more
+without the map's clauses of constants the record never spells
+(`a_map_below_its_clauses_the_subject_spells`): a map without a clause is narrower, so the
+proof stands, and the sets read a `Literal` key as every key equal to it, which on the
+supertype's side costs them the proof the clause does not bear on.
 Asked in the last asking alone, since a position rarely holds none and the verdict
 costs a goal's steps. `sequences_meeting_in_nothing` reads the other half in an emptiness
 question of any asking: two sequences meet in nothing where a position each of their values

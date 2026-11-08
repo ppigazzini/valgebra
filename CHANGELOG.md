@@ -51,10 +51,15 @@ answer of its own, or a repair to a change not yet released.
 - feat: a clause's key split between clauses of a supertype is covered
 - feat: a meet supertype and a union subject are read a member at a time
 - feat: a mapping of words under a length counting each is their record
+- feat: a supertype's clause of constants its subject never spells is beside it
 
 -->
 
 ### Added
+
+- **A supertype's clause of constants its subject never spells is beside it.**
+  `dict[Annotated[str, Regex("c")], str]` is `subset` of `{"c?": int | None | str, Literal["a"]:
+  bytes}`, where it stayed `undecided`.
 
 - **A mapping of words under a length counting each is their record.** `Annotated[dict[Literal["a"],
   int], MinLen(1)]` is `subset` of `{"a": int}` and `not_subset` of `nothing`, and

@@ -42,8 +42,8 @@ use literals::{
 use products::{linear_subtype, seq_splits_across_union};
 use readings::{outside_every_kind, refuted_by_a_multiple, tables_disjoint, tag_pairs};
 use records::{
-    a_shared_field_refuted_by_the_sets, attr_record_subtype, keyed_map_splits_across_union,
-    keyed_map_subtype, keyed_meet_below,
+    a_map_below_its_clauses_the_subject_spells, a_shared_field_refuted_by_the_sets,
+    attr_record_subtype, keyed_map_splits_across_union, keyed_map_subtype, keyed_meet_below,
 };
 
 pub use crate::oracle::{LeafRelations, NoLeafRelations};
@@ -1526,14 +1526,21 @@ impl Schema {
                 .or_else(|| member.decided_past_the_whole_pair(other, cx, by_branch))
             }));
         }
-        if let (Schema::KeyedMap { fields: fa, .. }, Schema::KeyedMap { fields: fb, .. }) =
-            (self, other)
+        if let (
+            Schema::KeyedMap {
+                fields: fa,
+                defaults: da,
+            },
+            Schema::KeyedMap {
+                fields: fb,
+                defaults: db,
+            },
+        ) = (self, other)
         {
-            return if a_shared_field_refuted_by_the_sets(fa, fb, cx) {
-                Relation::of_mismatch(self.verdict_rec(cx))
-            } else {
-                Relation::Unknown
-            };
+            if a_shared_field_refuted_by_the_sets(fa, fb, cx) {
+                return Relation::of_mismatch(self.verdict_rec(cx));
+            }
+            return a_map_below_its_clauses_the_subject_spells(fa, da, fb, db, self, cx);
         }
         if let Schema::Intersection(members) = other {
             let held = cx.held_below(self, members);

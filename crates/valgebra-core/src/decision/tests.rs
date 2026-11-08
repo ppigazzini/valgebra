@@ -15330,3 +15330,127 @@ mod a_counted_mapping {
         assert!(records::the_record_a_count_requires(&counted, &cx).is_some());
     }
 }
+
+/// A supertype's clause of constants the subject never spells, beside the pair.
+mod an_unspelled_clause {
+    use super::*;
+
+    /// A clause of constants is beside a record where no field of it names one
+    /// and no clause of it holds one: `Literal["b"]` beside `{a: str}`, and not
+    /// `Literal["a"]`, nor `Literal["b"]` beside a record whose own clause holds
+    /// `b`.
+    #[test]
+    fn a_clause_is_beside_a_record_naming_none_of_its_constants() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let clause = |key: Schema| MapClause {
+            key,
+            value: Schema::Bytes,
+        };
+        let named_a = [Field {
+            name: "a".into(),
+            schema: Schema::Str,
+            required: true,
+        }];
+        assert!(records::names_no_key_of(
+            &clause(Schema::Literal(ConstIx::new(1))),
+            &named_a,
+            &[],
+            &mut cx
+        ));
+        assert!(!records::names_no_key_of(
+            &clause(Schema::Literal(ConstIx::new(0))),
+            &named_a,
+            &[],
+            &mut cx
+        ));
+        let holding_b = [MapClause {
+            key: Schema::Literal(ConstIx::new(1)),
+            value: Schema::Int,
+        }];
+        assert!(!records::names_no_key_of(
+            &clause(Schema::Literal(ConstIx::new(1))),
+            &[],
+            &holding_b,
+            &mut cx
+        ));
+        // A clause of a kind names no constants, and is never set beside.
+        assert!(!records::names_no_key_of(
+            &clause(Schema::Str),
+            &[],
+            &[],
+            &mut cx
+        ));
+    }
+
+    /// One constant, the word `a`, read against the pattern `c` as the bindings'
+    /// matcher reads it: outside.
+    struct WordA;
+    impl Constants for WordA {
+        fn constant(&self, index: ConstIx) -> Option<Operand> {
+            (index.get() == 0).then(|| Operand::Word(b"a".to_vec(), Kind::Str))
+        }
+    }
+    impl LeafRelations for WordA {
+        fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+            let (Schema::Literal(_), Schema::Refine { constraints, .. }) = (sub, sup) else {
+                return None;
+            };
+            matches!(&**constraints, [Constraint::Regex(pattern)] if pattern == "c")
+                .then_some(false)
+        }
+        fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
+            (constant.get() == 0).then_some(Kind::Str)
+        }
+    }
+
+    /// `dict[Regex("c"), str]` is below `{"c?": int | None | str, Literal["a"]:
+    /// bytes}`: the subject's keys are the word `c`, the field reads it, and the
+    /// literal clause reads no key the subject holds.
+    #[test]
+    fn a_clause_of_constants_the_subject_never_spells_is_beside_the_pair() {
+        let words = Schema::refine(Schema::Str, vec![Constraint::Regex("c".into())]);
+        let subject = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: words,
+                value: Schema::Str,
+            }],
+        );
+        let field = Field {
+            name: "c".into(),
+            schema: Schema::union([Schema::Int, Schema::NoneType, Schema::Str]),
+            required: false,
+        };
+        let beside = |value: Schema| {
+            Schema::keyed_map(
+                vec![field.clone()],
+                vec![MapClause {
+                    key: Schema::Literal(ConstIx::new(0)),
+                    value,
+                }],
+            )
+        };
+        let table = WordA;
+        assert_eq!(
+            subject.subtype_relation_under(&beside(Schema::Bytes), &table, &[]),
+            Relation::Holds
+        );
+        // A field refusing the subject's value is not read past.
+        let refusing = Schema::keyed_map(
+            vec![Field {
+                name: "c".into(),
+                schema: Schema::Int,
+                required: false,
+            }],
+            vec![MapClause {
+                key: Schema::Literal(ConstIx::new(0)),
+                value: Schema::Bytes,
+            }],
+        );
+        assert_ne!(
+            subject.subtype_relation_under(&refusing, &table, &[]),
+            Relation::Holds
+        );
+    }
+}
