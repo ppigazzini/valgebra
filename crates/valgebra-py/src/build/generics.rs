@@ -79,7 +79,7 @@ pub(super) fn build_parametrized(
         // transposed is `dict[V, K]`, which typechecks and validates real values.
         let key_argument = args.get_item(0)?;
         let key = build_type_argument(&key_argument, lits, defs)?;
-        checked_key(&key, &key_argument)?;
+        checked_key(&key, &key_argument, defs)?;
         return Ok(Schema::mapping(MapClause {
             key,
             value: build_type_argument(&args.get_item(1)?, lits, defs)?,
@@ -899,7 +899,7 @@ pub(super) fn build_dict(
             });
         } else {
             let key_schema = build_schema(&key, lits, defs)?;
-            checked_key(&key_schema, &key)?;
+            checked_key(&key_schema, &key, defs)?;
             defaults.push(MapClause {
                 key: key_schema,
                 value: build_schema(&value, lits, defs)?,

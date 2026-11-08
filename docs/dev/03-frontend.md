@@ -707,7 +707,13 @@ being any finite one [Cas23, Def. 4.6], and two clauses that overlap read the jo
 of their values on the common refinement of their keys. `Annotated[int, Gt(0)]`, a
 word's order bound and a callback name part of a kind no language holds, with
 nothing for the set representation to split, so `checked_key` refuses them where
-they are written, and the mapping is checked by a predicate beside it.
+they are written, and the mapping is checked by a predicate beside it. A reference
+reads as its definition there, so a recursion with such an arm is refused as a key.
+A key that is the definition being built is a back edge whose body does not exist
+yet where the key is read, and reaching it would mean a scan of the finished body at
+the tie for the keys that name it, in `recursive` and in `tie_alias`; it builds, the
+walk reads it exactly, and a relation over it declines where the partition would
+decide.
 
 The same principle governs the regex: the pattern is compiled and anchored at
 build time, so an invalid expression fails at construction rather than at first

@@ -187,6 +187,12 @@ def test_optional_field_with_a_catch_all() -> None:
     assert not schema.is_valid({"a": "x"})  # the field still wins: a must be int
 
 
+# A recursion with a narrowed arm, which a key reads through its reference.
+_NARROWED_ARM = recursive(
+    lambda t: union(Annotated[int, at.Ge(0)], tuple[t, ...])  # ty: ignore[invalid-type-form]
+)
+
+
 def test_a_key_narrowed_past_a_language_is_refused() -> None:
     """A clause's key names a kind, a constant or the words of a language.
 
@@ -204,9 +210,17 @@ def test_a_key_narrowed_past_a_language_is_refused() -> None:
         # dict is built at runtime, so the static checker is not asked to read a
         # combinator as a type expression.
         GenericAlias(dict, (union(str, Annotated[int, at.Gt(0)]), int)),
+        # A recursion is its definition, whose arm is the same claim.
+        GenericAlias(dict, (_NARROWED_ARM, int)),
+        {_NARROWED_ARM: int},
     ):
         with pytest.raises(NotImplementedError, match="narrows the keys it governs"):
             Validator(spec)
+    # One whose arms a language reads keys as it is.
+    words = recursive(lambda t: union(str, tuple[t, ...]))  # ty: ignore[invalid-type-form]
+    keyed = Validator(GenericAlias(dict, (words, int)))
+    assert keyed.is_valid({("a", ("b",)): 1})
+    assert not keyed.is_valid({1: 1})
 
     # The spellings that remain: a key type, and the constants a Literal names.
     every_string = Validator(dict[str, int])

@@ -840,8 +840,11 @@ To write it, give the keys both patterns hold a clause of their own, over the me
 of the two schemas, so no two clauses overlap and the two readings agree.
 
 A key narrowed any other way -- a number's bound, a word's order, a callback --
-names part of a kind no language holds, and is refused where it is written. One
-level down, a narrowed position of a tuple key, it builds:
+names part of a kind no language holds, and is refused where it is written, and so
+is a recursion with such an arm, which keys a map as its definition. One keying a
+map inside its own body builds, since its arms are not built where the key is
+read: the walk reads it exactly, and a relation the key partition would decide
+declines. One level down, a narrowed position of a tuple key, it builds:
 
 ```python
 from typing import Annotated

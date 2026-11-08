@@ -8,8 +8,8 @@ use pyo3::exceptions::PyKeyboardInterrupt;
 use rusty_fork::rusty_fork_test;
 use std::ffi::CString;
 use valgebra_core::{
-    Carries, Constraint, LONGEST, MapClause, SeqShape, StepGroup, carries_division, carries_length,
-    carries_pattern, carries_through,
+    Carries, Constraint, LONGEST, MapClause, SeqKind, SeqShape, StepGroup, carries_division,
+    carries_length, carries_pattern, carries_through,
 };
 
 /// The release a corpus row needs, as `3.n`.
@@ -2028,9 +2028,41 @@ fn a_key_narrowed_past_words_is_found_under_every_connective() {
             narrowing.clone().complement(),
             Schema::union([Schema::Int, narrowing.clone().complement()]),
         ] {
-            assert!(narrows_past_words(&schema), "{schema:?} narrows past words");
+            assert!(
+                narrows_past_words(&schema, &[], &mut Vec::new()),
+                "{schema:?} narrows past words"
+            );
+        }
+        // A reference reads as its definition, a reference met again on the way
+        // adding nothing, so a recursion whose arm narrows is found through it.
+        let defs = [
+            Schema::union([
+                narrowing.clone(),
+                Schema::Seq {
+                    container: SeqKind::Tuple,
+                    shape: SeqShape::homogeneous(Schema::Ref(DefIx::new(0))),
+                },
+            ]),
+            Schema::union([Schema::Str, Schema::Ref(DefIx::new(0))]),
+        ];
+        for schema in [
+            Schema::Ref(DefIx::new(0)),
+            Schema::Ref(DefIx::new(1)),
+            Schema::union([Schema::Int, Schema::Ref(DefIx::new(1))]),
+        ] {
+            assert!(
+                narrows_past_words(&schema, &defs, &mut Vec::new()),
+                "{schema:?} narrows past words through {defs:?}"
+            );
         }
     }
+    // A cycle of references with no narrowing on it ends, and narrows nothing.
+    let cycle = [Schema::union([Schema::Str, Schema::Ref(DefIx::new(0))])];
+    assert!(!narrows_past_words(
+        &Schema::Ref(DefIx::new(0)),
+        &cycle,
+        &mut Vec::new()
+    ));
     let pattern = refined(Schema::Str, Constraint::Regex("a".to_owned()));
     // A plain key type and a refinement carrying no constraint narrow nothing, and
     // what a language reads keys as it is, whichever connective holds it.
@@ -2051,9 +2083,13 @@ fn a_key_narrowed_past_words_is_found_under_every_connective() {
         refined(pattern.clone(), Constraint::MinLen(1)),
         Schema::union([Schema::Int, pattern.clone()]),
         Schema::meet([Schema::Str, pattern.clone()]),
-        pattern.complement(),
+        Schema::Ref(DefIx::new(0)),
+        pattern.clone().complement(),
     ] {
-        assert!(!narrows_past_words(&schema), "{schema:?} keys as it is");
+        assert!(
+            !narrows_past_words(&schema, std::slice::from_ref(&pattern), &mut Vec::new()),
+            "{schema:?} keys as it is"
+        );
     }
 }
 

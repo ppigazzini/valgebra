@@ -1947,9 +1947,11 @@ impl Pool {
 /// on the common refinement of their keys [Cas23, Def. 4.6]. A key narrowed by a
 /// number's bound, a word's order or a callback names part of a kind no language
 /// holds, so it is refused where it is written, which is the rule the zero divisor
-/// and the invalid pattern already follow.
-fn checked_key(schema: &Schema, spelling: &Bound<'_, PyAny>) -> PyResult<()> {
-    if !narrows_past_words(schema) {
+/// and the invalid pattern already follow. A recursion is its definition here, so
+/// one whose arms are such a key is refused as one. A key that is the very
+/// definition being built is not: its arms are not built where the key is read.
+fn checked_key(schema: &Schema, spelling: &Bound<'_, PyAny>, defs: &[Schema]) -> PyResult<()> {
+    if !narrows_past_words(schema, defs, &mut Vec::new()) {
         return Ok(());
     }
     Err(not_implemented(format!(
@@ -1963,12 +1965,15 @@ fn checked_key(schema: &Schema, spelling: &Bound<'_, PyAny>) -> PyResult<()> {
 }
 
 /// Whether a key schema narrows its keys by more than a pattern or a length of a
-/// `str`, at any depth a union or a complement can hide one.
-fn narrows_past_words(schema: &Schema) -> bool {
+/// `str`, at any depth a union, a complement or a reference to a definition can
+/// hide one. `entered` holds the definitions on the way, so a reference reached
+/// again adds nothing.
+fn narrows_past_words(schema: &Schema, defs: &[Schema], entered: &mut Vec<DefIx>) -> bool {
     match schema {
         Schema::Refine { base, constraints } if !constraints.is_empty() => {
             let of_words = matches!(**base, Schema::Str)
-                || (matches!(**base, Schema::Refine { .. }) && !narrows_past_words(base));
+                || (matches!(**base, Schema::Refine { .. })
+                    && !narrows_past_words(base, defs, entered));
             !of_words
                 || !constraints.iter().all(|constraint| {
                     matches!(
@@ -1977,10 +1982,15 @@ fn narrows_past_words(schema: &Schema) -> bool {
                     )
                 })
         }
-        Schema::Union(members) | Schema::Intersection(members) => {
-            members.iter().any(narrows_past_words)
+        Schema::Union(members) | Schema::Intersection(members) => members
+            .iter()
+            .any(|member| narrows_past_words(member, defs, entered)),
+        Schema::Complement(inner) => narrows_past_words(inner, defs, entered),
+        Schema::Ref(index) if !entered.contains(index) => {
+            entered.push(*index);
+            defs.get(index.get())
+                .is_some_and(|body| narrows_past_words(body, defs, entered))
         }
-        Schema::Complement(inner) => narrows_past_words(inner),
         _ => false,
     }
 }

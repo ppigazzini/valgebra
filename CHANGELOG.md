@@ -58,6 +58,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a failure inside a key ends its path at the key
 - fix: a key past the digit limit is its hexadecimal text in a path
 - fix: a signal from an element's repr raises out of the message
+- fix: a recursion with an arm narrowed past words is refused as a map key
 
 -->
 
@@ -247,6 +248,12 @@ answer of its own, or a repair to a change not yet released.
   its order names, which CPython refuses an `mro()` to add.
 
 ### Fixed
+
+- **A recursion with an arm narrowed past words is refused as a map key.** `dict[recursive(lambda
+  t: union(Annotated[int, Ge(0)], tuple[t, ...])), int]` built, where a key narrowed by a number's
+  bound is refused where it is written, and its map's relations declined where the key partition
+  decides them: `dict[int, int]` against it read `undecided`, which `{-1: 1}` refutes. It raises
+  `NotImplementedError`, as `dict[Annotated[int, Ge(0)], int]` does.
 
 - **A signal from an element's `repr` raises out of the message.** `Validator(int).validate([x])`,
   for an `x` whose `__repr__` raises `MemoryError` or `RecursionError`, reported `[<X instance at
