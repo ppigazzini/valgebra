@@ -131,6 +131,45 @@ release waits for whatever reviewers those environments require.
    last one passes. The diff is read: every move is a widening or is a change this
    release's section says. `test_the_reference_is_the_last_release` holds the version.
 
+9. **Read the published wheels' time against the last release's**, in the commit step 8
+   makes, on every CPython release a wheel with the global lock is built for. A profiled
+   build places its code anew each time it is built, so the wheel PyPI serves is a build
+   no earlier step read, and step 1's count sees no placement at all. Four environments
+   from PyPI, named at one length, two holding each release:
+
+   ```bash
+   py="$(uv python find --managed-python 3.15)"
+   for name in old1 old2; do
+     uv run --no-sync python scripts/perf_inspect.py env "$name" --python "$py" --release "$LAST"
+   done
+   for name in new1 new2; do
+     uv run --no-sync python scripts/perf_inspect.py env "$name" --python "$py" --release "$NEW"
+   done
+   uv run --no-sync python scripts/perf_inspect.py count old1 new1
+   uv run --no-sync python scripts/perf_inspect.py cycles old1 old2 new1 new2
+   ```
+
+   A shape both of this release's environments read moved alike, by 5% or more either
+   way, where the last release's second one reads within the noise, is named in this
+   release's section with the interpreter and the machine. A move one environment
+   reads alone is that environment's: read beside one environment of the last release,
+   3.14 moved eleven shapes 5% to 12% in both of 0.0.24's, and none of them repeated
+   beside a second. A move is named and charged to no change, since the two wheels
+   differ in the build that made them as well as in their source. The
+   shapes hold a list of each scalar kind, each walked by a loop of its own that a build
+   places apart from the others, and a list of ten thousand distinct integers beside the
+   thousand. At one count, PyPI's CPython 3.15 wheel of 0.0.24 walks `list[None]` 62%
+   slower than 0.0.23's, `list[bool]` 24% faster, and ten thousand integers a third
+   slower where it walks a thousand in the same time.
+
+   Three remedies are refused. A hash seed fixed in the release's training: two builds
+   of one source by `scripts/page_figures.py`, which fixes it, placed the 3.15 list loop
+   at offsets 48 and 0 in its line. A loop alignment flag:
+   [measured and not taken](../11-performance.md#measured-and-not-taken). Publishing a
+   dry run's wheels so a reading comes before the upload: each run already runs the
+   suite on the wheels it uploads, and the section that names a move is part of the
+   commit those wheels are built from.
+
 ## Checking an index (steps 4 and 6)
 
 The workflow's smoke jobs prove each **artifact** imports and passes the product
@@ -344,9 +383,9 @@ Each bump costs a companion two commits and a session, so a release batches its 
 ## What this does not cover
 
 - **The wheels a local count cannot run.** Step 1 reads each CPython release's
-  Linux x86_64 build. Every other wheel is a build of its own, for another
-  platform, architecture or implementation, and no count reads it against the
-  release before.
+  Linux x86_64 build, and step 9 the one PyPI serves. Every other wheel is a build
+  of its own, for another platform, architecture or implementation, and no reading
+  holds it to the release before.
 - **A source install off Linux.** `uv pip install` takes the wheel; the sdist
   path is compiled and tested once by the workflow, on Linux, and
   `--no-binary valgebra` locally is the only way to reach it on another

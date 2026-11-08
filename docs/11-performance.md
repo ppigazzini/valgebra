@@ -1556,8 +1556,10 @@ binary a shape that allocates hands the C library's allocator: on 3.11 PyPI's
 0.0.19 read `explain_record` 0.84% below a build here of its own commit, 167
 instructions a call in `_int_malloc`, and 0.39% above it with the environment
 1,100 bytes larger. So a change is read against its base's revision built here,
-and in cycles only that way; a release's own wheel is read by count, for what it
-ships.
+and charged in cycles only that way. A release's own wheel is read by count, for
+what it ships, and once published in cycles against the last release's, for what a
+user meets: step 9 of `docs/dev/09-releasing.md` names a move there and charges it
+to no change.
 
 **`symbols` names where, not why.** A release wheel is stripped, so it names
 the extension's functions only between builds `--build` made; against a

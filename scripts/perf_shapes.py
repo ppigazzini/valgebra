@@ -126,6 +126,24 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
         "membership": lambda: (v(int).__contains__, 5),
         "list_int": lambda: (v(list[int]).is_valid, list(range(1000))),
         "list_str": lambda: (v(list[str]).is_valid, [str(i) for i in range(1000)]),
+        # Each scalar kind's list is walked by a loop of its own, which a build
+        # places apart from the others, so each kind has a shape.
+        "list_float": lambda: (
+            v(list[float]).is_valid,
+            [float(i) for i in range(1000)],
+        ),
+        "list_bool": lambda: (
+            v(list[bool]).is_valid,
+            [i % 2 == 0 for i in range(1000)],
+        ),
+        "list_bytes": lambda: (
+            v(list[bytes]).is_valid,
+            [b"%d" % i for i in range(1000)],
+        ),
+        "list_none": lambda: (v(list[None]).is_valid, [None] * 1000),
+        # Where a build places the `int` loop can read level over a thousand
+        # distinct integers and a third apart over ten thousand.
+        "list_int_long": lambda: (v(list[int]).is_valid, list(range(10_000))),
         "list_nullable": lambda: (
             v(list[int | None]).is_valid,
             [None if i % 3 else i for i in range(1000)],

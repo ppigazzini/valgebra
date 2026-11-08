@@ -413,6 +413,14 @@ cycles. On the free-threaded 3.14 and 3.15 a count of a shape of a few thousand
 instructions does not repeat, and the shapes that read higher twice read level in cycles,
 to 2.0% on a wide record, about the spread of one build read against itself.
 
+PyPI's wheels for CPython on Linux x86_64, read in cycles against 0.0.23's at one count
+(release step 9, an AMD Ryzen 7 PRO 7840U), walk some lists at another speed, by where each
+build places a kind's loop. Slower: `list[int | str]` by 8% to 20% on 3.11, 3.12, 3.14 and
+3.15, `list[None]` by 19% on 3.11 and 63% on 3.15, `list[bool]` by 12% on 3.11, and ten
+thousand distinct integers by 35% on 3.15, where a thousand read the same. Faster:
+`list[float]` by 12% on 3.13, and on 3.15 `list[str]` by 14%, `list[float]` by 15% and
+`list[bool]` by 24%. Every other shape reads within 5%.
+
 ### Added
 
 - **A `Fraction` or `Decimal` bound over a float is decided.** It is read at the float
