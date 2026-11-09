@@ -5694,6 +5694,13 @@ fn parted_positions(
 /// by a field or by a clause, so two records can differ at a key neither declares:
 /// `{"b": list, str: Any}` and `{"b?": Any, str: ~float}` part at a float under
 /// another key.
+///
+/// Ahead of those, the member holding every name the record reads at once, each
+/// at the first value built for it or at a member of its own. A union of records
+/// is parted only by a value carrying each member's difference together, and one
+/// differing at a single name lies inside another member: `{"a?": Any, "b?":
+/// bool}` is outside `{"a?": Any} | {str: bool}` at `{"a": 1, "b": True}`, whose
+/// `"b"` the first member reads nothing with and whose `1` the second refuses.
 fn parted_fields(
     subject: &Schema,
     (fields, defaults): (&Fields, &Clauses),
@@ -5704,6 +5711,8 @@ fn parted_fields(
         return Vec::new();
     };
     let mut found = Vec::new();
+    let mut every = base.clone();
+    let mut set_any = false;
     for name in NAMES {
         let Some(mine) = schema_at(fields, defaults, name) else {
             continue;
@@ -5712,12 +5721,24 @@ fn parted_fields(
             Some(read) => parted(&mine, &read, left),
             None => a_member(&mine, MEMBER_FUEL).into_iter().collect(),
         };
+        if let Some(value) = values
+            .first()
+            .cloned()
+            .or_else(|| a_member(&mine, MEMBER_FUEL))
+        {
+            every.retain(|(key, _)| key.name() != name);
+            every.push((Key::Exact(name), value));
+            set_any = true;
+        }
         for value in values {
             let mut entries = base.clone();
             entries.retain(|(key, _)| key.name() != name);
             entries.push((Key::Exact(name), value));
             found.push(Obj::Map(entries));
         }
+    }
+    if set_any {
+        found.insert(0, Obj::Map(every));
     }
     found
 }
@@ -7717,7 +7738,8 @@ fn a_meet_of_records_has_the_member_its_fields_meet_in() {
 /// there by a word other than `"a"`, three levels down. Nothing parts a schema
 /// from itself or from a schema it is below. Two records can differ at a key
 /// neither declares, and a list holding a complement of a complement holds a
-/// member of the set inside it.
+/// member of the set inside it. A record is parted from a union of records by a
+/// value differing from each member at once.
 #[test]
 fn a_value_is_built_where_two_shapes_differ_deep_inside() {
     let holding = |word: Schema| Schema::Seq {
@@ -7789,6 +7811,39 @@ fn a_value_is_built_where_two_shapes_differ_deep_inside() {
         },
     });
     assert!(a_value_parts(&held, &Schema::Bytes));
+
+    let optional = |name: &str, schema: Schema| Field {
+        name: name.into(),
+        schema,
+        required: false,
+    };
+    let either = Schema::KeyedMap {
+        fields: vec![
+            optional("a", Schema::ANY),
+            optional("b", Schema::Intersection(vec![Schema::Bool].into())),
+        ]
+        .into(),
+        defaults: Vec::new().into(),
+    };
+    let one_or_flags = Schema::Union(
+        vec![
+            Schema::KeyedMap {
+                fields: vec![optional("a", Schema::ANY)].into(),
+                defaults: Vec::new().into(),
+            },
+            Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: vec![MapClause {
+                    key: Schema::Str,
+                    value: Schema::Bool,
+                }]
+                .into(),
+            },
+        ]
+        .into(),
+    );
+    assert!(a_value_parts(&either, &one_or_flags));
+    assert_eq!(walked(&one_or_flags, &one_or_flags), Vec::new());
 }
 
 /// A meet of sequences has the member its positions meet in, and a sequence
