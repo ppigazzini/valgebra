@@ -941,6 +941,122 @@ fn a_length_bound_over_more_than_words_refuses() {
     );
 }
 
+/// A bound over every value met with a kind it counts lowers as that bound over
+/// the kind, and its complement as the complement within the kind: the meet is
+/// the same set either way [FCB08, Def. 4.1].
+#[test]
+fn a_bound_over_every_value_is_read_within_the_rest_of_its_meet() {
+    let pool = scalar_pool();
+    let over = |constraints: Vec<Constraint>| Schema::refine(Schema::ANYTHING, constraints);
+    let same = |a: &Schema, b: &Schema| {
+        assert_eq!(
+            a.descriptor_contained_in(b, &pool, &[]),
+            Relation::Holds,
+            "{a:?} in {b:?}"
+        );
+        assert_eq!(
+            b.descriptor_contained_in(a, &pool, &[]),
+            Relation::Holds,
+            "{b:?} in {a:?}"
+        );
+    };
+    let two = || vec![Constraint::MinLen(2)];
+    let words = Schema::refine(Schema::Str, two());
+    same(&Schema::meet([Schema::Str, over(two())]), &words);
+    same(&Schema::meet([over(two()), Schema::Str]), &words);
+    same(
+        &Schema::meet([Schema::Str, over(vec![Constraint::MaxLen(1)]).complement()]),
+        &words,
+    );
+    let list = Schema::list(SeqShape::homogeneous(Schema::Int));
+    same(
+        &Schema::meet([list.clone(), over(two())]),
+        &Schema::refine(list, two()),
+    );
+    let positive = vec![Constraint::Gt(OperandIx::new(0))];
+    same(
+        &Schema::meet([Schema::Int, over(positive.clone())]),
+        &Schema::refine(Schema::Int, positive),
+    );
+    // A refinement the members it is met with narrow, read with them.
+    same(
+        &Schema::meet([words.clone(), over(vec![Constraint::MaxLen(5)])]),
+        &Schema::refine(
+            Schema::Str,
+            vec![Constraint::MinLen(2), Constraint::MaxLen(5)],
+        ),
+    );
+
+    // Where the rest still holds a kind the bound cannot count, or there is no
+    // rest to read within, the meet refuses as the bound alone does.
+    let set = Schema::set(Schema::Int);
+    assert!(lower(&Schema::meet([set, over(two())]), &pool).is_none());
+    assert!(
+        lower(
+            &Schema::meet([over(two()), over(vec![Constraint::MaxLen(5)])]),
+            &pool
+        )
+        .is_none()
+    );
+}
+
+/// A base the law below meets a bound over every value with.
+fn met_base() -> impl Strategy<Value = Schema> {
+    let list = Schema::list(SeqShape::homogeneous(Schema::Int));
+    prop_oneof![
+        Just(Schema::Str),
+        Just(Schema::Bytes),
+        Just(Schema::Int),
+        Just(Schema::Float),
+        Just(Schema::NoneType),
+        Just(Schema::tuple(SeqShape::homogeneous(Schema::Int))),
+        Just(Schema::union([Schema::Str, list.clone()])),
+        Just(Schema::set(Schema::Int)),
+        Just(list),
+    ]
+}
+
+/// A length or an order bound over the scalar pool's integers.
+fn met_bound() -> impl Strategy<Value = Constraint> {
+    prop_oneof![
+        (0usize..4).prop_map(Constraint::MinLen),
+        (0usize..4).prop_map(Constraint::MaxLen),
+        (0usize..3).prop_map(|slot| Constraint::Gt(OperandIx::new(slot))),
+        (0usize..3).prop_map(|slot| Constraint::Le(OperandIx::new(slot))),
+    ]
+}
+
+proptest! {
+    /// A bound over every value met with a base is the base under the bound,
+    /// and its complement met with the base is the base less it: a refinement
+    /// is its base met with its constraints' set [JV20, §3.2], and a meet is
+    /// associative and commutative [FCB08, Def. 4.1]. Where both spellings
+    /// lower they lower to one set.
+    #[test]
+    fn a_bound_met_with_a_base_is_the_base_under_the_bound(
+        base in met_base(),
+        bounds in prop::collection::vec(met_bound(), 1..3),
+    ) {
+        let pool = scalar_pool();
+        let refined = Schema::refine(base.clone(), bounds.clone());
+        let over = Schema::refine(Schema::ANYTHING, bounds);
+        let spellings = [
+            (Schema::meet([base.clone(), over.clone()]), refined.clone()),
+            (
+                Schema::meet([base.clone(), over.complement()]),
+                Schema::meet([base, refined.complement()]),
+            ),
+        ];
+        for (meet, read) in spellings {
+            if lower(&meet, &pool).is_none() || lower(&read, &pool).is_none() {
+                continue;
+            }
+            prop_assert_eq!(meet.descriptor_contained_in(&read, &pool, &[]), Relation::Holds);
+            prop_assert_eq!(read.descriptor_contained_in(&meet, &pool, &[]), Relation::Holds);
+        }
+    }
+}
+
 /// A word constraint on a base with no words refuses.
 ///
 /// The bound has no component to land in: an integer has no length, so
@@ -2347,6 +2463,16 @@ fn scalar_schema() -> impl Strategy<Value = Schema> {
         )),
         Just(Schema::refine(Schema::Str, vec![Constraint::MaxLen(0)])),
         Just(Schema::refine(Schema::Str, vec![Constraint::MinLen(1)])),
+        // A bound over every value, which a meet reads within its other
+        // members: refused alone, it lowers met with a kind it counts.
+        Just(Schema::refine(
+            Schema::ANYTHING,
+            vec![Constraint::MinLen(1)]
+        )),
+        Just(Schema::refine(
+            Schema::ANYTHING,
+            vec![Constraint::Gt(operand(0))]
+        )),
     ];
     leaf.prop_recursive(3, 12, 3, |inner| {
         prop_oneof![

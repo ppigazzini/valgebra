@@ -67,10 +67,18 @@ answer of its own, or a repair to a change not yet released.
 - feat: zero is a multiple of an exact Fraction or Decimal step
 - feat: the last asking reads a union past a member it cannot settle
 - fix: an exact Fraction or Decimal pools by value
+- feat: a bound over every value is read within the rest of its meet
 
 -->
 
 ### Added
+
+- **A bound written over every value and met with a base is that bound over the base.**
+  `intersection(str, Annotated[object, MinLen(2)])` and `Annotated[str, MinLen(2)]` are
+  `subset` of each other both ways, and so are the same length met with `bytes`, a list or a
+  tuple, its complement met with `str`, and `intersection(int, Annotated[object, Gt(0)])`
+  with `Annotated[int, Gt(0)]`, where the meet read `undecided`. Met with a set or a dict,
+  whose lengths the set representation does not count, it stays `undecided`.
 
 - **A union holds a value whichever member its constants list first.** A record whose field
   is `intersection(X, B) | intersection(X, complement(B))` is `not_subset` of `nothing` on a

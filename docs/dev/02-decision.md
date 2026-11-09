@@ -415,6 +415,21 @@ pattern in nothing, answered before the automaton is built.
 `a_patterns_set_holds_only_strings` in `laws.rs` draws the base over the
 structural fragment.
 
+**A refinement in a meet is read within the members that lower.** `descend`
+lowers a meet a member at a time, and a bound over a base holding kinds it
+cannot count refuses alone: a length over `object` holds sets, dicts and values
+with no length. Where a meet fails so, `refinements_within_the_rest` lowers the
+members that lower and meets each refinement's base, or the base of a
+complemented one, with them before its constraints are read. `R ∩ (B ∩ C)` is
+`R ∩ ((B ∩ R) ∩ C)` [FCB08, Def. 4.1], so `intersection(str, Annotated[object,
+MinLen(2)])` lowers to the set `Annotated[str, MinLen(2)]` does, and met with a
+set or a dict the length still refuses. The reading is exact and asked only
+after the member-by-member reading refused, so a meet that lowers pays nothing
+for it. It is a reading, where `01-schema-ir.md` refuses the fold that would make
+the meet one refinement in the constructor.
+`a_bound_met_with_a_base_is_the_base_under_the_bound` in `descr/lower/tests.rs`
+holds the two spellings to one set.
+
 **The rules read a pattern over two bases as one set.** `Refine(str, C)` and
 `Refine(Anything, C)`, `C` holding a pattern, denote the strings `C` admits, and
 so does a refinement by the same constraints over any base that holds every

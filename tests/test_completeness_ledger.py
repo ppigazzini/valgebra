@@ -922,6 +922,38 @@ _DECIDED = [
         Annotated[str, at.MaxLen(5)],
         id="refine:MaxLen(2)<=MaxLen(5)",
     ),
+    # A bound written over every value and met with a base is that bound over
+    # the base, read within the kinds the rest of the meet holds.
+    pytest.param(
+        "equivalent",
+        intersection(str, Annotated[object, at.MinLen(2)]),
+        Annotated[str, at.MinLen(2)],
+        id="refine:str&object-MinLen(2)==str-MinLen(2)",
+    ),
+    pytest.param(
+        "equivalent",
+        intersection(Annotated[object, at.MinLen(2)], bytes),
+        Annotated[bytes, at.MinLen(2)],
+        id="refine:object-MinLen(2)&bytes==bytes-MinLen(2)",
+    ),
+    pytest.param(
+        "equivalent",
+        intersection(list[int], Annotated[object, at.MinLen(1), at.MaxLen(3)]),
+        Annotated[list[int], at.MinLen(1), at.MaxLen(3)],
+        id="refine:list&object-Len(1,3)==list-Len(1,3)",
+    ),
+    pytest.param(
+        "equivalent",
+        intersection(str, complement(Annotated[object, at.MaxLen(1)])),
+        Annotated[str, at.MinLen(2)],
+        id="refine:str&~object-MaxLen(1)==str-MinLen(2)",
+    ),
+    pytest.param(
+        "equivalent",
+        intersection(int, Annotated[object, at.Gt(0)]),
+        Annotated[int, at.Gt(0)],
+        id="refine:int&object-Gt(0)==int-Gt(0)",
+    ),
     # A bound conjunction whose lower bound exceeds its upper bound is empty,
     # whether the bounds sit on one refinement or across an intersection.
     pytest.param("empty", _GE10_LE0, None, id="empty:Ge(10)Le(0)"),
@@ -2005,6 +2037,16 @@ _LEDGERED: list[object] = [
         union(set[Literal[1]], set[Validator(1.0)]),  # ty: ignore[invalid-type-form]
         id="set:set[1|1.0]<=set[1]|set[1.0]",
         marks=_missed("the members it takes are one number in two kinds"),
+    ),
+    # A length bound over every value met with a mapping: the set
+    # representation counts no mapping's entries, so the bound has no part to
+    # be read within, and the rules read a meet over two bases member by member.
+    pytest.param(
+        "subtype",
+        intersection(dict[str, int], Annotated[object, at.MinLen(2)]),
+        Annotated[dict[str, int], at.MinLen(2)],
+        id="refine:dict&object-MinLen(2)<=dict-MinLen(2)",
+        marks=_missed("a mapping's length is no part of the set representation"),
     ),
 ]
 

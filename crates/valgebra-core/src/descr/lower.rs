@@ -844,16 +844,22 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Room, depth: u32) -> 
         // A meet starts from its first member: met with every value it is itself,
         // and the top of every kind is what building that value costs.
         Schema::Intersection(members) => {
-            let mut members = members.iter();
-            let Some(first) = members.next() else {
+            let mut rest = members.iter();
+            let Some(first) = rest.next() else {
                 return Some(Descr::anything());
             };
-            members.try_fold(descend(first, pool, budget, depth)?, |whole, member| {
-                whole.intersect(&descend(member, pool, budget, depth)?)
-            })
+            descend(first, pool, budget, depth)
+                .and_then(|first| {
+                    rest.try_fold(first, |whole, member| {
+                        whole.intersect(&descend(member, pool, budget, depth)?)
+                    })
+                })
+                .or_else(|| refinements_within_the_rest(members, pool, budget, depth))
         }
         Schema::Complement(inner) => Some(descend(inner, pool, budget, depth)?.complement()),
-        Schema::Refine { base, constraints } => refine(base, constraints, pool, budget, depth),
+        Schema::Refine { base, constraints } => {
+            refine(base, constraints, None, pool, budget, depth)
+        }
         // Every attribute narrows the same value, so the record is their meet.
         // Each attribute's type is a descriptor in its own right, which is what
         // makes the attribute half recursive, and each is required: the value
@@ -1344,6 +1350,66 @@ fn sequence(
     Descr::sequence(&prefix?, tail.as_ref(), kind)
 }
 
+/// A meet whose members do not lower one at a time, read with each refinement
+/// met with the members that do, and `None` where a member that is no
+/// refinement does not lower.
+///
+/// A refinement is its base met with its constraints' set [JV20, §3.2], and a
+/// meet is associative and commutative [FCB08, Def. 4.1]. For `R` the meet of
+/// the members that lower, `R ∩ (B ∩ C)` is `R ∩ ((B ∩ R) ∩ C)`, and
+/// `R ∩ ¬(B ∩ C)` is `R ∩ ¬((B ∩ R) ∩ C)`, since a value of `R` lies in `R`
+/// either way. So a length over `object` met with `str` reads as a length over
+/// `str`, which [`lengths`] counts, where over `object` it refuses for the sets
+/// and dicts the base also holds. The reading is exact: it gives no value and
+/// takes none away, so a meet it lowers is the set the meet denotes, and a meet
+/// whose members together still reach those kinds refuses as before.
+///
+/// Out of line, asked only after the meet failed to lower member by member, so
+/// a meet that lowers carries none of it.
+#[inline(never)]
+fn refinements_within_the_rest(
+    members: &[Schema],
+    pool: &dyn Constants,
+    budget: &Room,
+    depth: u32,
+) -> Option<Descr> {
+    if !members.iter().any(|member| a_refinement(member).is_some()) {
+        return None;
+    }
+    let mut rest: Option<Descr> = None;
+    let mut within = Vec::new();
+    for member in members {
+        match descend(member, pool, budget, depth) {
+            Some(set) => {
+                rest = Some(match rest {
+                    Some(whole) => whole.intersect(&set)?,
+                    None => set,
+                });
+            }
+            None => within.push(a_refinement(member)?),
+        }
+    }
+    let mut whole = rest?;
+    for (base, constraints, negated) in within {
+        let set = refine(base, constraints, Some(&whole), pool, budget, depth)?;
+        whole = whole.intersect(&if negated { set.complement() } else { set })?;
+    }
+    Some(whole)
+}
+
+/// A meet member [`refinements_within_the_rest`] reads within the others: a
+/// refinement's base and constraints, and whether the member is its complement.
+fn a_refinement(member: &Schema) -> Option<(&Schema, &[Constraint], bool)> {
+    let (inner, negated) = match member {
+        Schema::Complement(inner) => (&**inner, true),
+        member => (member, false),
+    };
+    match inner {
+        Schema::Refine { base, constraints } => Some((base, constraints, negated)),
+        _ => None,
+    }
+}
+
 /// The base narrowed by every constraint, which is a meet, as a refined base
 /// type is its base cut down by its refinement [JV20, §3.2].
 ///
@@ -1360,16 +1426,21 @@ fn sequence(
 /// no builtin value, has no length, takes no remainder and matches no pattern,
 /// and no class derives from `NoneType` to answer otherwise, so `None` under
 /// any constraint but a predicate is the empty set.
+///
+/// `within` is a set the base is met with before a constraint is read, where a
+/// meet reads the refinement within its other members
+/// ([`refinements_within_the_rest`]).
 fn refine(
     base: &Schema,
     constraints: &[Constraint],
+    within: Option<&Descr>,
     pool: &dyn Constants,
     budget: &Room,
     depth: u32,
 ) -> Option<Descr> {
     if let Schema::Union(branches) = base {
         return branches.iter().try_fold(Descr::nothing(), |whole, branch| {
-            whole.union(&refine(branch, constraints, pool, budget, depth)?)
+            whole.union(&refine(branch, constraints, within, pool, budget, depth)?)
         });
     }
     if matches!(base, Schema::NoneType)
@@ -1380,6 +1451,9 @@ fn refine(
         return Some(Descr::nothing());
     }
     let mut narrowed = descend(base, pool, budget, depth)?;
+    if let Some(within) = within {
+        narrowed = narrowed.intersect(within)?;
+    }
     for constraint in constraints {
         let Some(set) = constrained(constraint, &narrowed, pool) else {
             if matches!(constraint, Constraint::Predicate(_)) {

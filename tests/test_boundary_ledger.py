@@ -219,6 +219,13 @@ ROWS: dict[str, Row] = {
         spellings=(
             (Annotated[int, at.Gt(0), at.Lt(1)], nothing),
             (intersection(Annotated[int, at.Gt(0)], Annotated[int, at.Lt(1)]), nothing),
+            # "A bound written over every value and met with a base is that
+            # bound over the base", a length and an order bound.
+            (intersection(int, Annotated[object, at.Ge(1)]), Annotated[int, at.Ge(0)]),
+            (
+                intersection(str, Annotated[object, at.MinLen(5)]),
+                Annotated[str, at.MinLen(2)],
+            ),
         ),
     ),
     "Sequences.": Decides(

@@ -214,7 +214,12 @@ answers `"undecided"`.
   — `Annotated[int, Gt(0), Lt(1)]` — is empty even though its endpoints are
   ordered. That holds however the meet is spelled: on one refinement, or across
   an intersection whose members bound it, since an intersection is a subset of
-  every member. A `bool` base counts too, because it subclasses `int`; a `float`
+  every member. A bound written over every value and met with a base is that
+  bound over the base: `intersection(str, Annotated[object, MinLen(2)])` is the
+  set `Annotated[str, MinLen(2)]` is, and `intersection(int, Annotated[object,
+  Gt(0)])` the set `Annotated[int, Gt(0)]` is. Met with a set or a dict, whose
+  lengths the set representation does not count, it declines. A `bool` base
+  counts too, because it subclasses `int`; a `float`
   base holds `0.5` between the same bounds, so they are not empty. A `float`,
   `Fraction` or `Decimal` operand over the integers is read at its floor or its
   ceiling, since Python compares an `int` with each exactly:
