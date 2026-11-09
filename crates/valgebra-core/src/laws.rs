@@ -9721,6 +9721,43 @@ fn a_length_bound() -> impl Strategy<Value = Constraint> {
     ]
 }
 
+proptest! {
+    /// A meet of lists, one of them a length bound over every list, holds what the
+    /// one list of the items' meet under that bound holds: a value of the meet holds,
+    /// at each position, an item of every member, as an `allOf` of arrays is one array
+    /// of the items' meet [HSHP20, §4.2].
+    /// The meet is read by its positions and the one list by its own shape, and the
+    /// two never decide apart.
+    #[test]
+    fn a_meet_of_lists_reads_as_the_list_of_the_items_meet(
+        items in proptest::collection::vec(
+            prop_oneof![
+                Just(Schema::Int),
+                Just(Schema::Str),
+                Just(Schema::Bool),
+                Just(Schema::union([Schema::Int, Schema::Str])),
+                Just(Schema::Anything(Spelling::Any)),
+            ],
+            2..4,
+        ),
+        bound in proptest::collection::vec(a_length_bound(), 1..3),
+    ) {
+        let list_of = |item| Schema::list(SeqShape::homogeneous(item));
+        let mut members: Vec<Schema> = items.iter().cloned().map(list_of).collect();
+        members.push(Schema::refine(list_of(Schema::Anything(Spelling::Any)), bound.clone()));
+        let meet = Schema::meet(members);
+        let one = Schema::refine(list_of(Schema::meet(items)), bound);
+        let (by_positions, as_one) =
+            (meet.verdict_under(&NoLeafRelations), one.verdict_under(&NoLeafRelations));
+        prop_assert!(
+            by_positions == Verdict::Unknown
+                || as_one == Verdict::Unknown
+                || by_positions == as_one,
+            "{:?}: {:?} against {:?}", meet, by_positions, as_one
+        );
+    }
+}
+
 // THEORY: the-domain-is-one-model-per-interpreter
 /// The line itself, for a list of integers: refuted below a list of at most
 /// `REACHED - 1` items on one of `REACHED`, which every interpreter builds, and

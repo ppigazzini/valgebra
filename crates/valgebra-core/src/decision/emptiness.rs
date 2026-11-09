@@ -1805,53 +1805,70 @@ fn one_refinement_of_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Verdict
     Schema::refine(first.clone(), constraints).verdict_rec(cx)
 }
 
-/// `Empty` where two sequences of a meet meet in nothing at a position each of their
-/// values has: a value of both holds an item of both there. A value holds the items
-/// its prefix names and the least its bound asks of it, so the positions read are those
-/// of the longest of them, a shorter prefix's tail reading the rest, and past every
-/// prefix one reading of the two tails stands for all of them, since a bound may ask
-/// for more items than a value holds. A position past a fixed shape's end is the
-/// arity's, which `disjoint_with` reads. So a list of an `int` and a `None`, and a list
-/// of at least one `int`, are outside `μt. list[t]`, whose every item is a list.
+/// `Empty` where the sequences of a meet meet in nothing at a position each of their
+/// values has: a value of the meet is a value of every one of them, and holds there
+/// an item of each. A value holds the items its longest prefix names and the least
+/// any member's bound asks of it, so the positions read are those, a shorter
+/// prefix's tail reading the rest, and past every prefix one reading of the tails
+/// stands for all of them, since a bound may ask for more items than a value holds.
+/// A member of fixed shape that ends before such a position holds no value of that
+/// length. So a list of an `int` and a `None`, and a list of at least one `int`, are
+/// outside `μt. list[t]`, whose every item is a list, and a list of at least one item
+/// met with a list of words and a list of records holds none.
+///
+/// A meet of products with no negative one is empty exactly where a component's
+/// meet is [FCB08, Lem. 6.5], which at every arity is this reading by positions. Every
+/// sequence of the meet is read at once, the item-wise meet of an `allOf` of arrays
+/// [HSHP20, §4.2], since the bound that names a position may sit on a member whose
+/// items meet the others', `Annotated[list[Any], MinLen(1)]` beside `list[str]` and a
+/// list of records.
 pub(super) fn sequences_meeting_in_nothing(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
-    let mut sequences = members.iter().filter_map(|member| match member {
-        Schema::Seq { container, shape } => Some((container, shape, 0)),
-        Schema::Refine { base, constraints } => match &**base {
-            Schema::Seq { container, shape } => {
-                Some((container, shape, shortest(constraints.iter())))
-            }
-            _ => None,
-        },
-        _ => None,
-    });
-    let (Some((mine, a, my_least)), Some((theirs, b, their_least))) =
-        (sequences.next(), sequences.next())
-    else {
+    let mut sequences = members.iter().filter_map(a_sequence);
+    let Some((mine, first, mut least)) = sequences.next() else {
         return Verdict::Unknown;
     };
-    if mine != theirs {
+    let (mut named, mut read) = (first.prefix.len(), 1);
+    for (theirs, shape, asked) in sequences {
+        if theirs != mine {
+            return Verdict::Unknown;
+        }
+        named = named.max(shape.prefix.len());
+        least = least.max(asked);
+        read += 1;
+    }
+    if read < 2 {
         return Verdict::Unknown;
     }
-    let at = |shape: &crate::ir::SeqShape, position: usize| {
-        shape
-            .prefix
-            .get(position)
-            .or(shape.tail.as_deref())
-            .cloned()
-    };
     #[cfg(test)]
     let _crossing = super::goal_tests::goals::crossing();
-    let named = a.prefix.len().max(b.prefix.len());
-    let reached = named.max(my_least).max(their_least);
-    for position in 0..reached.min(named + 1) {
-        let (Some(x), Some(y)) = (at(a, position), at(b, position)) else {
-            continue;
-        };
-        if Schema::meet_within([x, y], cx.defs).is_empty_rec(cx) {
+    for position in 0..named.max(least).min(named + 1) {
+        let items = members
+            .iter()
+            .filter_map(a_sequence)
+            .map(|(_, shape, _)| shape.prefix.get(position).or(shape.tail.as_deref()));
+        if items.clone().any(|item| item.is_none()) {
+            return Verdict::Empty;
+        }
+        if Schema::meet_within(items.flatten().cloned(), cx.defs).is_empty_rec(cx) {
             return Verdict::Empty;
         }
     }
     Verdict::Unknown
+}
+
+/// A sequence member of a meet, or a refinement of one: its container, its shape,
+/// and the fewest items its bound asks for.
+fn a_sequence(member: &Schema) -> Option<(crate::ir::SeqKind, &crate::ir::SeqShape, usize)> {
+    match member {
+        Schema::Seq { container, shape } => Some((*container, shape, 0)),
+        Schema::Refine { base, constraints } => match &**base {
+            Schema::Seq { container, shape } => {
+                Some((*container, shape, shortest(constraints.iter())))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// Whether a value of this schema, where it holds one, is one a set can hold.

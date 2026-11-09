@@ -262,9 +262,13 @@ proof of [Cas23, Lem. 4.7] generalizes the pair to every arity, over the
 mappings of the branches to positions [Cas23, App. C.1], which the paper
 explains for the arity-`n` case [Cas23, App. D].
 **[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in
-`decision/products.rs`. It applies in subtyping and nowhere else: emptiness's
-rules do not decompose a product, so the same relation asked as a meet with a
-complement is left to the set representation, which decides it where the
+`decision/products.rs`. It applies in subtyping, and emptiness reads only its case
+with no negative product: a meet of sequences is the sequence of its items' meets,
+empty where the meet at a position every value holds is, every sequence of the meet
+read at once (`sequences_meeting_in_nothing`), the lemma with `N` empty, as an `allOf`
+of arrays is one array of the items' meet [HSHP20, §4.2]. So the same
+relation asked as a meet with a complement is left to the set representation, which
+decides it where the
 difference fits the build bounds -- `tuple[int | str, int]` against its two
 corners -- and declines past them. `Φ` characterizes the inclusion exactly, so
 the rule refutes as well as proves -- a product with a value and no branch left
@@ -278,7 +282,7 @@ product's once beside `Φ`.
 
 SOURCE: §13.1 "**The product decomposition.**"
 
-IMPLEMENTED-BY: decision/products.rs::fixed_components, decision/products.rs::product_subtype, decision/products.rs::seq_splits_across_union, decision/products.rs
+IMPLEMENTED-BY: decision/products.rs::fixed_components, decision/products.rs::product_subtype, decision/products.rs::seq_splits_across_union, decision/products.rs, decision/emptiness.rs::sequences_meeting_in_nothing
 
 HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches, the_product_rule_is_lemma_6_5_at_three_positions, the_product_rule_decides_every_covering_split, the_product_rule_decides_scalar_pairs_as_the_values_do, a_product_is_below_its_corners_and_refuted_by_a_missing_one, a_member_the_product_rule_sets_aside_withholds_its_refutation
 

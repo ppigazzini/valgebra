@@ -625,7 +625,11 @@ answers `"undecided"`.
   `[int, None]` is below the complement of `recursive(lambda t: list[t])`, whose
   every item is a list, and a list that may be empty shares `[]` and is refuted.
   A length bound names positions as a prefix does:
-  `Annotated[list[int], MinLen(1)]` is below that complement too.
+  `Annotated[list[int], MinLen(1)]` is below that complement too. Every sequence
+  of a meet is read at once, so the bound may sit on a member of its own:
+  `intersection(list[str], Annotated[list[Any], MinLen(1)], list[rec])`, the shape
+  a JSON Schema `minItems` beside two item types translates to, is empty for `rec`
+  a record over the JSON values, as each pair of its members is not.
   This is the
   semantic-subtyping reduction applied where no structural rule can help — a
   complement has no shape on the right to recurse into.

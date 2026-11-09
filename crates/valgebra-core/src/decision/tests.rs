@@ -14477,6 +14477,105 @@ mod an_empty_position {
             Verdict::Unknown
         );
     }
+
+    /// Every sequence of a meet is read at once: the bound that names a position
+    /// may sit on a member whose items meet the others'. Each pair of `list[int]`,
+    /// `list[str]` and a list of at least one item holds `[]` or `[1]` or `["s"]`,
+    /// and the three hold none -- the shape a translation from JSON Schema writes
+    /// for `minItems` beside the items' own type.
+    #[test]
+    fn every_sequence_of_a_meet_is_read_at_once() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let any = Schema::Anything(Spelling::Any);
+        let least = Schema::refine(list_of(any.clone()), vec![Constraint::MinLen(1)]);
+        let three = [list_of(Schema::Int), list_of(Schema::Str), least.clone()];
+        for pair in [[0, 1], [0, 2], [1, 2]] {
+            let pair = [three[pair[0]].clone(), three[pair[1]].clone()];
+            assert_eq!(
+                sequences_meeting_in_nothing(&pair, &mut cx),
+                Verdict::Unknown,
+                "{pair:?}"
+            );
+        }
+        assert_eq!(
+            sequences_meeting_in_nothing(&three, &mut cx),
+            Verdict::Empty
+        );
+        let either = list_of(Schema::union([Schema::Int, Schema::Str]));
+        assert_eq!(
+            sequences_meeting_in_nothing(&[list_of(Schema::Int), either, least], &mut cx),
+            Verdict::Unknown
+        );
+        let tuples = |item| Schema::tuple(SeqShape::homogeneous(item));
+        let at_least_one = Schema::refine(tuples(any), vec![Constraint::MinLen(1)]);
+        assert_eq!(
+            sequences_meeting_in_nothing(
+                &[tuples(Schema::Bytes), at_least_one, tuples(Schema::Float)],
+                &mut cx
+            ),
+            Verdict::Empty
+        );
+    }
+
+    /// A member of fixed shape that ends before a position every value of the meet
+    /// holds holds no value of the meet: `(int,)` has one item, and a list of at
+    /// least two has two.
+    #[test]
+    fn a_fixed_shape_ending_before_a_held_position_holds_none() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        let one = Schema::list(SeqShape::fixed(vec![Schema::Int]));
+        let least = |n| Schema::refine(list_of(Schema::Int), vec![Constraint::MinLen(n)]);
+        assert_eq!(
+            sequences_meeting_in_nothing(&[one.clone(), least(2)], &mut cx),
+            Verdict::Empty
+        );
+        assert_eq!(
+            sequences_meeting_in_nothing(&[one, least(1)], &mut cx),
+            Verdict::Unknown
+        );
+    }
+
+    /// The census of the MCP reference servers met this meet in a thousand cells:
+    /// a list of at least one item, a list of words, and a list of records over the
+    /// JSON values with a required key. It holds no value.
+    #[test]
+    fn a_list_of_words_of_at_least_one_item_meets_a_list_of_records_in_nothing() {
+        // The JSON values, `μj. None | bool | int | float | str | list[j] | dict[str, j]`.
+        let json = Schema::Ref(DefIx::new(0));
+        let defs = [Schema::union([
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            list_of(json.clone()),
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: json.clone(),
+                }],
+            ),
+        ])];
+        let record = Schema::meet([
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: json,
+                }],
+            ),
+            Schema::record(vec![field("t", Schema::Str, true)], Openness::Closed),
+        ]);
+        let least = Schema::refine(
+            list_of(Schema::Anything(Spelling::Any)),
+            vec![Constraint::MinLen(1)],
+        );
+        let cell = Schema::meet([list_of(Schema::Str), least, list_of(record)]);
+        assert!(cell.is_empty_under(&defs));
+    }
 }
 
 /// A subject of a builtin kind against a table of constants, a literal pinning its
