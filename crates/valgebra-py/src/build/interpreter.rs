@@ -2114,7 +2114,12 @@ fn a_key_narrowed_past_words_is_found_under_every_connective() {
         for schema in [
             narrowing.clone(),
             Schema::union([Schema::Int, narrowing.clone()]),
-            Schema::meet([Schema::Str, narrowing.clone()]),
+            // Met with a member holding the kind it narrows, which no member
+            // reads away.
+            Schema::meet([
+                Schema::union([Schema::Str, Schema::Int, Schema::Bytes]),
+                narrowing.clone(),
+            ]),
             narrowing.clone().complement(),
             Schema::union([Schema::Int, narrowing.clone().complement()]),
         ] {
@@ -2175,6 +2180,18 @@ fn a_key_narrowed_past_words_is_found_under_every_connective() {
         Schema::meet([Schema::Str, pattern.clone()]),
         Schema::Ref(DefIx::new(0)),
         pattern.clone().complement(),
+        // A length over every value met with `str` is a key of the words it
+        // leaves, and so is its complement; a length over `bytes` met with
+        // `str` is a key of no word at all.
+        Schema::meet([
+            Schema::Str,
+            refined(Schema::ANYTHING, Constraint::MinLen(2)),
+        ]),
+        Schema::meet([
+            Schema::Str,
+            refined(Schema::ANYTHING, Constraint::MaxLen(1)).complement(),
+        ]),
+        Schema::meet([Schema::Str, refined(Schema::Bytes, Constraint::MinLen(1))]),
     ] {
         assert!(
             !narrows_past_words(&schema, std::slice::from_ref(&pattern), &mut Vec::new()),

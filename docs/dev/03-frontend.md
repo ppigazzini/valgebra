@@ -710,7 +710,14 @@ being any finite one [Cas23, Def. 4.6], and two clauses that overlap read the jo
 of their values on the common refinement of their keys. `Annotated[int, Gt(0)]`, a
 word's order bound and a callback name part of a kind no language holds, with
 nothing for the set representation to split, so `checked_key` refuses them where
-they are written, and the mapping is checked by a predicate beside it. A reference
+they are written, and the mapping is checked by a predicate beside it. A meet is
+read whole before it is refused for a member: a length or a pattern over a base
+wider than `str` holds part of each other kind, and a member holding none of a
+kind reads that part away, so `intersection(str, Annotated[object, MinLen(2)])`
+keys the words of two symbols or more. `checked_key` asks it of the set
+representation's own reading of a key (`reads_as_words` in `descr/lower.rs`),
+which a map splits its `str` part by, so a meet the guard admits is one the
+decision reads. A reference
 reads as its definition there, so a recursion with such an arm is refused as a key.
 A key that is the definition being built is a back edge whose body does not exist
 yet where the key is read, and reaching it would mean a scan of the finished body at

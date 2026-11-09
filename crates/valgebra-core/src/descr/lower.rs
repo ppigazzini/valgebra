@@ -960,21 +960,36 @@ type ReadClause = (Vec<Label>, Vec<Option<Kind>>, Option<RegularSet>, Descr);
 /// it holds, and a regular language of `str` keys, a part of a partition finer than
 /// the kinds [Cas23, Def. 4.6].
 ///
-/// Only the connectives and a refinement of `str` by what a language can read: a
-/// pattern and a length bound. A literal keeps `key_cover`'s reading, which is its
-/// value and not its type, so a union holding one beside a narrowing is left to the
-/// rules, and the walk answers its values exactly.
+/// Only the connectives and a refinement by what a language can read: a pattern and
+/// a length bound. A refinement over a base holding more than `str` holds some of
+/// each other kind, which no language reads, and a meet reads that part away where
+/// another member holds none of the kind: `intersection(str, Annotated[object,
+/// MinLen(2)])` is the words of two symbols or more. A literal keeps `key_cover`'s
+/// reading, which is its value and not its type, so a union holding one beside a
+/// narrowing is left to the rules, and the walk answers its values exactly.
 fn narrowed_cover(key: &Schema) -> Option<(Vec<Option<Kind>>, RegularSet)> {
     if !narrows(key) {
         return None;
     }
-    let (parts, words) = narrowed_parts(key)?;
-    let held = KEY_KINDS.iter().copied().map(Some).chain([None]);
-    let parts = held
-        .zip(parts)
-        .filter_map(|(part, held)| held.then_some(part))
-        .collect();
-    Some((parts, words))
+    let (held, words) = narrowed_parts(key)?;
+    let mut whole = Vec::new();
+    for (part, held) in KEY_KINDS.iter().copied().map(Some).chain([None]).zip(held) {
+        if held? {
+            whole.push(part);
+        }
+    }
+    Some((whole, words))
+}
+
+/// Whether a map reads `key` as words.
+///
+/// Words are the parts of the key partition the key holds whole and a regular
+/// language of `str` keys, which a map splits its `str` part by. The frontend's
+/// key guard asks it of a meet it would refuse member by member, so a key the
+/// decision reads is a key that builds.
+#[must_use]
+pub fn reads_as_words(key: &Schema) -> bool {
+    narrowed_cover(key).is_some()
 }
 
 /// Whether a key holds a refinement under its connectives. A meet of whole kinds, as
@@ -989,33 +1004,39 @@ fn narrows(key: &Schema) -> bool {
     }
 }
 
-/// [`narrowed_cover`] as one flag per part beside the language, the shape the
-/// connectives are pointwise over. The flag of the `str` part stays down: the
-/// language says what it holds.
-fn narrowed_parts(key: &Schema) -> Option<(Vec<bool>, RegularSet)> {
+/// How much of one part of the key partition a key holds: all of it, none of it,
+/// or `None`, some of it, which no language reads.
+type Held = Option<bool>;
+
+/// [`narrowed_cover`] as one [`Held`] per part beside the language, the shape the
+/// connectives are pointwise over [FCB08, Def. 4.1]. The `str` part is held by
+/// none: the language says what it holds.
+fn narrowed_parts(key: &Schema) -> Option<(Vec<Held>, RegularSet)> {
     let of_parts = |held: fn(Kind) -> bool, others: bool| {
         KEY_KINDS
             .iter()
-            .map(|kind| held(*kind))
-            .chain([others])
-            .collect::<Vec<bool>>()
+            .map(|kind| Some(held(*kind)))
+            .chain([Some(others)])
+            .collect::<Vec<Held>>()
     };
     let none = RegularSet::empty;
     let every = || RegularSet::all(Alphabet::Text);
     let but_str = |kind: Kind| kind != Kind::Str;
     let fold = |members: &[Schema],
-                unit: (Vec<bool>, RegularSet),
-                flags: fn(bool, bool) -> bool,
+                unit: (Vec<Held>, RegularSet),
+                held: fn(Held, Held) -> Held,
                 words: fn(&RegularSet, &RegularSet) -> Option<RegularSet>| {
-        members.iter().try_fold(unit, |(parts, held), member| {
-            let (their_parts, theirs) = narrowed_parts(member)?;
-            let parts = parts
-                .iter()
-                .zip(&their_parts)
-                .map(|(a, b)| flags(*a, *b))
-                .collect();
-            Some((parts, words(&held, &theirs)?))
-        })
+        members
+            .iter()
+            .try_fold(unit, |(parts, words_so_far), member| {
+                let (their_parts, theirs) = narrowed_parts(member)?;
+                let parts = parts
+                    .iter()
+                    .zip(&their_parts)
+                    .map(|(a, b)| held(*a, *b))
+                    .collect();
+                Some((parts, words(&words_so_far, &theirs)?))
+            })
     };
     match key {
         Schema::Nothing => Some((of_parts(|_| false, false), none())),
@@ -1032,9 +1053,6 @@ fn narrowed_parts(key: &Schema) -> Option<(Vec<bool>, RegularSet)> {
         Schema::Bytes => Some((of_parts(|kind| kind == Kind::Bytes, false), none())),
         Schema::Refine { base, constraints } => {
             let (parts, mut words) = narrowed_parts(base)?;
-            if parts.iter().any(|held| *held) {
-                return None;
-            }
             for constraint in constraints.iter() {
                 let keys = match constraint {
                     Constraint::Regex(pattern) => RegularSet::pattern(pattern, Alphabet::Text)?,
@@ -1044,24 +1062,42 @@ fn narrowed_parts(key: &Schema) -> Option<(Vec<bool>, RegularSet)> {
                 };
                 words = words.intersect(&keys)?;
             }
+            // Of every part but `str` the base holds any of, the constraints keep
+            // some: a length of a tuple, a pattern no value of the kind has.
+            let parts = parts
+                .into_iter()
+                .map(|held| (held == Some(false)).then_some(false))
+                .collect();
             Some((parts, words))
         }
         Schema::Union(members) => fold(
             members,
             (of_parts(|_| false, false), none()),
-            |a, b| a || b,
+            |a, b| match (a, b) {
+                (Some(true), _) | (_, Some(true)) => Some(true),
+                (Some(false), Some(false)) => Some(false),
+                _ => None,
+            },
             RegularSet::union,
         ),
         Schema::Intersection(members) => fold(
             members,
             (of_parts(but_str, true), every()),
-            |a, b| a && b,
+            |a, b| match (a, b) {
+                (Some(false), _) | (_, Some(false)) => Some(false),
+                (Some(true), Some(true)) => Some(true),
+                _ => None,
+            },
             RegularSet::intersect,
         ),
         Schema::Complement(inner) => {
             let (parts, words) = narrowed_parts(inner)?;
             let held = KEY_KINDS.iter().map(|kind| but_str(*kind)).chain([true]);
-            let parts = parts.iter().zip(held).map(|(a, b)| !a && b).collect();
+            let parts = parts
+                .iter()
+                .zip(held)
+                .map(|(a, b)| a.map(|a| !a && b))
+                .collect();
             Some((parts, words.complement()))
         }
         _ => None,

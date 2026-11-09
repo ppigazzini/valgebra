@@ -231,6 +231,35 @@ def test_a_key_narrowed_past_a_language_is_refused() -> None:
     assert not one_key.is_valid({"a": 1})
 
 
+def test_a_meet_keys_the_words_a_bound_over_every_value_leaves() -> None:
+    """A length over a wider base, met with `str`, keys the words it leaves.
+
+    The key is the set `Annotated[str, MinLen(2)]` is, however the meet is
+    spelled, and a map over it relates to the map over that key both ways.
+    """
+    words = {Annotated[str, at.MinLen(2)]: int}
+    for key in (
+        intersection(str, Annotated[object, at.MinLen(2)]),
+        intersection(Annotated[object, at.MinLen(2)], str),
+        intersection(str, complement(Annotated[object, at.MaxLen(1)])),
+    ):
+        keyed = Validator({key: int})
+        assert keyed.is_valid({"ab": 1})
+        assert not keyed.is_valid({"a": 1})
+        assert not keyed.is_valid({1: 1})
+        assert keyed.relation_to(words) == "subset"
+        assert Validator(words).relation_to({key: int}) == "subset"
+    # Alone, met with a kind the bound narrows, or narrowed by an order, the key
+    # holds part of a kind no language holds.
+    for key in (
+        Annotated[object, at.MinLen(2)],
+        intersection(union(str, bytes), Annotated[object, at.MinLen(2)]),
+        intersection(int, Annotated[object, at.Gt(0)]),
+    ):
+        with pytest.raises(NotImplementedError, match="narrows the keys it governs"):
+            Validator({key: int})
+
+
 def test_a_non_string_key_in_a_closed_record_is_rejected() -> None:
     schema = Validator({"a": int})  # closed: no default clause
     assert schema.is_valid({"a": 1})

@@ -839,6 +839,10 @@ JSON Schema's `patternProperties` reads overlap the other way, as a conjunction.
 To write it, give the keys both patterns hold a clause of their own, over the meet
 of the two schemas, so no two clauses overlap and the two readings agree.
 
+A length or a pattern written over a wider base and met with `str` is a key of the
+words it leaves: `intersection(str, Annotated[object, MinLen(2)])` is the key
+`Annotated[str, MinLen(2)]` is, and builds as it does.
+
 A key narrowed any other way -- a number's bound, a word's order, a callback --
 names part of a kind no language holds, and is refused where it is written, and so
 is a recursion with such an arm, which keys a map as its definition. One keying a

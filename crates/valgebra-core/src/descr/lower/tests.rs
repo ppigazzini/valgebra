@@ -6,7 +6,7 @@ use proptest::prelude::*;
 use super::{
     BUDGET, Bounds, Constants, DEPTH, Operand, Room, WORK, an_empty_reading_stands, descend,
     floats_meet, lower, lower_widened, lower_within, narrowed_cover, nests_past_the_depth,
-    read_widened,
+    read_widened, reads_as_words,
 };
 use crate::descr::budget;
 use crate::descr::classes::Class;
@@ -507,6 +507,48 @@ fn a_key_no_language_spells_refuses_the_lowering() {
         Schema::Instance(ClassIx::new(0)),
     ] {
         assert!(narrowed_cover(&key).is_none(), "{key:?} spells no language");
+    }
+}
+
+/// A meet reads away the part of a kind a refinement over a wider base holds,
+/// where another member holds none of the kind: the key is the words it leaves.
+/// Where a member keeps the kind, or the bound is no word constraint, the key
+/// spells no language.
+#[test]
+fn a_meet_keys_the_words_a_refinement_over_every_value_leaves() {
+    let over = |constraints: Vec<Constraint>| Schema::refine(Schema::ANYTHING, constraints);
+    let reads = |key: &Schema, word: &[u8]| {
+        let (parts, words) = narrowed_cover(key).expect("the key reads as words");
+        assert_eq!(parts, Vec::new(), "{key:?} holds no whole part");
+        words.holds(word)
+    };
+    for key in [
+        Schema::meet([Schema::Str, over(vec![Constraint::MinLen(2)])]),
+        Schema::meet([over(vec![Constraint::MinLen(2)]), Schema::Str]),
+        Schema::meet([Schema::Str, over(vec![Constraint::MaxLen(1)]).complement()]),
+    ] {
+        assert!(reads(&key, b"ab") && reads(&key, b"abc"), "{key:?}");
+        assert!(!reads(&key, b"a") && !reads(&key, b""), "{key:?}");
+        assert!(reads_as_words(&key));
+    }
+    // A length over `bytes` met with `str` is no word at all.
+    let none = Schema::meet([
+        Schema::Str,
+        Schema::refine(Schema::Bytes, vec![Constraint::MinLen(1)]),
+    ]);
+    assert!(!reads(&none, b"") && !reads(&none, b"a"));
+
+    for key in [
+        over(vec![Constraint::MinLen(2)]),
+        Schema::meet([
+            Schema::union([Schema::Str, Schema::Bytes]),
+            over(vec![Constraint::MinLen(2)]),
+        ]),
+        Schema::meet([Schema::Str, over(vec![Constraint::Gt(OperandIx::new(0))])]),
+        Schema::union([Schema::Str, over(vec![Constraint::MinLen(2)])]),
+    ] {
+        assert!(narrowed_cover(&key).is_none(), "{key:?} spells no language");
+        assert!(!reads_as_words(&key));
     }
 }
 

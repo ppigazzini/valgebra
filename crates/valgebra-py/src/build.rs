@@ -14,6 +14,7 @@ use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyIterator, PyList, PyModule, PySet,
     PyString, PyTuple, PyType,
 };
+use valgebra_core::descr::lower::reads_as_words;
 use valgebra_core::{
     ClassIx, ConstIx, Constraint, DefIx, DefShift, Guarded, OperandIx, PredIx, Schema,
     fresh_self_token,
@@ -2004,9 +2005,19 @@ fn narrows_past_words(schema: &Schema, defs: &[Schema], entered: &mut Vec<DefIx>
                     )
                 })
         }
-        Schema::Union(members) | Schema::Intersection(members) => members
+        Schema::Union(members) => members
             .iter()
             .any(|member| narrows_past_words(member, defs, entered)),
+        // A member narrowed past words alone may be narrowed to words by the
+        // others, which hold none of the kinds it narrows: the map's own
+        // reading of the key says, so a key the decision splits by a language
+        // builds.
+        Schema::Intersection(members) => {
+            members
+                .iter()
+                .any(|member| narrows_past_words(member, defs, entered))
+                && !reads_as_words(schema)
+        }
         Schema::Complement(inner) => narrows_past_words(inner, defs, entered),
         Schema::Ref(index) if !entered.contains(index) => {
             entered.push(*index);

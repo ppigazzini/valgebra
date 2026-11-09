@@ -249,6 +249,9 @@ _language = st.sampled_from(
         Annotated[str, Regex("a")],
         Annotated[str, at.MaxLen(1)],
         str,
+        # A bound over every value, met with `str`, and its complement so met.
+        intersection(str, Annotated[object, at.MinLen(2)]),
+        intersection(str, complement(Annotated[object, at.MaxLen(1)])),
     ]
 )
 _value = st.sampled_from([int, str, int | str, anything])

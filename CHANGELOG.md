@@ -68,10 +68,19 @@ answer of its own, or a repair to a change not yet released.
 - feat: the last asking reads a union past a member it cannot settle
 - fix: an exact Fraction or Decimal pools by value
 - feat: a bound over every value is read within the rest of its meet
+- feat: a bound over every value met with str is a map key
 
 -->
 
 ### Added
+
+- **A length or a pattern written over every value and met with `str` is a map key.**
+  `{intersection(str, Annotated[object, MinLen(2)]): int}` builds and keys the words of two
+  characters or more, as `{Annotated[str, MinLen(2)]: int}` does, the two maps `subset` of
+  each other both ways, where the key was refused as narrowing the keys it governs. Its
+  complement met with `str` builds too. Alone, or met with a union such as `str | bytes`
+  whose other kind it narrows, the bound stays refused, and so does an order bound met with
+  `int`.
 
 - **A bound written over every value and met with a base is that bound over the base.**
   `intersection(str, Annotated[object, MinLen(2)])` and `Annotated[str, MinLen(2)]` are
