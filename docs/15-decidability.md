@@ -629,7 +629,10 @@ answers `"undecided"`.
   of a meet is read at once, so the bound may sit on a member of its own:
   `intersection(list[str], Annotated[list[Any], MinLen(1)], list[rec])`, the shape
   a JSON Schema `minItems` beside two item types translates to, is empty for `rec`
-  a record over the JSON values, as each pair of its members is not.
+  a record over the JSON values, as each pair of its members is not. A meet of
+  sequences is read as the one sequence of its items' meet under all its bounds, so
+  `intersection(list[J], union([], list[str]), Annotated[list[Any], MinLen(1)])` is
+  refuted below a list of records on `["x"]`, as `Annotated[list[str], MinLen(1)]` is.
   This is the
   semantic-subtyping reduction applied where no structural rule can help — a
   complement has no shape on the right to recurse into.

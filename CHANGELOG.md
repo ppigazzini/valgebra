@@ -14,10 +14,17 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - feat: every sequence of a meet is read at once
+- feat: a meet of sequences is read as the one sequence of its items' meet
 
 -->
 
 ### Added
+
+- **A meet of sequences is read as the one sequence of its items' meet.**
+  `intersection(list[J], union([], list[str]), Annotated[list[Any], MinLen(1)])`, for `J` the JSON
+  value, is `not_subset` of `intersection(list[J], union([], list[rec]))` for a record `rec` with a
+  required key, on `["x"]`, where it stayed `undecided`. It is how `valgebra-jsonschema` writes
+  `minItems` beside the items, and the tuple form is read alike.
 
 - **Every sequence of a meet is read at once.** For `J` the JSON value and `rec` the record
   `intersection(dict[str, J], {"t": str})`, `intersection(list[str], Annotated[list[Any],

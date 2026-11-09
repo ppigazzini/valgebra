@@ -266,7 +266,11 @@ explains for the arity-`n` case [Cas23, App. D].
 with no negative product: a meet of sequences is the sequence of its items' meets,
 empty where the meet at a position every value holds is, every sequence of the meet
 read at once (`sequences_meeting_in_nothing`), the lemma with `N` empty, as an `allOf`
-of arrays is one array of the items' meet [HSHP20, §4.2]. So the same
+of arrays is one array of the items' meet [HSHP20, §4.2]. A pair the rules decline
+with a meet of sequences as its subject is asked again of that one sequence, under
+every bound of the meet, a refinement being its base met with the bound [JV20, §3.2],
+one union of sequences beside the meet distributed and an item a neighbor's union
+holds absorbed [FCB08, Def. 4.1] (`a_meet_of_sequences_as_one`). So the same
 relation asked as a meet with a complement is left to the set representation, which
 decides it where the
 difference fits the build bounds -- `tuple[int | str, int]` against its two
@@ -282,7 +286,7 @@ product's once beside `Φ`.
 
 SOURCE: §13.1 "**The product decomposition.**"
 
-IMPLEMENTED-BY: decision/products.rs::fixed_components, decision/products.rs::product_subtype, decision/products.rs::seq_splits_across_union, decision/products.rs, decision/emptiness.rs::sequences_meeting_in_nothing
+IMPLEMENTED-BY: decision/products.rs::fixed_components, decision/products.rs::product_subtype, decision/products.rs::seq_splits_across_union, decision/products.rs, decision/emptiness.rs::sequences_meeting_in_nothing, decision/readings.rs::a_meet_of_sequences_as_one, decision/readings.rs::absorbed, decision.rs::Schema::asked_as_one_sequence
 
 HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches, the_product_rule_is_lemma_6_5_at_three_positions, the_product_rule_decides_every_covering_split, the_product_rule_decides_scalar_pairs_as_the_values_do, a_product_is_below_its_corners_and_refuted_by_a_missing_one, a_member_the_product_rule_sets_aside_withholds_its_refutation
 
@@ -1040,14 +1044,15 @@ back edges into a finite table of definitions, so the subterms reachable by
 unfolding it are finitely many, which is the regularity a type is asked
 [Cas23, Def. 2.1]. A rule asks a pair of them or a pair built out
 of them -- a meet of subterms and their complements from the product rule, a
-union of some of a union's members at any depth from the union rule, a bound
-from a fold --
+union of some of a union's members at any depth from the union rule, the one
+sequence a meet of sequences is read as, each item the meet of the items its
+members hold at that position, a bound from a fold --
 so every goal is drawn from a finite closure, which stands where the normal
 forms over the atoms a type mentions stand [FCB08, §6.9] and is finite by the
-argument of [LN26, §5.1] -- a narrowing builds a record atom no subterm is, and
-finitely many of them -- and the distinct goals a
-query
-reaches are at most its square. With the trail cutting a pair that comes back,
+argument of [LN26, §5.1], which pushes a meet below a product and counts what
+that builds -- a narrowing builds a record atom no subterm is, and the
+sequence reading a sequence none is, finitely many of each -- and the distinct
+goals a query reaches are at most its square. With the trail cutting a pair that comes back,
 that is the termination argument the saturating algorithm makes, and the work
 budget bounds cost rather than standing in for it. The closure is held on the
 workload shapes, on the recursive pairs the trail is for, on the rules that
@@ -1060,7 +1065,7 @@ SOURCE: §14.2 "Regularity bounds the number of distinct"
 
 IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference, valgebra-py/src/build.rs::refuse_a_growing_argument
 
-HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
+HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure, a_meet_of_sequences_is_asked_as_one_sequence_inside_the_closure, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
 
 **A cache under coinduction is revertible or absent.** A memo added to the
 coinductive procedure must be persistent, so a failed disjunct can roll it

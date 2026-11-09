@@ -9714,6 +9714,45 @@ proptest! {
     }
 }
 
+proptest! {
+    /// A meet of sequences, a length bound over every list and a union of sequences
+    /// among them, is one set with the one sequence it is read as [HSHP20, §4.2], so
+    /// neither inclusion between the two is refuted.
+    #[test]
+    fn a_meet_of_sequences_is_the_one_sequence_it_is_read_as(
+        items in proptest::collection::vec(
+            prop_oneof![
+                Just(Schema::Int),
+                Just(Schema::Str),
+                Just(Schema::union([Schema::Int, Schema::Str])),
+                Just(Schema::Anything(Spelling::Any)),
+            ],
+            1..3,
+        ),
+        bound in proptest::collection::vec(a_length_bound(), 1..3),
+        branch in prop_oneof![Just(Schema::Int), Just(Schema::Str), Just(Schema::Bool)],
+        spread in any::<bool>(),
+    ) {
+        let list_of = |item| Schema::list(SeqShape::homogeneous(item));
+        let mut members: Vec<Schema> = items.into_iter().map(list_of).collect();
+        members.push(Schema::refine(list_of(Schema::Anything(Spelling::Any)), bound));
+        if spread {
+            members.push(Schema::union([Schema::list(SeqShape::fixed([])), list_of(branch)]));
+        }
+        let Some(one) = crate::decision::a_meet_of_sequences_as_one(&members, &[]) else {
+            return Err(TestCaseError::fail("two sequences of one container are read as one"));
+        };
+        let meet = Schema::meet(members);
+        for (below, above) in [(&one, &meet), (&meet, &one)] {
+            prop_assert_ne!(
+                below.subtype_relation_under(above, &NoLeafRelations, &[]),
+                Relation::Fails,
+                "{:?} below {:?}", below, above
+            );
+        }
+    }
+}
+
 fn a_length_bound() -> impl Strategy<Value = Constraint> {
     prop_oneof![
         (0usize..5).prop_map(Constraint::MinLen),

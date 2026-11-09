@@ -16,6 +16,8 @@ mod lengths;
 mod literals;
 mod products;
 mod readings;
+#[cfg(test)]
+pub(crate) use readings::a_meet_of_sequences_as_one;
 mod records;
 
 use std::cell::{Cell, OnceCell, RefCell};
@@ -1045,6 +1047,7 @@ impl Schema {
             .or_else(|| {
                 if by_branch {
                     self.decided_as_respelled(other, cx)
+                        .or_else(|| self.asked_as_one_sequence(other, cx))
                 } else {
                     Relation::Unknown
                 }
@@ -1261,6 +1264,22 @@ impl Schema {
             ),
             _ => Relation::Unknown,
         }
+    }
+
+    /// A meet of sequences asked again as the one sequence of its items' meet under its
+    /// bounds [HSHP20, §4.2], the spelling the rules read a refinement of a sequence in:
+    /// a translation from JSON Schema writes `minItems` over every list, beside the
+    /// items' own sequence. It shares the respelling's allowance of the query's steps.
+    #[inline(never)]
+    fn asked_as_one_sequence(&self, other: &Schema, cx: &Cx<'_>) -> Relation {
+        let Schema::Intersection(members) = self else {
+            return Relation::Unknown;
+        };
+        let Some(one) = readings::a_meet_of_sequences_as_one(members, cx.defs) else {
+            return Relation::Unknown;
+        };
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
+        one.is_subtype_rec(other, &mut cx.within_this_query(&allowance))
     }
 
     /// The pair asked in the spellings the Boolean algebra gives it, where

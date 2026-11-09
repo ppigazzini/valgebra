@@ -15972,3 +15972,156 @@ fn zero_is_a_multiple_of_an_exact_rational_step() {
         "a step read as nothing"
     );
 }
+
+/// A meet of sequences is the one sequence of their items' meet under their bounds,
+/// the spelling the rules read a refinement of a sequence in.
+mod a_meet_of_sequences {
+    use super::*;
+
+    fn list_of(item: Schema) -> Schema {
+        Schema::list(SeqShape::homogeneous(item))
+    }
+
+    fn at_least(base: Schema, n: usize) -> Schema {
+        Schema::refine(base, vec![Constraint::MinLen(n)])
+    }
+
+    /// The JSON values, `μj. None | bool | int | float | str | list[j] | dict[str, j]`.
+    fn json() -> (Schema, Vec<Schema>) {
+        let at = Schema::Ref(DefIx::new(0));
+        let map = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: at.clone(),
+            }],
+        );
+        let body = Schema::union([
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            list_of(at.clone()),
+            map,
+        ]);
+        (at, vec![body])
+    }
+
+    #[test]
+    fn a_bound_over_every_list_stands_on_the_items_list() {
+        let any = list_of(Schema::Anything(Spelling::Any));
+        let members = [list_of(Schema::Str), at_least(any, 1)];
+        assert_eq!(
+            readings::a_meet_of_sequences_as_one(&members, &[]),
+            Some(at_least(list_of(Schema::Str), 1))
+        );
+        assert_eq!(
+            readings::a_meet_of_sequences_as_one(&members[..1], &[]),
+            None
+        );
+        let tuples = Schema::tuple(SeqShape::homogeneous(Schema::Str));
+        assert_eq!(
+            readings::a_meet_of_sequences_as_one(&[list_of(Schema::Str), tuples], &[]),
+            None
+        );
+    }
+
+    /// The meet a translation from JSON Schema writes for `minItems` beside the items:
+    /// the union of `[]` and the items' list is distributed, the `[]` branch holds
+    /// none of the bound's values, and the JSON values absorb `str`.
+    #[test]
+    fn the_json_spelling_of_min_items_is_one_refined_list() {
+        let (json, defs) = json();
+        let empty = Schema::list(SeqShape::fixed([]));
+        let members = [
+            list_of(json),
+            Schema::union([empty, list_of(Schema::Str)]),
+            at_least(list_of(Schema::Anything(Spelling::Any)), 1),
+        ];
+        assert_eq!(
+            readings::a_meet_of_sequences_as_one(&members, &defs),
+            Some(at_least(list_of(Schema::Str), 1))
+        );
+    }
+
+    /// A fixed shape shorter than another's prefix holds no value of the meet.
+    #[test]
+    fn a_fixed_shape_shorter_than_a_prefix_is_nothing() {
+        let one = Schema::list(SeqShape::fixed([Schema::Int]));
+        let two = Schema::list(SeqShape::fixed([Schema::Int, Schema::Int]));
+        assert_eq!(
+            readings::a_meet_of_sequences_as_one(&[one, two], &[]),
+            Some(Schema::Nothing)
+        );
+    }
+
+    /// A fixed shape is kept under a bound its one length meets and is nothing under
+    /// one it misses, and a union branch of another container leaves the meet unread.
+    #[test]
+    fn a_fixed_shape_is_read_under_the_bounds_its_length_meets() {
+        let any = || list_of(Schema::Anything(Spelling::Any));
+        let pair = Schema::list(SeqShape::fixed([Schema::Int, Schema::Int]));
+        let read = |bound: Constraint| {
+            readings::a_meet_of_sequences_as_one(
+                &[pair.clone(), Schema::refine(any(), vec![bound.clone()])],
+                &[],
+            )
+        };
+        let kept = |bound: Constraint| Some(Schema::refine(pair.clone(), vec![bound]));
+        for bound in [
+            Constraint::MinLen(2),
+            Constraint::MaxLen(2),
+            Constraint::MaxLen(3),
+        ] {
+            assert_eq!(read(bound.clone()), kept(bound));
+        }
+        for bound in [Constraint::MinLen(3), Constraint::MaxLen(1)] {
+            assert_eq!(read(bound), Some(Schema::Nothing));
+        }
+        let tuples = Schema::tuple(SeqShape::homogeneous(Schema::Str));
+        let members = [
+            list_of(Schema::Str),
+            at_least(any(), 1),
+            Schema::union([tuples, list_of(Schema::Int)]),
+        ];
+        assert_eq!(readings::a_meet_of_sequences_as_one(&members, &[]), None);
+    }
+
+    /// A list of at least one word, as a translation from JSON
+    /// Schema writes it, is refuted below a list of records with a required key, on
+    /// `["x"]`, and is still proved below the list of words it refines.
+    #[test]
+    fn a_list_of_at_least_one_word_is_refuted_below_a_list_of_records() {
+        let (json, defs) = json();
+        let empty = Schema::list(SeqShape::fixed([]));
+        let record = Schema::meet([
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: json.clone(),
+                }],
+            ),
+            Schema::record(vec![field("t", Schema::Str, true)], Openness::Closed),
+        ]);
+        let words = Schema::meet([
+            list_of(json.clone()),
+            Schema::union([empty.clone(), list_of(Schema::Str)]),
+            at_least(list_of(Schema::Anything(Spelling::Any)), 1),
+        ]);
+        let records = Schema::meet([list_of(json), Schema::union([empty, list_of(record)])]);
+        assert_eq!(
+            words.subtype_relation_under(&records, &NoLeafRelations, &defs),
+            Relation::Fails
+        );
+        assert_eq!(
+            words.subtype_relation_under(
+                &at_least(list_of(Schema::Str), 1),
+                &NoLeafRelations,
+                &defs
+            ),
+            Relation::Holds
+        );
+    }
+}

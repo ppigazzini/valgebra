@@ -574,7 +574,7 @@ fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -
 /// drawn from.
 ///
 /// A rule asks a pair of the children of the pair it was asked, or unfolds a
-/// reference into the definition `subterms` holds, except in five places. The
+/// reference into the definition `subterms` holds, except in six places. The
 /// product rule meets a component with the complement of a branch's
 /// component, one conjunct per narrowing, so what it asks is a meet of
 /// subterms and of their complements. The union rule asks the subject against
@@ -586,17 +586,23 @@ fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -
 /// and the inner set below the bottom, and as the inner set below the
 /// subject's complement. A sequence or a mapping below a union asks its item
 /// against the union of what the branches hold at one position, which are
-/// children of the branches ([`readings::one_item_outside`]). And a complement or a
-/// meet folds to a bound, the top or the bottom. Each of the five is a subset or a
-/// sign of the subterms, so the closure is finite because they are.
+/// children of the branches ([`readings::one_item_outside`]). A meet of
+/// sequences is asked as the one sequence of its items' meets
+/// ([`one_sequence_of`]). And a complement or a meet folds to a bound, the top
+/// or the bottom. Each of the six is a subset, a sign or a meet of the
+/// subterms, so the closure is finite because they are.
 fn in_closure(term: &Schema, subterms: &[Schema]) -> bool {
     let signed = |t: &Schema| {
         subterms.contains(t) || matches!(t, Schema::Complement(inner) if subterms.contains(inner))
     };
+    let built = |t: &Schema| match t {
+        Schema::Union(members) => members.iter().all(|m| one_sequence_of(m, subterms)),
+        t => one_sequence_of(t, subterms),
+    };
     match term {
         _ if signed(term) => true,
         Schema::Nothing | Schema::Anything(_) => true,
-        Schema::Intersection(members) => members.iter().all(signed),
+        Schema::Intersection(members) => members.iter().all(|m| signed(m) || built(m)),
         Schema::Union(members) => {
             members.iter().all(|member| subterms.contains(member))
                 || subterms.iter().any(|union| match union {
@@ -606,9 +612,43 @@ fn in_closure(term: &Schema, subterms: &[Schema]) -> bool {
                     }
                     _ => false,
                 })
+                || built(term)
         }
-        _ => false,
+        _ => built(term),
     }
+}
+
+/// Whether `term` is a sequence a meet of sequences among `subterms` is asked as
+/// ([`readings::a_meet_of_sequences_as_one`]): at each position the meet of the
+/// items the subterms hold there, under bounds the subterms carry.
+///
+/// The product step of [LN26, §5.1], which pushes the intersection below the
+/// constructor and argues that "only a finite number of such new types are
+/// created": an item is a meet of signed subterms, a bound one a subterm
+/// carries, and finitely many of each exist.
+fn one_sequence_of(term: &Schema, subterms: &[Schema]) -> bool {
+    let signed = |t: &Schema| {
+        subterms.contains(t) || matches!(t, Schema::Complement(inner) if subterms.contains(inner))
+    };
+    let (shape, bounds) = match term {
+        Schema::Seq { shape, .. } => (shape, &[][..]),
+        Schema::Refine { base, constraints } => match &**base {
+            Schema::Seq { shape, .. } => (shape, &constraints[..]),
+            _ => return false,
+        },
+        _ => return false,
+    };
+    let item = |item: &Schema| match item {
+        Schema::Nothing | Schema::Anything(_) => true,
+        Schema::Intersection(members) => members.iter().all(signed),
+        item => signed(item),
+    };
+    shape.prefix.iter().chain(shape.tail.as_deref()).all(item)
+        && bounds.iter().all(|bound| {
+            subterms.iter().any(
+                |t| matches!(t, Schema::Refine { constraints, .. } if constraints.contains(bound)),
+            )
+        })
 }
 
 /// A union's members at every depth: each nested union itself, which a rule
@@ -1033,6 +1073,81 @@ fn a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure() 
     let (outside, built) = outside_the_closure(&Schema::NoneType, &grouped, &bools);
     assert!(outside.is_empty(), "asked outside the closure: {outside:?}");
     assert!(built >= 1, "the union rule built no goal");
+}
+
+// THEORY: regularity-bounds-the-goals
+/// A meet of sequences asked as the one sequence of its items' meets asks goals
+/// inside the closure, in each of the three forms the reading builds: the one
+/// sequence alone, a union of them where a union of sequences is distributed,
+/// and a meet of one with a member no sequence is.
+///
+/// The subjects are the meets a translation from JSON Schema writes for
+/// `items` beside `minItems`, below a list of records with a required key: the
+/// pair the reading was written for, which the rules and the set
+/// representation decline as written. Each row is also held to have built a
+/// goal, which keeps it from passing on a pair that never reached the reading.
+#[test]
+fn a_meet_of_sequences_is_asked_as_one_sequence_inside_the_closure() {
+    use crate::ir::{MapClause, Spelling};
+    let json = Schema::Ref(DefIx::new(0));
+    let a_map = || {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: json.clone(),
+            }],
+        )
+    };
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        Schema::Bool,
+        Schema::Int,
+        Schema::Float,
+        Schema::Str,
+        list_of(json.clone()),
+        a_map(),
+    ])];
+    let empty = || Schema::list(SeqShape::fixed([]));
+    let at_least_one = Schema::refine(
+        list_of(Schema::Anything(Spelling::Any)),
+        vec![Constraint::MinLen(1)],
+    );
+    let record = Schema::meet([
+        a_map(),
+        Schema::record(
+            vec![Field {
+                name: "t".into(),
+                schema: Schema::Str,
+                required: true,
+            }],
+            Openness::Closed,
+        ),
+    ]);
+    let records = Schema::meet([
+        list_of(json.clone()),
+        Schema::union([empty(), list_of(record)]),
+    ]);
+    let one = Schema::meet([
+        list_of(json.clone()),
+        list_of(Schema::Str),
+        at_least_one.clone(),
+    ]);
+    let a_union = Schema::meet([
+        list_of(json.clone()),
+        Schema::union([empty(), list_of(Schema::Str), list_of(Schema::Bytes)]),
+    ]);
+    let with_a_member = Schema::meet([
+        list_of(json),
+        Schema::union([empty(), list_of(Schema::Str)]),
+        at_least_one,
+        Schema::Complement(Arc::new(Schema::set(Schema::Int))),
+    ]);
+    for subject in [one, a_union, with_a_member] {
+        let (outside, built) = outside_the_closure(&subject, &records, &defs);
+        assert!(outside.is_empty(), "asked outside the closure: {outside:?}");
+        assert!(built >= 1, "{subject:?} reached no reading that builds");
+    }
 }
 
 /// The same bound, asked of drawn pairs over drawn definitions.

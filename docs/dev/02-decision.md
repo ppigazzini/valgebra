@@ -1923,7 +1923,15 @@ meet of the complements, against any supertype and under an allowance of its
 own (`decided_as_respelled`): `¬(¬X ∪ Y) ⊆ dict` is `X ∩ ¬Y ⊆ dict`, which a
 member of `X` places, and the meet is of the subject's own signed branches.
 `a_complement_is_below_its_complements_pushed_in` holds them with one step to
-spend, over drawn schemas.
+spend, over drawn schemas. A meet of sequences is asked again as the one sequence of
+its items' meet under every bound of the meet (`a_meet_of_sequences_as_one`), the
+canonical array of [HSHP20, §4.2], one union of sequences beside it distributed, a
+branch a bound leaves no value of dropped, and an item a neighbor's union holds
+absorbed: `list[J] & ([] | list[str]) & Annotated[list[Any], MinLen(1)]`, the
+spelling of `minItems` beside the items, is `Annotated[list[str], MinLen(1)]`, which
+the rules read where they decline the meet. The respelling is the one set, so it
+decides both ways, and `a_meet_of_sequences_is_the_one_sequence_it_is_read_as` holds
+the two to it over drawn meets.
 
 **The universe bound reads a union one De Morgan step in, where the region
 walk passes over the member that covers the rest.** The complete walk carries
