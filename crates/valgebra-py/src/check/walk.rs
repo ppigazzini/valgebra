@@ -1121,12 +1121,24 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         return false;
     }
     let chosen = chosen_record(&refused);
-    let mut best: Option<(usize, Vec<Violation>)> = None;
-    // The first branch the walk could not answer for, kept aside. A branch that
-    // ran out of levels, found the value inside itself, or raised inside a
-    // predicate has not said "this value is not a member" -- it has said the
-    // walk stopped -- and its failure sits at the union's own location, so the
-    // progress rule below would fold it into a summary and drop the reason.
+    // The branch whose first failure lies furthest past the union's location,
+    // in levels of the value. A path longer than the location's goes at least
+    // one level past it, since a key's mark, which is no level, follows its
+    // key. How far is counted only between two branches that both went past:
+    // a union with one such branch reads no path, so a refusal under a union at
+    // every level is not counted at each of them.
+    let mut best: Option<Vec<Violation>> = None;
+    let progress = |branch: &[Violation]| {
+        branch
+            .first()
+            .and_then(|v| v.path.get(base_depth..))
+            .map_or(0, PathSegment::steps)
+    };
+    // The first branch the walk could not answer for at the union's own
+    // location, kept aside. A branch that ran out of levels, found the value
+    // inside itself, or raised inside a predicate has not said "this value is
+    // not a member" -- it has said the walk stopped -- and the progress rule
+    // would fold a failure at the location into a summary and drop the reason.
     let mut declined: Option<Vec<Violation>> = None;
     // Each branch explained is one more of the union's, armed as the deciding
     // scan arms it ([`again`]).
@@ -1157,22 +1169,22 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
                 branch
             }
         };
-        let first = branch.first();
-        let progress = first
-            .map_or(base_depth, |v| PathSegment::steps(&v.path))
-            .saturating_sub(base_depth);
-        if declined.is_none() && first.is_some_and(|v| walk_declined(v.code)) {
-            declined = Some(branch.clone());
+        let Some(first) = branch.first() else {
+            continue;
+        };
+        if first.path.len() <= base_depth {
+            if declined.is_none() && walk_declined(first.code) {
+                declined = Some(branch);
+            }
+            continue;
         }
-        // Strictly greater keeps the earliest branch on a tie.
-        let replace = best
-            .as_ref()
-            .is_none_or(|(best_progress, _)| progress > *best_progress);
-        if replace {
-            best = Some((progress, branch));
-        }
+        // Strictly greater replaces, which keeps the earliest branch on a tie.
+        best = match best {
+            Some(held) if progress(&held) >= progress(&branch) => Some(held),
+            _ => Some(branch),
+        };
     }
-    if let Some(branch) = declined.filter(|_| best.as_ref().is_none_or(|(p, _)| *p == 0)) {
+    if let Some(branch) = declined.filter(|_| best.is_none()) {
         let reported = if ctx.mode.stops_at_first() {
             1
         } else {
@@ -1184,7 +1196,7 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     match best {
         // A fail-fast walk recorded one violation, the one the full walk leads
         // with; a full walk recorded every one, and all are reported.
-        Some((progress, branch)) if progress > 0 => {
+        Some(branch) => {
             let reported = if ctx.mode.stops_at_first() {
                 1
             } else {
@@ -1192,7 +1204,7 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
             };
             frame.out.extend(branch.into_iter().take(reported));
         }
-        _ => refused_as_a_union(members.iter(), value, frame),
+        None => refused_as_a_union(members.iter(), value, frame),
     }
     false
 }

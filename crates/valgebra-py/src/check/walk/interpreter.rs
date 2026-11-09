@@ -2519,11 +2519,23 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         let nested = PyList::new(py, [PyList::new(py, ["a"]).expect("a list")])
             .expect("a list")
             .into_any();
-        for branches in [vec![ints.clone(), lists.clone()], vec![lists, ints]] {
+        for branches in [vec![ints.clone(), lists.clone()], vec![lists, ints.clone()]] {
             let union = Schema::Union(branches.into());
             let (ok, violations) = explain(py, &union, &nested, &[], &[]);
             assert!(!ok);
             assert_eq!(violations[0].location(), "[0][0]", "{union:?}");
+        }
+        // Two branches failing equally deep: the earlier one is reported.
+        let bytes = Schema::list(SeqShape::homogeneous(Schema::Bytes));
+        let one_float = PyList::new(py, [1.5]).expect("a list").into_any();
+        for (branches, expected) in [
+            (vec![ints.clone(), bytes.clone()], Schema::Int.expected()),
+            (vec![bytes, ints], Schema::Bytes.expected()),
+        ] {
+            let union = Schema::Union(branches.into());
+            let (ok, violations) = explain(py, &union, &one_float, &[], &[]);
+            assert!(!ok);
+            assert_eq!(violations[0].expected, expected, "{union:?}");
         }
 
         // No branch makes any progress: a single union error, not two flat
@@ -5135,6 +5147,20 @@ fn a_union_reports_a_branch_whose_walk_stopped_rather_than_a_summary() {
             violations[0].expected,
             "a predicate that does not raise (raised ValueError: no)"
         );
+        // A branch that descends is reported over one that stopped where the
+        // union stands: it is the one the value came closer to.
+        let raising = Schema::Refine {
+            base: Arc::new(Schema::ANYTHING),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let schema = Schema::Union(vec![raising, ints].into());
+        let value = PyList::new(py, ["s"]).expect("a list").into_any();
+        let (ok, violations) = explain(py, &schema, &value, &pool, &[]);
+        assert!(!ok);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].location(), "[0]");
+        assert_eq!(violations[0].expected, Schema::Int.expected());
     });
 }
 

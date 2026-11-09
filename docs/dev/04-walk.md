@@ -197,6 +197,14 @@ its walk records -- with a tie keeping the earliest branch so the choice is
 deterministic. When no branch makes progress — every branch a flat type mismatch
 — it falls back to one union error.
 
+**How far is counted only between two branches that went past the location.** A
+first failure whose path is longer than the union's location goes at least one
+level past it, since a key's `Entered` mark follows the key, so a union with one
+such branch reads no path and moves that branch into its report, as it moves the
+branch it keeps for stopping. Counted, or copied, at every union, a refusal under
+a union at each of its levels -- `int | list[T]` refused at the depth bound --
+would read its path once a level, the square of its depth.
+
 **The union is decided before it is explained.** `explain_union` decides every
 branch before it explains any (`refused_branches`) -- a record branch by its own
 deciding pass, which keeps where it stopped, and any other on the fast path --
