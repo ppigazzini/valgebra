@@ -115,14 +115,16 @@ is where they are applied.
 
 cargo-mutants <https://mutants.rs/>; cargo-llvm-cov; cargo-fuzz; hypothesis;
 proptest; cachegrind
-<https://valgrind.org/docs/manual/cg-manual.html>; cargo-deny; zizmor.
+<https://valgrind.org/docs/manual/cg-manual.html>; cargo-deny; zizmor;
+gh-actions-lock <https://github.com/github/gh-actions-lock>.
 
 ## The toolchain baseline
 
 Read the pins from the files that own them, not from prose: `Cargo.toml` for the
 Rust edition and MSRV, `pyproject.toml` for the supported Python range and the
 tools' floors, `uv.lock` for the Python tools' versions, `.github/workflows/`
-and `.github/actions/` for the Rust tools, zizmor, uv and maturin, and
+and `.github/actions/` for the Rust tools, zizmor, uv and maturin,
+`.github/workflows/actions.lock` for the commit each action runs, and
 `.github/workflows/ci.yml` for the interpreter matrix and the nightly the fuzz
 lane uses. A pin quoted in prose goes stale the
 release it moves.

@@ -111,6 +111,11 @@ NEEDS_A_RUNNER = {
     # would uninstall what the developer built.
     "Build the fuzz targets": "needs the pinned nightly toolchain and cargo-fuzz",
     "Test the fuzz harness": "needs the pinned nightly toolchain",
+    "Install the lockfile checker": "installs an extension into the caller's gh",
+    "Verify the workflow lockfile": (
+        "needs that extension and a token for the GitHub API; after a change to "
+        "a `uses:`, `gh actions-lock` writes the entry and `--verify` reads it"
+    ),
 }
 
 #: A step only a runner can run, and the part of it a developer can.

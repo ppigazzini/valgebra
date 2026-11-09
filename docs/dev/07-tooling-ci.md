@@ -1318,11 +1318,28 @@ each checks the repository out into `tree/`, for `tests/` alone, so the local
 action's files are not where it looks for them, and two of them install uv
 before that checkout.
 
-**A toolchain comes from rustup, not from an action.** A third-party action is
-pinned by hash with a comment naming its tag, and `zizmor` checks that the tag
-still names the hash. A toolchain action that publishes one moving tag moves it
-with every upstream change, so the pin drifts from its comment and the audit
-fails every lane behind it until somebody re-pins. Every lane installs through
+**An action runs the commit the lockfile names.** Every `uses:` names a release
+tag, and `.github/workflows/actions.lock`, which `gh actions-lock` writes, names
+the commit each tag resolved to when it was locked, an action another action
+calls included: `actions/setup-python` inside the PyPI publish action,
+`actions/upload-artifact` inside the Pages upload. The runner runs that commit,
+and refuses a commit only a fork carries or a repository that is no longer the
+one locked under its name. The `actions lock` job reads the file against the
+workflows and upstream with `gh actions-lock --verify`, so a `uses:` with no
+entry, or a tag moved off its commit, fails there. After a change to a `uses:`,
+`gh actions-lock` writes the entry; Dependabot writes it in its own pull request
+for an action a workflow names, and a pull request that leaves an entry stale
+reads red in that job until `gh actions-lock` runs on its branch. Nobody edits
+the file by hand. `zizmor` reads it too and takes a tag it locks as pinned. The
+local `setup-uv` action is no workflow, so its two `uses:` carry an ignore:
+every workflow that calls it locks the action it runs. The PyPI publish action
+writes a container action into the workspace at run time, and a `./` path is
+never locked; that one calls no action.
+
+**A toolchain comes from rustup, not from an action.** A toolchain action that
+publishes one moving tag moves it with every upstream change, so the commit
+locked for it falls off the tag and the lockfile check fails every lane behind
+it until somebody relocks. Every lane installs through
 `.github/actions/setup-rust` instead, which runs `rustup toolchain install` and
 `rustup default` itself -- the runner carries rustup -- retrying, a few times
 and on the release server's checksum failure alone, while that server

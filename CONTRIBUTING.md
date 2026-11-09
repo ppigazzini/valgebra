@@ -162,6 +162,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | supply chain (Rust) | `deny.toml` | `cargo deny check` |
 | supply chain (Python) | `uv.lock` | `uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt && uvx pip-audit -r requirements-audit.txt` |
 | workflow security | `.github/` | `uvx zizmor .github/` |
+| the commit each action runs | `.github/workflows/actions.lock` | `gh actions-lock --verify` |
 | the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --no-sync --group bench maturin build --release --pgo --out dist` |
 
 The first two mutation rows take a skip list; `docs/dev/07-tooling-ci.md` says
@@ -177,7 +178,8 @@ on the loader path — the binding-coverage job in `.github/workflows/ci.yml` sh
 the two lines that set it. The lint row is the two workspace passes; the
 `rust lint` job adds a third, three restriction lints over the library targets.
 The `pip audit` and `zizmor` jobs pin the tool versions their `uvx` commands
-run, and a local `uvx` without a pin takes the latest.
+run, and a local `uvx` without a pin takes the latest. The `actions lock` job
+installs the `gh` extension at the release it names.
 
 `tests/test_contract_inventory.py` holds this table to the tree in both
 directions: a gate script with no row fails, and a row naming a script or a

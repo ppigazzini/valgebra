@@ -4137,11 +4137,9 @@ PLANTS = (
             "      - uses: $/.github/actions/setup-rust\n"
             "        with:\n"
             "          toolchain: stable\n"
-            "      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0"
-            " # v2.9.3\n"
+            "      - uses: Swatinem/rust-cache@v2.9.3\n"
             "      # The default feature set",
-            "      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0"
-            " # v2.9.3\n"
+            "      - uses: Swatinem/rust-cache@v2.9.3\n"
             "      - uses: $/.github/actions/setup-rust\n"
             "        with:\n"
             "          toolchain: stable\n"

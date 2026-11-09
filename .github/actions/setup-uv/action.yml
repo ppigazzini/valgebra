@@ -59,7 +59,7 @@ runs:
         UV_VERSION: ${{ inputs.uv-version }}
       run: echo "PYO3_ENVIRONMENT_SIGNATURE=uv-$UV_VERSION" >> "$GITHUB_ENV" # zizmor: ignore[github-env]
     - id: install
-      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      uses: astral-sh/setup-uv@v10.3.3 # zizmor: ignore[unpinned-uses]
       continue-on-error: true
       with:
         version: ${{ inputs.uv-version }}
@@ -67,7 +67,7 @@ runs:
         enable-cache: ${{ inputs.enable-cache }}
     - name: Retry the uv install
       if: steps.install.outcome == 'failure'
-      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      uses: astral-sh/setup-uv@v10.3.3 # zizmor: ignore[unpinned-uses]
       with:
         version: ${{ inputs.uv-version }}
         python-version: ${{ inputs.python-version }}
