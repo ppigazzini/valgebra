@@ -13,64 +13,51 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a class's kind reads a builtin its order names
-- fix: a required field is paid for by the entry its name finds
-- fix: a build pays for a step's table by what it holds
-- fix: a named tuple holds the positions its class stores
-- feat: a sequence or a mapping of one item outside every branch refutes
-- feat: a goal the rules decline is read by the sets, past what stopped the pair
-- feat: a supertype proved empty is the bottom
-- feat: a table of constants beside what holds them is the table
-- feat: a meet is read as a member below all the others
-- fix: a build pays for a product of two automata by what it holds
-- feat: the complement of a set proved empty is every value
-- feat: a refinement only the sets read holds a value a refutation stands on
-- feat: a set of one member and a mapping of its required fields hold a value
-- feat: a mapping's own lengths refuse a length its subject holds
-- feat: a position or a clause holding no value is read as what it leaves
-- feat: two sequences meet in nothing at a position each of their values has
-- feat: a plain value of a kind is outside a table of another exact type
-- feat: a float refinement and a float step over the integers hold a value
-- feat: a class holds no boolean but through the order of bool
-- feat: a mapping's clauses are read beside a table and over a language of keys
-- fix: a refinement of a refinement and equal constants past 64 bits are one
-- fix: a refusal names a refined branch's bounds and each clause reading a key
-- fix: a dict's entries are read from its storage on PyPy
-- feat: a meet of refinements of one base is read as the one they are
-- feat: a sequence's length bound names the positions its values hold
-- feat: a set's own lengths refuse a length its subject holds
-- feat: two attribute records share no value where a shared attribute holds none
-- feat: the complement of a table holds a plain value of another kind
-- feat: a field's name is read as a word of a clause narrowed by a language
-- fix: each key of a parsed object is its own value to the walk's memo
-- fix: a value sharing a sub-object answers as its copy past the walk's bounds
-- fix: the module loads in the main interpreter of a process, once
-- fix: what a marker or a class yields is read within the node bound
-- fix: an allocation Python refuses inside a call raises MemoryError
-- feat: a key or an optional field holding no value carries no entry
-- feat: a clause's key split between clauses of a supertype is covered
-- feat: a meet supertype and a union subject are read a member at a time
-- feat: a mapping of words under a length counting each is their record
-- feat: a supertype's clause of constants its subject never spells is beside it
-- feat: a pair asked through a complement is read by the parts it turns to
-- feat: a word's length range is outside a table holding fewer constants
-- feat: a class reached again inside a type alias is tied by the alias
-- fix: a failure inside a key ends its path at the key
-- fix: a key past the digit limit is its hexadecimal text in a path
-- fix: a signal from an element's repr raises out of the message
-- fix: a recursion with an arm narrowed past words is refused as a map key
-- fix: a class applied past its type parameters is refused
-- fix: an annotation folds a recursion and its complement as its combinator does
-- fix: a refined record or list display prints as the validator it builds
-- fix: a pattern holding a lone surrogate is refused by its surrogate
-- feat: a meet of a kind with members of that kind is read as those members
-- feat: zero is a multiple of an exact Fraction or Decimal step
-- feat: the last asking reads a union past a member it cannot settle
-- fix: an exact Fraction or Decimal pools by value
-- feat: a bound over every value is read within the rest of its meet
-- feat: a bound over every value met with str is a map key
-
 -->
+
+## [0.0.25] - 2026-11-09
+
+A release of answers, with thirty-three additions and no node. Thirty-one of them read a
+pair 0.0.24 left `undecided`, from a meet of a kind with members of that kind and a bound
+written over every value read within the rest of its meet to a mapping's clauses beside a
+table, and two build what 0.0.24 refused: a class reached again through a `type` alias,
+and that bound met with `str` as a map key.
+Over the 60,000 pairs each generation of a fuzzer draws, the relations give 1,766 answers
+more than 0.0.24 on the second and 698 more on the first, and the JSON Schema containment
+suite, read through `valgebra-jsonschema`, proves 107 more of its labeled inclusions and
+refutes 145 more, with no proof against a label. One answer 0.0.24 gave on those pairs
+reads `undecided`: the law `A <= (A & ~B) | (A & B)` over a union of float refinements
+met with the JSON values, which 0.0.24 proved by not reading that a float refinement holds
+a value, and which the query's budget does not reach once it does. Seven entries are
+security fixes, and their advisories go out with the release.
+
+Against 0.0.24 built here from its tag, on CPython 3.15, the instruction gate's workloads
+count from 78.31% fewer instructions, a list of refined elements, to 1.01% more, a map
+keyed by a language, each within its ceiling, and the whole steps asked of the sets count
+10.54% fewer. The profiled wheel counts the one `int` 11.91% fewer, a wide record 7.57%,
+the error report 4.18% and the JSON document 1.73%, and the build 0.25% more. On the
+profiled wheels of CPython 3.11 through 3.15 a validator of one scalar kind is its type
+test and counts 19% to 22% fewer, for a load and a comparison every other call pays at
+its entry: two instructions, `union` 0.7% to 0.9% and `literal` 0.4% to 0.5%. A list of
+refined scalars counts 66% to 75% fewer. A mapping counts twenty instructions more a
+call, 0.2%, where a list of records reads its node once and counts 4.7% fewer, and a
+relation between two built validators 0.2% to 0.4% more. A list nested twenty-five deep
+counts 0.62% more on 3.13 alone, and reads 3.0% fewer cycles. The JSON shapes that count
+higher do so at one size of the environment and not at the other, which is an
+allocator's. On the free-threaded 3.14 and 3.15 a count of a shape of a few thousand
+instructions does not repeat, and the two that read higher twice, a relation and a
+mapping, read within 2% in cycles. A refusal reported over a value nested twenty
+thousand deep counts 69% fewer instructions and takes 24 us where 0.0.24 takes 64 on
+CPython 3.15: a union counts how far its branches went only between two that went past
+its location, and moves the branch it reports where 0.0.24 copied it at every level.
+
+One cost is named. A relation the set representation declines reads more before it
+declines: of the 840,000 calls the fuzzer's second generation asks, on profiled CPython
+3.14 wheels built here, 295 take five times 0.0.24's time or more and 5 ms or more, up to
+45 ms, nearly all a decline 0.0.24 also gave, and the generation takes 24% more time in
+all where the first takes 14% less; that time is spent in the readings the additions
+name.
+
 
 ### Added
 
@@ -4783,7 +4770,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.24...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.25...HEAD
+[0.0.25]: https://github.com/ppigazzini/valgebra/compare/v0.0.24...v0.0.25
 [0.0.24]: https://github.com/ppigazzini/valgebra/compare/v0.0.23...v0.0.24
 [0.0.23]: https://github.com/ppigazzini/valgebra/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/ppigazzini/valgebra/compare/v0.0.21...v0.0.22
