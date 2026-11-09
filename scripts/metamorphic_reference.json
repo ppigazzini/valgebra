@@ -85,7 +85,7 @@
   "~int&~str": true,
   "~~int": true
  },
- "commit": "6bf7e7245091f4ca7e553eab7412428045b26048",
+ "commit": "f569cd35ab20127a5720981019cdea08236803ea",
  "decisions": {
   "(int|str)&(str|none) <= (int|str)&(str|none)": "s",
   "(int|str)&(str|none) <= (int|str)&~str": "n",
@@ -195,9 +195,9 @@
   "(int|str)&~str <= ~int": "n",
   "(int|str)&~str <= ~int&~str": "n",
   "(int|str)&~str <= ~~int": "s",
-  "a-dict-of-literal-keys.left <= a-dict-of-literal-keys.right": "u",
+  "a-dict-of-literal-keys.left <= a-dict-of-literal-keys.right": "n",
   "a-step-table-beneath-a-bound.left <= a-step-table-beneath-a-bound.right": "u",
-  "a-word-table-beneath-lists.left <= a-word-table-beneath-lists.right": "u",
+  "a-word-table-beneath-lists.left <= a-word-table-beneath-lists.right": "n",
   "anything <= (int|str)&(str|none)": "n",
   "anything <= (int|str)&~str": "n",
   "anything <= anything": "s",
@@ -252,7 +252,7 @@
   "anything <= ~int": "n",
   "anything <= ~int&~str": "n",
   "anything <= ~~int": "n",
-  "below-a-recursion-of-no-value.left <= below-a-recursion-of-no-value.right": "u",
+  "below-a-recursion-of-no-value.left <= below-a-recursion-of-no-value.right": "n",
   "bool <= (int|str)&(str|none)": "n",
   "bool <= (int|str)&~str": "s",
   "bool <= anything": "s",
@@ -361,7 +361,7 @@
   "bytes <= ~int": "s",
   "bytes <= ~int&~str": "s",
   "bytes <= ~~int": "n",
-  "complement-of-no-value.left <= complement-of-no-value.right": "u",
+  "complement-of-no-value.left <= complement-of-no-value.right": "n",
   "dict[str,int] <= (int|str)&(str|none)": "n",
   "dict[str,int] <= (int|str)&~str": "n",
   "dict[str,int] <= anything": "s",
@@ -2526,7 +2526,7 @@
   "set[int] <= ~int": "s",
   "set[int] <= ~int&~str": "s",
   "set[int] <= ~~int": "n",
-  "sets-of-one-literal.left <= sets-of-one-literal.right": "u",
+  "sets-of-one-literal.left <= sets-of-one-literal.right": "n",
   "str <= (int|str)&(str|none)": "s",
   "str <= (int|str)&~str": "n",
   "str <= anything": "s",
@@ -6435,5 +6435,5 @@
   "~~int @ tuple-1-2": "n",
   "~~int @ tuple-1-a": "n"
  },
- "version": "0.0.24"
+ "version": "0.0.25"
 }

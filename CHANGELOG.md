@@ -58,6 +58,21 @@ declines: of the 840,000 calls the fuzzer's second generation asks, on profiled 
 all where the first takes 14% less; that time is spent in the readings the additions
 name.
 
+Read on the wheels PyPI serves, two environments of each release on each of CPython 3.11
+through 3.15, on an AMD Ryzen 7 PRO 7840U under WSL2, the shapes that count fewer
+instructions take less time in both: a list of refined scalars 41% to 73%, building a
+union 68%, one scalar 18% to 23% on 3.12 through 3.15, a membership test 17% to 24%,
+refined fields 14% to 19% and a list of records 7% to 11%. Twenty-one shapes moved by 5%
+or more at the instructions 0.0.24's wheel counts, within 0.6%, which is where each build
+placed its loop, and none is charged to a change. Slower: on 3.15 `list[bool]` 31%,
+`{str: int, int: bool}` 9% and `list[int | str]` 8%; on 3.14 `list[str]` 16%; on 3.13
+`list[float]` 11%, `list[int | str]` 10% and a list nested twenty-five deep 7%; on 3.12
+`list[None]` 17%; on 3.11 `list[float]` 16%, the list nested twenty-five deep 6% and
+`list[int]` refusing a JSON document 6%. Faster: on 3.15 `list[str]` 15%, `list[None]`
+20% and ten thousand integers 26%; on 3.14 `list[None]` 24%, `list[int | None]` 12% and a
+relation between two lists 9%; on 3.12 `list[float]` 12% and `list[int | str]` 9%; on
+3.11 `list[bool]` 10% and `list[int | str]` 9%.
+
 
 ### Added
 
