@@ -2855,14 +2855,15 @@ PLANTS = (
         trips=("test_every_marker_names_a_declared_bound",),
     ),
     Plant(
-        # A bound no name pattern reads, its test's marker dropped: the summary
-        # cut is a constant like any other, and a scan by name never saw it.
+        # A bound only a Python test drives, its marker dropped: a binding
+        # constant has no name Python reaches, so the marker is the one place
+        # the test names it, and a scan of identifiers never sees it.
         "tests/test_bound_ledger.py",
-        ("tests/test_error_contract.py",),
+        ("tests/test_records.py",),
         lambda tree: _edit(
             tree,
-            "tests/test_error_contract.py",
-            f"{BOUND_MARKER}: SUMMARY_CHARS\n",
+            "tests/test_records.py",
+            f"{BOUND_MARKER}: MAX_QUALIFIER_DEPTH\n",
             "",
         ),
         trips=("test_every_declared_bound_is_driven_or_accepted",),

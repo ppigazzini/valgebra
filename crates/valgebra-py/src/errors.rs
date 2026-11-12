@@ -61,8 +61,8 @@ pub(crate) fn refused_memory_is_memory_error<T>(call: impl FnOnce() -> PyResult<
 /// What a message says of an object whose `__repr__` raises.
 pub(crate) const UNREPRESENTABLE: &str = "<unrepresentable>";
 
-/// The characters of a value a summary keeps.
-pub(crate) const SUMMARY_CHARS: usize = 80;
+/// The characters of a value a summary keeps, and of a key a location writes.
+pub(crate) use valgebra_core::SUMMARY_CHARS;
 
 /// A bounded renderer for containers, built once per interpreter.
 ///

@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - feat: every sequence of a meet is read at once
 - feat: a meet of sequences is read as the one sequence of its items' meet
+- fix: a long key is cut where a message writes its location
 
 -->
 
@@ -31,6 +32,13 @@ answer of its own, or a repair to a change not yet released.
   MinLen(1)], list[rec])` is `subset` of `nothing`, where it stayed `undecided`: each pair of its
   members holds a value, and the three hold none. It is the shape `valgebra-jsonschema` writes for
   `minItems` beside two item types.
+
+### Fixed
+
+- **A long key is cut where a message writes its location.** A string key past eighty
+  characters is written in `str(error)` and in each item's `message` as a subscript of its first
+  eighty, `['kkk...]`, and the `path` keeps it whole. A JSON document holding one key of a
+  hundred thousand characters over a thousand failures built a 100 MB message at the raise.
 
 ## [0.0.25] - 2026-11-09
 

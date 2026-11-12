@@ -52,7 +52,7 @@ pub use ir::{
 };
 pub use kind::Kind;
 pub use verdict::{Relation, Verdict};
-pub use violation::{Violation, quoted};
+pub use violation::{SUMMARY_CHARS, Violation, quoted};
 
 /// Fresh tokens for the transient [`Schema::SelfRef`] marker, so no two
 /// `recursive` definitions ever resolve each other's self-references.

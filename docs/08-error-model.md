@@ -43,7 +43,12 @@ A `ValidationError` exposes:
     bare name — empty, or holding a `.`, a bracket, whitespace or a control
     character — is written as a subscript of its Python literal, `['a.b']`, so
     no two string or integer keys read alike and the message stays on one
-    line. A key of any other type is written as its `repr`, and reads as the
+    line. A string key past eighty characters is written as a subscript of its
+    first eighty, quoted, and `...` where the quote would close, as a value
+    summary is cut: `['kkk...]`. A document's key is written into the message
+    of every failure under it, so written whole the report would grow as the
+    key's length times the failures' count; the `path` keeps the key whole. A
+    key of any other type is written as its `repr`, and reads as the
     string key with that text. A place inside a key follows the key and `,
     key`: `('x',), key[0]` is position 0 of the key, and `('x',)[0]` position 0
     of its value.

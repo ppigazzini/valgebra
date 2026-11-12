@@ -369,6 +369,25 @@ def test_a_message_names_each_key_on_one_line() -> None:
         assert "\n" not in info.value.message
 
 
+def test_a_long_key_is_cut_in_every_message_and_kept_whole_in_the_path() -> None:
+    """A key past eighty characters is written as its head in a message.
+
+    A document's key is written into the message of every failure under it, so
+    written whole the report is the key's length times the failures' count:
+    quadratic in one JSON document. The path keeps the key whole, so it still
+    indexes the value.
+    """
+    key = "k" * 10_000
+    document = json.dumps({key: ["x"] * 1_000})
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[str, list[int]]).validate_json(document)
+    error = info.value
+    assert len(str(error)) < 200_000
+    assert error.errors[0]["path"] == (key, 0)
+    assert str(error.errors[1]["message"]).startswith(f"at ['{'k' * 80}...][1]: ")
+    assert json.loads(document)[key][1] == "x"
+
+
 def test_the_error_model_is_built_when_it_is_asked_for() -> None:
     """A caller that logs `str(error)` should not pay for the whole model.
 

@@ -578,6 +578,43 @@ fn a_key_that_is_not_a_bare_name_is_quoted_in_the_location() {
     assert_eq!(at(vec![key("user-id"), key("é")]), "user-id.é");
 }
 
+/// A key past the summary's bound is written as its head, quoted, and `...` where
+/// the quote would close; one at the bound is written whole, bare or quoted.
+#[test]
+fn a_key_past_the_summary_bound_is_cut_in_the_location() {
+    use crate::SUMMARY_CHARS;
+    let at = |path| {
+        Violation {
+            code: "x",
+            path,
+            expected: String::new(),
+            value_summary: String::new(),
+        }
+        .location()
+    };
+    let key = |text: &str| PathSegment::Key(text.into());
+    let at_the_bound = "k".repeat(SUMMARY_CHARS);
+    assert_eq!(
+        at(vec![key("a"), key(&at_the_bound)]),
+        format!("a.{at_the_bound}")
+    );
+    let past = format!("{at_the_bound}k");
+    assert_eq!(
+        at(vec![key("a"), key(&past), PathSegment::Index(0)]),
+        format!("a['{at_the_bound}...][0]")
+    );
+    // Characters, not bytes: eighty two-byte characters are written whole.
+    let wide = "é".repeat(SUMMARY_CHARS);
+    assert_eq!(at(vec![key(&wide)]), wide);
+    assert_eq!(at(vec![key(&format!("{wide}é"))]), format!("['{wide}...]"));
+    // The quote is chosen over the head, and the head is escaped.
+    let ks = "k".repeat(SUMMARY_CHARS);
+    assert_eq!(
+        at(vec![key(&format!("it's\n{ks}"))]),
+        format!("[\"it's\\n{}...]", &ks[5..])
+    );
+}
+
 /// `quoted` spells text as a Python string literal reading back as the text.
 #[test]
 fn quoted_text_is_a_python_literal_of_itself() {

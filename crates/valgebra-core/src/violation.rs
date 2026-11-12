@@ -3,6 +3,15 @@
 
 use crate::ir::PathSegment;
 
+/// The characters of a value or a key a message writes.
+///
+/// A key a document names can be as long as the document, and a location is
+/// written into the message of every failure under it, so a key written whole
+/// makes the report the product of the key's length and the failures' count.
+/// Cut to this, a location is bounded by the walk's depth instead. The value
+/// summary keeps the same number of characters, for the same reason.
+pub const SUMMARY_CHARS: usize = 80;
+
 /// A validation failure: a value did not belong to a schema's set.
 #[derive(Debug, Clone)]
 pub struct Violation {
@@ -24,7 +33,9 @@ impl Violation {
     /// is written as a subscript of its [`quoted`] text, `name['a.b']`: bare,
     /// the key `"a.b"` would read as the path `a` then `b`, `"[0]"` as the index
     /// 0, and a key holding a newline would break the one-line message across
-    /// two.
+    /// two. A key past [`SUMMARY_CHARS`] characters is written as a subscript of
+    /// its first [`SUMMARY_CHARS`] quoted, and `...` where the quote would
+    /// close, as a value summary is cut; the path keeps the key whole.
     #[must_use]
     pub fn location(&self) -> String {
         let mut out = String::new();
@@ -43,17 +54,26 @@ impl Violation {
         let mut first = true;
         for segment in &self.path {
             match segment {
-                PathSegment::Key(key) if is_bare(key) => {
-                    if !first {
-                        out.write_char('.')?;
+                PathSegment::Key(key) => match cut(key) {
+                    Some(head) => {
+                        out.write_char('[')?;
+                        let quote = quote_for(head);
+                        out.write_char(quote)?;
+                        write_escaped(out, head, quote)?;
+                        out.write_str("...]")?;
                     }
-                    out.write_str(key)?;
-                }
-                PathSegment::Key(key) => {
-                    out.write_char('[')?;
-                    write_quoted(out, key)?;
-                    out.write_char(']')?;
-                }
+                    None if is_bare(key) => {
+                        if !first {
+                            out.write_char('.')?;
+                        }
+                        out.write_str(key)?;
+                    }
+                    None => {
+                        out.write_char('[')?;
+                        write_quoted(out, key)?;
+                        out.write_char(']')?;
+                    }
+                },
                 PathSegment::IntKey(key) => write!(out, "[{key}]")?,
                 PathSegment::BigIntKey(key) => write!(out, "[{key}]")?,
                 PathSegment::Index(index) => write!(out, "[{index}]")?,
@@ -66,6 +86,20 @@ impl Violation {
         }
         Ok(())
     }
+}
+
+/// The first [`SUMMARY_CHARS`] characters of a key longer than that, and `None`
+/// for a key a location writes whole.
+///
+/// A key of no more bytes than the bound has no more characters either, so a
+/// byte read answers the common key without decoding it, and a message writing
+/// a short key twice -- in the summary and in its own line -- decodes it only
+/// where it is read as bare. A longer key is walked one character past the
+/// bound and no further, so a long key costs what a short one does.
+fn cut(key: &str) -> Option<&str> {
+    key.as_bytes().get(SUMMARY_CHARS)?;
+    let (end, _) = key.char_indices().nth(SUMMARY_CHARS)?;
+    key.get(..end)
 }
 
 /// Whether a key reads as itself in a location: it has a character, and none the
@@ -92,12 +126,24 @@ pub fn quoted(text: &str) -> String {
 }
 
 fn write_quoted(out: &mut impl core::fmt::Write, text: &str) -> core::fmt::Result {
-    let quote = if text.contains('\'') && !text.contains('"') {
+    let quote = quote_for(text);
+    out.write_char(quote)?;
+    write_escaped(out, text, quote)?;
+    out.write_char(quote)
+}
+
+/// The quote `repr` writes `text` in: double where it holds a single quote and
+/// no double one, single otherwise.
+fn quote_for(text: &str) -> char {
+    if text.contains('\'') && !text.contains('"') {
         '"'
     } else {
         '\''
-    };
-    out.write_char(quote)?;
+    }
+}
+
+/// `text` between quotes of `quote`, escaped as [`quoted`] escapes it.
+fn write_escaped(out: &mut impl core::fmt::Write, text: &str, quote: char) -> core::fmt::Result {
     for c in text.chars() {
         match c {
             '\\' => out.write_str("\\\\")?,
@@ -117,7 +163,7 @@ fn write_quoted(out: &mut impl core::fmt::Write, text: &str) -> core::fmt::Resul
             c => out.write_char(c)?,
         }
     }
-    out.write_char(quote)
+    Ok(())
 }
 
 impl std::fmt::Display for Violation {
