@@ -41,7 +41,7 @@ smoke has passed; it uploads to no index, and neither the ref nor
 No workflow listens for a tag push. The tag records a release that already
 happened; it is a marker, not a trigger.
 
-Four conditions stand between a dispatch and an upload, and each is a step or a
+Five conditions stand between a dispatch and an upload, and each is a step or a
 job condition in `release.yml` rather than a convention:
 
 - **The smoke must pass.** Each wheel set is loaded on its own platform -- the
@@ -55,14 +55,33 @@ job condition in `release.yml` rather than a convention:
   upload rather than after it.
 - **`confirm_version` must equal the version in the built wheels**, and an empty
   input aborts. A dispatch cannot publish a version the run did not build.
-- **The ref must be `main`.** A dispatch from a topic branch uploads nothing, so
-  the bump commit has to land before step 3 — that is why step 2 says to land it.
+- **The ref must be `main`.** The bump commit has to land before step 3 — that
+  is why step 2 says to land it.
+- **`ci.yml` must have passed on the commit.** The publish job's first step asks
+  the API for a push run of `ci.yml` on the commit that concluded in success, and
+  refuses on a failed, canceled or unfinished run, on none, and on no answer. A
+  run on `github_ci` counts, since the commit, and the copy of `ci.yml` its run
+  read, is the same. So step 3 waits for the push of step 2 to go green.
 - **The version must be absent from the target index.** The check fails closed: a
   200 is a stale re-publish and anything other than a definitive 404 leaves the
   question unanswered and also aborts.
 
-The publish job also runs in a deployment environment named after the index, so a
-release waits for whatever reviewers those environments require.
+The condition on the ref is a line of `release.yml`, and a dispatch from a branch
+runs that branch's copy of the file, which can drop it. The publish job runs in a
+deployment environment named after the index, which the trusted publisher on the
+index names, so each environment admits a deployment from `main` alone: a rule of
+the repository's settings that no branch edits, which holds for every copy of the
+workflow.
+
+```bash
+for env in testpypi pypi; do
+  gh api -X PUT repos/ppigazzini/valgebra/environments/$env \
+    -F 'deployment_branch_policy[protected_branches]=false' \
+    -F 'deployment_branch_policy[custom_branch_policies]=true'
+  gh api -X POST repos/ppigazzini/valgebra/environments/$env/deployment-branch-policies \
+    -f name=main -f type=branch
+done
+```
 
 ## The order
 

@@ -629,22 +629,41 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     # Publishing requires a deliberate dispatch that selects a real index, from
-    # the main branch: a dry-run dispatch (target "none") uploads nothing, no tag
-    # reaches here, and a dispatch from a topic branch cannot publish a commit the
-    # merge gate never blessed.
+    # the main branch: a dry-run dispatch (target "none") uploads nothing and no
+    # tag reaches here. The ref check holds only in the copy of this file that
+    # carries it, since a dispatch from a branch runs that branch's copy; what
+    # holds for every copy is the environments' deployment-branch policy, a
+    # setting of the repository that admits `main` alone.
     if: ${{ inputs.publish_target != 'none' && github.ref == 'refs/heads/main' }}
     # The deployment environment that holds the trusted-publisher binding for
-    # the selected index; create the pypi and testpypi environments in the
-    # repository settings, with required reviewers, before the first release.
+    # the selected index; `docs/dev/09-releasing.md` gives the settings each
+    # environment needs before the first release.
     environment:
       name: ${{ inputs.publish_target }}
       url: ${{ inputs.publish_target == 'pypi' && 'https://pypi.org/p/valgebra' || 'https://test.pypi.org/p/valgebra' }}
     permissions:
-      # OIDC token for trusted publishing, and attestation signing for PEP 740.
+      # The OIDC token trusted publishing exchanges, which also signs the PEP
+      # 740 attestations the publish action makes.
       id-token: write
-      attestations: write
+      # The runs of `ci.yml` on the commit, read by the first step.
+      actions: read
       contents: read
     steps:
+      - name: Refuse a commit the push lanes have not passed
+        # The commit is one `ci.yml` passed: a push run of it on this very
+        # commit concluded in success. A failed, canceled or unfinished run,
+        # none at all, or an API that does not answer refuses. A push run on
+        # `github_ci` counts as one on `main`, since the commit, and with it the
+        # copy of `ci.yml` the run read, is the same.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&status=success&per_page=1" --jq .total_count)"
+          if [ "$passed" -lt 1 ]; then
+            echo "::error::ci.yml has no successful push run on $GITHUB_SHA"; exit 1
+          fi
+          echo "ci.yml passed on $GITHUB_SHA"
       - uses: actions/download-artifact@v8.0.2
         with:
           path: dist
