@@ -16052,6 +16052,93 @@ fn a_set_inside_c_that_holds_a_value_is_refuted_below_the_complement_of_c() {
     );
 }
 
+/// A pair every decider declines is split on a set its supertype negates: `U ⊆ T`
+/// is `U ∧ C ⊆ T` and `U ∧ ¬C ⊆ T` [FCB08, §6.9].
+///
+/// `J ⊆ 1 ∪ (J ∧ ¬1)` is the excluded middle a translation from JSON Schema
+/// writes for `anyOf [Y, not Y]`, `J` the JSON values, and holds for every `J`;
+/// the negated set may be a union whose members the supertype holds flattened.
+/// A half refuted refutes the pair. A half already holding the set is not split
+/// on it again, and a set a predicate answers is not split on at all, since a
+/// predicate answering two calls apart obeys no excluded middle.
+#[test]
+fn a_declined_pair_is_split_on_a_set_its_supertype_negates() {
+    let json = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        Schema::Bool,
+        Schema::Int,
+        Schema::Float,
+        Schema::Str,
+        Schema::list(SeqShape::homogeneous(json.clone())),
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: json.clone(),
+            }],
+        ),
+    ])];
+    let one = Schema::Literal(ConstIx::new(3));
+    let word = Schema::Literal(ConstIx::new(1));
+    let either = Schema::union([one.clone(), word.clone()]);
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&Words, &defs, &budget);
+    let split =
+        |sub: &Schema, sup: &Schema, cx: &mut Cx<'_>| sub.split_on_a_set_it_negates(sup, cx);
+    let middle = |set: &Schema| {
+        Schema::union([
+            set.clone(),
+            Schema::meet([json.clone(), set.clone().complement()]),
+        ])
+    };
+    assert_eq!(split(&json, &middle(&one), &mut cx), Relation::Holds);
+    assert_eq!(split(&json, &middle(&either), &mut cx), Relation::Holds);
+    assert_eq!(
+        json.subtype_relation_under(&middle(&either), &Words, &defs),
+        Relation::Holds
+    );
+    // The half outside `1` holds every other integer, which `Str ∧ ¬1` does not.
+    let narrower = Schema::union([
+        one.clone(),
+        Schema::meet([Schema::Str, one.clone().complement()]),
+    ]);
+    assert_eq!(split(&json, &narrower, &mut cx), Relation::Fails);
+    // A subject already met with the set is not split on it again.
+    let held = Schema::meet([json.clone(), one.clone()]);
+    assert_eq!(split(&held, &middle(&one), &mut cx), Relation::Unknown);
+    let negated = Schema::meet([json.clone(), one.clone().complement()]);
+    assert_eq!(split(&negated, &middle(&one), &mut cx), Relation::Unknown);
+    // A meet holding another set is split as any subject is.
+    let but_a_word = Schema::meet([json.clone(), word.clone().complement()]);
+    assert_eq!(split(&but_a_word, &middle(&one), &mut cx), Relation::Holds);
+    // A set a predicate answers obeys no excluded middle.
+    let answered = Schema::refine(Schema::Int, vec![Constraint::Predicate(PredIx::new(0))]);
+    assert_eq!(split(&json, &middle(&answered), &mut cx), Relation::Unknown);
+    // The sets a pair is split on stop at `SPLITS`: members ahead of the excluded
+    // middle negate kinds whose splits decide nothing alone, since the half
+    // outside each still needs the split on `1`.
+    let kinds = [Schema::NoneType, Schema::Bool, Schema::Float, Schema::Str];
+    assert!(kinds.len() >= super::SPLITS);
+    let past = |ahead: usize| {
+        let mut members: Vec<Schema> = kinds
+            .iter()
+            .take(ahead)
+            .map(|kind| Schema::meet([Schema::Bytes, kind.clone().complement()]))
+            .collect();
+        members.push(middle(&one));
+        Schema::union(members)
+    };
+    assert_eq!(
+        split(&json, &past(super::SPLITS - 1), &mut cx),
+        Relation::Holds
+    );
+    assert_eq!(
+        split(&json, &past(super::SPLITS), &mut cx),
+        Relation::Unknown
+    );
+}
+
 /// A meet of sequences is the one sequence of their items' meet under their bounds,
 /// the spelling the rules read a refinement of a sequence in.
 mod a_meet_of_sequences {

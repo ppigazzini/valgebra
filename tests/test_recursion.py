@@ -917,3 +917,27 @@ def test_a_constant_inside_a_record_of_patterns_is_outside_its_complement() -> N
         == "not_subset"
     )
     assert record.is_valid({"foo": 1, "vroom": 2})
+
+
+def test_a_set_is_below_the_excluded_middle_of_a_set_it_meets() -> None:
+    """`U <= B | (U & ~B)` holds for every `U` and every set `B`.
+
+    The supertype is the one a translation from JSON Schema writes for `anyOf
+    [B, not B]`, `U` the JSON values, and it is decided by splitting `U` on `B`:
+    the half inside `B` is below `B`, and the half outside it is the second
+    member. With no recursion the split decides it alike, `B` holding a
+    refinement met with `U`.
+    """
+    json_values = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    two = Validator(Literal[2])
+    assert (
+        json_values.relation_to(union(two, intersection(json_values, complement(two))))
+        == "subset"
+    )
+    flat = Validator(union(None, bool, int, float, str, list, dict))
+    big = union(int, intersection(Annotated[float, at.Ge(2)], flat))
+    assert flat.relation_to(union(big, intersection(flat, complement(big)))) == "subset"
+    # One set short of the middle, and the half outside it is refuted.
+    assert (
+        flat.relation_to(union(big, intersection(str, complement(big)))) == "not_subset"
+    )

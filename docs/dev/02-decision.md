@@ -186,7 +186,13 @@ rules, by the set representation and the readings after it under the
 respelling's allowance, and `a` holds a value: the rules' complement arm reads
 the same from its own proof, which a constant record below a record of patterns
 over the JSON values never reaches (`inside_what_it_complements`, read after the
-parts of the pair and for each conjunct of a meet supertype). Against a union
+parts of the pair and for each conjunct of a meet supertype). Last, the pair is
+split on a set `C` its supertype holds under a complement, a member or a
+conjunct of one: `U ⊆ T` is `U ∧ C ⊆ T` and `U ∧ ¬C ⊆ T`, so `J ⊆ Y ∪ (J ∧ ¬Y)`,
+the excluded middle a translation from JSON Schema writes for `anyOf [Y, not Y]`,
+is proved, and a half refuted refutes the pair (`split_on_a_set_it_negates`).
+`C` denotes a set, a half already holding `C` is not split on it, and a query
+splits once, on at most four sets. Against a union
 holding a complement, `b ∪ ¬c`, the meet
 `a ∧ c` is asked below `b`, and where that declines, `a ∧ ¬(b ∪ ¬c)` is read
 empty the same way, which folds no predicate's complement:

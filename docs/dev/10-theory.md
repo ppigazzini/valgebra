@@ -1063,7 +1063,7 @@ recursive meet of maps is read under its cycle rather than unfolded again.
 
 SOURCE: §14.2 "Regularity bounds the number of distinct"
 
-IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference, valgebra-py/src/build.rs::refuse_a_growing_argument
+IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference, valgebra-py/src/build.rs::refuse_a_growing_argument, decision.rs::Schema::split_on_a_set_it_negates
 
 HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure, a_meet_of_sequences_is_asked_as_one_sequence_inside_the_closure, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
 

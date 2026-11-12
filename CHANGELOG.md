@@ -19,10 +19,18 @@ answer of its own, or a repair to a change not yet released.
 - fix: the failures under one key share its string in errors
 - fix: long text is rendered from its head in a value summary
 - feat: a set inside c that holds a value is refuted below the complement of c
+- feat: a pair the deciders declined is split on a set its supertype negates
 
 -->
 
 ### Added
+
+- **A pair the deciders declined is split on a set its supertype negates.** `U <= T` is asked as
+  `U & C <= T` and `U & ~C <= T`, for a `C` the supertype holds under a complement, so `J` the JSON
+  value is `subset` of `union(Literal[2], intersection(J, complement(Literal[2])))`, where it stayed
+  `undecided`: the excluded middle `valgebra-jsonschema` writes for `anyOf [Y, not Y]`, which decides
+  182 of its containment suite's undecided questions, none against a label. A refuted half refutes
+  the pair.
 
 - **A set inside `c` that holds a value is refuted below the complement of `c`.** For `J` the JSON
   value and `rec` a record of a named field and a pattern-keyed clause over `J`,

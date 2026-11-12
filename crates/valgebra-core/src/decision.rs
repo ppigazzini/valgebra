@@ -132,11 +132,24 @@ pub(crate) const RESPELLING_AGAIN: u32 = 65_536;
 const LEAF_READING: u32 = 64;
 
 thread_local! {
+    /// Whether a split of a pair on a set is under way on this thread
+    /// ([`Schema::split_on_a_set_it_negates`]): a half is not split again, so a
+    /// query splits once, and a supertype negating many sets costs `SPLITS`
+    /// pairs of halves rather than a tree of them.
+    static SPLITTING: Cell<bool> = const { Cell::new(false) };
     /// The respelling allowance of the asking a question on this thread is in:
     /// [`RESPELLING`], or [`RESPELLING_AGAIN`] while [`asked_again`] asks a
     /// second time.
     static RESPELLING_NOW: Cell<u32> = const { Cell::new(RESPELLING) };
 }
+
+/// The sets a pair is split on, at most, where every decider declined it
+/// ([`Schema::split_on_a_set_it_negates`]).
+///
+/// **This bound is cost.** Each split asks two halves under the respelling's
+/// allowance; the supertypes a translation from JSON Schema writes negate one
+/// set, a nested `not` two.
+const SPLITS: usize = 4;
 
 /// The steps a pair respelled may spend in the asking under way.
 pub(super) fn respelling() -> u32 {
@@ -1049,6 +1062,7 @@ impl Schema {
                 if by_branch {
                     self.decided_as_respelled(other, cx)
                         .or_else(|| self.asked_as_one_sequence(other, cx))
+                        .or_else(|| self.split_on_a_set_it_negates(other, cx))
                 } else {
                     Relation::Unknown
                 }
@@ -1446,6 +1460,77 @@ impl Schema {
                     matches!(meet, Schema::Union(_)) && meet.read_as_a_relation_empty(cx),
                 )
             })
+    }
+
+    /// The pair asked of the subject split on a set the supertype holds under a
+    /// complement.
+    ///
+    /// `U ⊆ T` holds exactly where `U ∧ C ⊆ T` and `U ∧ ¬C ⊆ T` both do, `C` any
+    /// set, since `U` is the union of the two [FCB08, §6.9]. It is the split a
+    /// normal form makes on every atom, made here on one, the step a binary
+    /// decision diagram is built from, and it is made on a `C` the supertype holds
+    /// under a complement, as a member or a conjunct of one, so that one half
+    /// meets `C` and the other `¬C`: `J ⊆ Y ∪ (J ∧ ¬Y)` holds for every `Y`, and
+    /// a translation from JSON Schema writes `anyOf [Y, not Y]` so, `J` the JSON
+    /// values. Either half refuted refutes the pair, since each is a part of `U`.
+    /// `C` must denote a set: a predicate answering two calls apart obeys no
+    /// excluded middle. Both goals are meets of signed subterms, asked of the
+    /// rules and the set representation and not of the respellings, which would
+    /// ask a half below the complement of another and so past the closure; a
+    /// half already holding `C` or `¬C` is not split on it again. A supertype
+    /// that is itself `¬C` is not split: its halves ask the pair again.
+    #[inline(never)]
+    fn split_on_a_set_it_negates(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        fn read<'a>(schema: &'a Schema, out: &mut Vec<&'a Schema>) {
+            if let Schema::Complement(inner) = schema {
+                out.push(inner);
+            }
+        }
+        if SPLITTING.with(Cell::get) {
+            return Relation::Unknown;
+        }
+        let mut negated: Vec<&Schema> = Vec::new();
+        match other {
+            Schema::Union(members) | Schema::Intersection(members) => {
+                for member in members.iter() {
+                    read(member, &mut negated);
+                    if let Schema::Intersection(conjuncts) = member {
+                        for conjunct in conjuncts.iter() {
+                            read(conjunct, &mut negated);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        let held = |set: &Schema| match self {
+            Schema::Intersection(members) => members.iter().any(|member| {
+                member == set
+                    || matches!(member, Schema::Complement(inner) if inner.as_ref() == set)
+            }),
+            subject => subject == set,
+        };
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
+        let cx = &mut cx.within_this_query(&allowance);
+        for set in negated.into_iter().take(SPLITS) {
+            if held(set) || !denotes_a_set_within(set, cx.oracle, cx.defs) {
+                continue;
+            }
+            let mut halves = [set.clone(), set.clone().complement()]
+                .into_iter()
+                .map(|side| {
+                    let half = Schema::meet_within([self.clone(), side], cx.defs);
+                    half.is_subtype_rec(other, cx)
+                        .or_else(|| half.descriptor_contained_in(other, cx.oracle, cx.defs))
+                });
+            SPLITTING.with(|splitting| splitting.set(true));
+            let answer = Relation::all(&mut halves);
+            SPLITTING.with(|splitting| splitting.set(false));
+            if answer != Relation::Unknown {
+                return answer;
+            }
+        }
+        Relation::Unknown
     }
 
     /// A subject the set representation places inside `c`, against `¬c`.
