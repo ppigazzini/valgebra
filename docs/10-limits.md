@@ -257,9 +257,19 @@ raise `MemoryError`:
   pydantic's `validate_json` ends the process or panics on the same documents
   under the same caps. Bound a document's
   size before handing it to valgebra, as a service bounds what it accepts.
-- **A report grows with the value.** `validate` collects every failure, so a
-  refused value of a million elements builds a million violations;
-  `fail_fast=True` collects one.
+- **A report grows with the value, and each failure in it is bounded.**
+  `validate` collects every failure, so a refused value of a million elements
+  builds a million violations; `fail_fast=True` collects one. A failure's
+  message writes at most eighty characters of the value and of each key on its
+  path, and the failures under one key share its string in `errors`, so a
+  document of one long key over many failures reports in its failures' count
+  rather than in their product with the key. A summary is rendered under a
+  bound for a `list`, `tuple`, `dict`, `set` or `frozenset` of exactly that
+  type, and from its head for a `str`, `bytes` or `bytearray`. Any other value
+  -- a subclass of those, a `deque`, an `array`, a `Decimal`, a class with a
+  `__repr__` of its own -- is rendered whole and then cut, once per failure it
+  stands at, so a large one held many times in a refused value pays its render
+  each time; `fail_fast` pays it once.
 
 ## Rejection is clean, not catastrophic
 
