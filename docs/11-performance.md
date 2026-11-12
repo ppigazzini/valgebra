@@ -65,6 +65,15 @@ The record shape compares valgebra's closed record against a pydantic
 `TypedDict` and a jsonschema object with `additionalProperties: false`, so all
 three check the same set of named fields.
 
+Two libraries check an object in hand against its annotation, as valgebra does,
+and the matrix leaves both out: **typeguard** and **beartype**. Neither reads
+every element by default. typeguard checks the first item of a collection
+unless its `collection_check_strategy` is `ALL_ITEMS`, and beartype checks one
+item drawn at random, so `[1] * 999 + ["x"]` passes as a `list[int]` on every
+call of the first and on most calls of the second. A ratio against a check that reads one element measures what
+sampling buys, not the same work; typeguard under `ALL_ITEMS` does the same
+work, in Python.
+
 ## Baseline matrix
 
 Machine class: AMD Ryzen 7 PRO 7840U (Zen 4, 8c/16t, up to 5.1 GHz, a 2023-era
