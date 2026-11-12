@@ -1,6 +1,8 @@
 //! Error construction: violation summaries, value labels, and the Python
 //! `ValidationError` raised from a [`valgebra_core::Violation`].
 
+use std::sync::Arc;
+
 use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
 use pyo3::intern;
 use pyo3::prelude::*;
@@ -354,13 +356,23 @@ pub(crate) fn validation_error_getattr<'py>(
             "expected" => first.expected.as_str().into_pyobject(py)?.into_any(),
             "value" => first.value_summary.as_str().into_pyobject(py)?.into_any(),
             "message" => first.to_string().into_pyobject(py)?.into_any(),
-            "path" => build_path(py, &first.path)?.into_any(),
+            "path" => build_path(py, &first.path, &mut KeyStrings::default())?.into_any(),
             _ => {
                 let (first_violation, rest) =
                     failures.violations.split_first().unwrap_or((&GENERIC, &[]));
                 let message = first_violation.to_string();
-                let path = build_path(py, &first_violation.path)?;
-                error_items(py, &keys, &message, &path, first_violation, rest)?.into_any()
+                let mut strings = KeyStrings::default();
+                let path = build_path(py, &first_violation.path, &mut strings)?;
+                error_items(
+                    py,
+                    &keys,
+                    &message,
+                    &path,
+                    first_violation,
+                    rest,
+                    &mut strings,
+                )?
+                .into_any()
             }
         };
         // Cached on the instance, so this runs once per attribute per error and the
@@ -575,6 +587,7 @@ fn error_items<'py>(
     first_path: &Bound<'py, PyTuple>,
     first: &Violation,
     rest: &[Violation],
+    strings: &mut KeyStrings<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let mut items = Vec::with_capacity(rest.len() + 1);
     for (at, violation) in core::iter::once(first).chain(rest).enumerate() {
@@ -584,7 +597,7 @@ fn error_items<'py>(
             item.set_item(keys.path, first_path)?;
             item.set_item(keys.message, first_message)?;
         } else {
-            item.set_item(keys.path, build_path(py, &violation.path)?)?;
+            item.set_item(keys.path, build_path(py, &violation.path, strings)?)?;
             item.set_item(keys.message, violation.to_string())?;
         }
         item.set_item(keys.expected, violation.expected.as_str())?;
@@ -594,11 +607,54 @@ fn error_items<'py>(
     PyTuple::new(py, items)
 }
 
-fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py, PyTuple>> {
+/// The `str` of the last key a path named at each depth, for the next path.
+///
+/// Every failure under one mapping entry carries the entry's key as one shared
+/// `Arc`, and the walk reports them one after another. A `str` built per path
+/// would make `errors` the key's length times the failures' count, which a
+/// JSON document of one long key over many failures turns quadratic in its
+/// size. So each depth keeps the key it built last and hands the same object to
+/// the next path holding the same `Arc` there: the failures under an entry share
+/// one string whatever its length.
+///
+/// A key is told by its address. The violations hold every `Arc` for as long as
+/// the items are built, so no two live keys share one, and comparing addresses
+/// spares each miss the two atomic counts a held `Arc` would cost -- a record of
+/// fifty failing keys misses fifty times.
+#[derive(Default)]
+struct KeyStrings<'py> {
+    at: Vec<Option<(*const str, Bound<'py, PyString>)>>,
+}
+
+impl<'py> KeyStrings<'py> {
+    /// The `str` of `key` at `depth`. A path is read from its root, so a depth
+    /// past the ones kept is the next one, and is kept by pushing it.
+    fn read(&mut self, py: Python<'py>, depth: usize, key: &Arc<str>) -> Bound<'py, PyString> {
+        let address = Arc::as_ptr(key);
+        if let Some(Some((held, text))) = self.at.get(depth)
+            && core::ptr::addr_eq(*held, address)
+        {
+            return text.clone();
+        }
+        let text = PyString::new(py, key);
+        let kept = Some((address, text.clone()));
+        match self.at.get_mut(depth) {
+            Some(slot) => *slot = kept,
+            None => self.at.push(kept),
+        }
+        text
+    }
+}
+
+fn build_path<'py>(
+    py: Python<'py>,
+    path: &[PathSegment],
+    strings: &mut KeyStrings<'py>,
+) -> PyResult<Bound<'py, PyTuple>> {
     let mut items: Vec<Bound<'py, PyAny>> = Vec::with_capacity(path.len());
-    for segment in path {
+    for (depth, segment) in path.iter().enumerate() {
         let item = match segment {
-            PathSegment::Key(key) => (&**key).into_pyobject(py)?.into_any(),
+            PathSegment::Key(key) => strings.read(py, depth, key).into_any(),
             PathSegment::IntKey(key) => (*key).into_pyobject(py)?.into_any(),
             // Past the digit limit the digits are hexadecimal, and they stay
             // text: an `int` there is one the standard library's JSON encoder,

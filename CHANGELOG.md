@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: every sequence of a meet is read at once
 - feat: a meet of sequences is read as the one sequence of its items' meet
 - fix: a long key is cut where a message writes its location
+- fix: the failures under one key share its string in errors
 
 -->
 
@@ -39,6 +40,10 @@ answer of its own, or a repair to a change not yet released.
   characters is written in `str(error)` and in each item's `message` as a subscript of its first
   eighty, `['kkk...]`, and the `path` keeps it whole. A JSON document holding one key of a
   hundred thousand characters over a thousand failures built a 100 MB message at the raise.
+
+- **The failures under one key share its string in `errors`.** Each item's `path` names the key
+  whole, and the items under one mapping entry hold one `str` for it rather than a copy each, so
+  `errors` grows with the failures and not with their product with the key's length.
 
 ## [0.0.25] - 2026-11-09
 

@@ -70,3 +70,40 @@ fn into_pyerr_maps_violations_to_the_structured_attributes() {
         assert_eq!(second_code, "missing");
     });
 }
+
+/// The failures under one entry share the `str` of its key, and a path naming
+/// another key at that depth has its own.
+#[test]
+fn the_failures_under_one_key_share_its_string() {
+    Python::attach(|py| {
+        install_lazy_attributes(py).expect("the hooks the module installs");
+        let long: Arc<str> = "k".repeat(1_000).into();
+        let other: Arc<str> = "other".into();
+        let under = |key: &Arc<str>, index| {
+            vec![PathSegment::Key(Arc::clone(key)), PathSegment::Index(index)]
+        };
+        let violations = vec![
+            violation("int_type", under(&long, 0)),
+            violation("int_type", under(&long, 1)),
+            violation("int_type", under(&other, 0)),
+            violation("int_type", under(&other, 1)),
+        ];
+        let errors = into_pyerr(py, violations)
+            .value(py)
+            .getattr("errors")
+            .unwrap();
+        let key = |at: usize| {
+            errors
+                .get_item(at)
+                .unwrap()
+                .get_item("path")
+                .unwrap()
+                .get_item(0)
+                .unwrap()
+        };
+        assert!(key(0).is(key(1)));
+        assert_eq!(key(0).extract::<String>().unwrap(), *long);
+        assert!(key(2).is(key(3)));
+        assert_eq!(key(2).extract::<String>().unwrap(), "other");
+    });
+}

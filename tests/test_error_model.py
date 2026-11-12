@@ -7,7 +7,7 @@ import subprocess
 import sys
 import textwrap
 import traceback
-from typing import Annotated, Literal, NamedTuple, TypedDict
+from typing import Annotated, Literal, NamedTuple, TypedDict, cast
 
 import annotated_types as at
 import pytest
@@ -386,6 +386,18 @@ def test_a_long_key_is_cut_in_every_message_and_kept_whole_in_the_path() -> None
     assert error.errors[0]["path"] == (key, 0)
     assert str(error.errors[1]["message"]).startswith(f"at ['{'k' * 80}...][1]: ")
     assert json.loads(document)[key][1] == "x"
+    # One `str` for the key, shared by the paths under it: a copy per failure
+    # would make `errors` the same product the message was.
+    keys = [cast("tuple[object, ...]", item["path"])[0] for item in error.errors]
+    assert all(each is keys[0] for each in keys)
+    assert len(keys) == 1_000
+
+
+def test_the_paths_under_two_keys_name_each_its_own() -> None:
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[str, list[int]]).validate({"a": ["x", "y"], "b": ["z"]})
+    paths = [item["path"] for item in info.value.errors]
+    assert paths == [("a", 0), ("a", 1), ("b", 0)]
 
 
 def test_the_error_model_is_built_when_it_is_asked_for() -> None:
