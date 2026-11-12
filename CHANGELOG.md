@@ -18,10 +18,18 @@ answer of its own, or a repair to a change not yet released.
 - fix: a long key is cut where a message writes its location
 - fix: the failures under one key share its string in errors
 - fix: long text is rendered from its head in a value summary
+- feat: a set inside c that holds a value is refuted below the complement of c
 
 -->
 
 ### Added
+
+- **A set inside `c` that holds a value is refuted below the complement of `c`.** For `J` the JSON
+  value and `rec` a record of a named field and a pattern-keyed clause over `J`,
+  `{"foo": Literal[1], "vroom": Literal[2]}` is `not_subset` of `complement(intersection(rec, J))`,
+  where it stayed `undecided`: it lies inside `rec`, by a proof past the structural rules, and holds
+  a value. It is the pair `valgebra-jsonschema` asks for a constant below `not`, and 44 of its
+  containment suite's undecided questions are decided by it.
 
 - **A meet of sequences is read as the one sequence of its items' meet.**
   `intersection(list[J], union([], list[str]), Annotated[list[Any], MinLen(1)])`, for `J` the JSON

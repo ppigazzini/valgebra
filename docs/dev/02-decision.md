@@ -181,7 +181,13 @@ set representation. So `anything ⊆ ¬s` is proved where `s` is read empty with
 the respelling's steps, which `below_nothing_exactly_where_read_empty` in
 `laws.rs` holds over drawn schemas, and
 `the_universe_is_below_the_complement_of_a_set_read_empty` on a union neither
-reading empties whole. Against a union holding a complement, `b ∪ ¬c`, the meet
+reading empties whole. And `a ⊆ ¬c` is refuted where `a ⊆ c` is proved past the
+rules, by the set representation and the readings after it under the
+respelling's allowance, and `a` holds a value: the rules' complement arm reads
+the same from its own proof, which a constant record below a record of patterns
+over the JSON values never reaches (`inside_what_it_complements`, read after the
+parts of the pair and for each conjunct of a meet supertype). Against a union
+holding a complement, `b ∪ ¬c`, the meet
 `a ∧ c` is asked below `b`, and where that declines, `a ∧ ¬(b ∪ ¬c)` is read
 empty the same way, which folds no predicate's complement:
 `what_is_read_empty_bounds_the_relation` holds the relation to what that reading

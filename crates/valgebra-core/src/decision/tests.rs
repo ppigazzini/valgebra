@@ -15973,6 +15973,85 @@ fn zero_is_a_multiple_of_an_exact_rational_step() {
     );
 }
 
+/// A set the deciders place inside `c`, and that holds a value, is refuted below
+/// `¬c` [FCB08, §4.1], where only the readings past the rules prove it inside.
+///
+/// The record a translation from JSON Schema writes for an object of named
+/// properties and a property pattern. The constant `{"foo": 1, "vroom": 1}` lies
+/// inside it, which the rules cannot prove under an oracle that matches no
+/// pattern, and the set representation does, reading the pattern as the
+/// language it denotes. The pair below the record's complement is asked bare and
+/// as the translation writes `not`, the complement met with the JSON values.
+#[test]
+fn a_set_inside_c_that_holds_a_value_is_refuted_below_the_complement_of_c() {
+    let json = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        Schema::Bool,
+        Schema::Int,
+        Schema::Float,
+        Schema::Str,
+        Schema::list(SeqShape::homogeneous(json.clone())),
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: json.clone(),
+            }],
+        ),
+    ])];
+    let pattern = Schema::meet([
+        Schema::Str,
+        Schema::refine(
+            Schema::Str,
+            vec![Constraint::Regex("(?s:.*)(?:^v)(?s:.*)".into())],
+        ),
+    ]);
+    let record = Schema::keyed_map(
+        vec![field("foo", json.clone(), false)],
+        vec![MapClause {
+            key: pattern,
+            value: json.clone(),
+        }],
+    );
+    let one = || Schema::Literal(ConstIx::new(3));
+    let constant = Schema::record(
+        vec![field("foo", one(), true), field("vroom", one(), true)],
+        Openness::Closed,
+    );
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&Words, &defs, &budget);
+    let outside = record.clone().complement();
+    assert!(!by_the_rules(&constant, &record));
+    assert_eq!(
+        constant.inside_what_it_complements(&outside, &mut cx),
+        Relation::Fails,
+        "a value of the constant lies inside the record"
+    );
+    // An empty subject is below every complement, and the reading says so.
+    assert_eq!(
+        Schema::Nothing.inside_what_it_complements(&outside, &mut cx),
+        Relation::Holds
+    );
+    // It reads a complement alone, and a subject outside the inner set is not its
+    // question.
+    assert_eq!(
+        constant.inside_what_it_complements(&record, &mut cx),
+        Relation::Unknown
+    );
+    let elsewhere = Schema::record(vec![field("bar", one(), true)], Openness::Closed);
+    assert_eq!(
+        elsewhere.inside_what_it_complements(&outside, &mut cx),
+        Relation::Unknown
+    );
+    let relation = |sup: &Schema| constant.subtype_relation_under(sup, &Words, &defs);
+    assert_eq!(relation(&outside), Relation::Fails);
+    assert_eq!(
+        relation(&Schema::meet([json.clone(), outside])),
+        Relation::Fails
+    );
+}
+
 /// A meet of sequences is the one sequence of their items' meet under their bounds,
 /// the spelling the rules read a refinement of a sequence in.
 mod a_meet_of_sequences {

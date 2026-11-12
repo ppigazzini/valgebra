@@ -893,3 +893,27 @@ def test_a_value_of_a_kind_no_cut_reaches_refutes_a_fixpoint() -> None:
             assert answer == "not_subset", (name, kind, leaf)
         assert Validator(list[str]).relation_to(shapes["list"](str)) == "subset"
         assert Validator(str).relation_to(fixpoint(str)) == "subset", name
+
+
+def test_a_constant_inside_a_record_of_patterns_is_outside_its_complement() -> None:
+    """A set inside `c` that holds a value is outside `¬c`, however `c` is proved.
+
+    The record is the one a translation from JSON Schema writes for an object of a
+    named property and a property pattern, met with the JSON values, and `not`
+    over it is its complement met with them again. The constant lies inside the
+    record by a proof the structural rules do not make, and the refutation below
+    the complement stands on the constant itself.
+    """
+    json_values = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    key = intersection(str, Annotated[str, Regex("(?s:.*)(?:^v)(?s:.*)")])
+    record = intersection(
+        Validator({"foo?": json_values, key: json_values}), json_values
+    )
+    constant = Validator({"foo": Literal[1], "vroom": Literal[2]})
+    assert constant.relation_to(record) == "subset"
+    assert constant.relation_to(complement(record)) == "not_subset"
+    assert (
+        constant.relation_to(intersection(json_values, complement(record)))
+        == "not_subset"
+    )
+    assert record.is_valid({"foo": 1, "vroom": 2})

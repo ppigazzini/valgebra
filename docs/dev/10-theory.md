@@ -1231,7 +1231,7 @@ asked by `is_empty` of the same meet, and a law over drawn meets holds it.
 
 SOURCE: §14.4 "completeness is a property of **one**"; §13.1 "`is_subtype_of` is not that reduction applied uniformly"
 
-IMPLEMENTED-BY: decision/emptiness.rs::intersection_verdict
+IMPLEMENTED-BY: decision/emptiness.rs::intersection_verdict, decision.rs::Schema::inside_what_it_complements
 
 HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set
 

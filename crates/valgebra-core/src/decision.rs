@@ -1044,6 +1044,7 @@ impl Schema {
     ) -> Relation {
         self.a_plain_value_outside_a_table(other, cx)
             .or_else(|| self.decided_by_parts(other, cx, by_branch))
+            .or_else(|| self.inside_what_it_complements(other, cx))
             .or_else(|| {
                 if by_branch {
                     self.decided_as_respelled(other, cx)
@@ -1447,6 +1448,34 @@ impl Schema {
             })
     }
 
+    /// A subject the set representation places inside `c`, against `¬c`.
+    ///
+    /// `a ⊆ ¬c` is `a ∧ c = ∅` [FCB08, §4.1], and `a ⊆ c` makes that meet `a`
+    /// itself, so the pair holds exactly where `a` is empty and is refuted on any
+    /// value of `a`. The rules' complement arm reads this from their own proof of
+    /// `a ⊆ c`; this asks `a ⊆ c` as the relation does past them, the set
+    /// representation and the readings after it, under the respelling's
+    /// allowance: a constant record below a record of patterns over the JSON
+    /// values, which a translation from JSON Schema writes under `not`, is proved
+    /// there and declined by the rules. The goal is a pair of subterms.
+    #[inline(never)]
+    fn inside_what_it_complements(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        let Schema::Complement(inner) = other else {
+            return Relation::Unknown;
+        };
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
+        let inside = {
+            let cx = &mut cx.within_this_query(&allowance);
+            self.is_subtype_rec(inner, cx)
+                .or_else(|| self.decided_by_sets(inner, cx, true))
+        };
+        if inside.holds() {
+            Relation::of_mismatch(self.verdict_rec(cx))
+        } else {
+            Relation::Unknown
+        }
+    }
+
     /// The pair asked of its parts, where both deciders declined it whole.
     ///
     /// A union subject is below a supertype where each member is, and outside
@@ -1589,6 +1618,7 @@ impl Schema {
                     None => self.is_subtype_rec(member, cx),
                 }
                 .or_else(|| self.descriptor_contained_in(member, cx.oracle, cx.defs))
+                .or_else(|| self.inside_what_it_complements(member, cx))
             }));
         }
         let Schema::Union(branches) = other else {
