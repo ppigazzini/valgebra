@@ -299,8 +299,12 @@ fn is_the_main_interpreter(py: Python<'_>) -> PyResult<bool> {
 /// under the serialization its cell type provides.
 /// The validation walk keeps its recursion guard in a per-call local, so no two
 /// threads share mutable walk state.
-#[pymodule(gil_used = false)]
-fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
+///
+/// The module's name is the attribute's, so the function's own carries no
+/// leading underscore: Rust reads a function named `_valgebra` as one meant to
+/// go unused, and the module's initializer uses it.
+#[pymodule(gil_used = false, name = "_valgebra")]
+fn extension_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
     the_main_interpreter_once(py)?;
     // The distribution version, from the crate the wheel is built from.
