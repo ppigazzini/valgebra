@@ -17,6 +17,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet of sequences is read as the one sequence of its items' meet
 - fix: a long key is cut where a message writes its location
 - fix: the failures under one key share its string in errors
+- fix: long text is rendered from its head in a value summary
 
 -->
 
@@ -44,6 +45,12 @@ answer of its own, or a repair to a change not yet released.
 - **The failures under one key share its string in `errors`.** Each item's `path` names the key
   whole, and the items under one mapping entry hold one `str` for it rather than a copy each, so
   `errors` grows with the failures and not with their product with the key's length.
+
+- **Long text is rendered from its head in a value summary.** A `str`, `bytes` or `bytearray`
+  past eighty items is rendered from its first seventy-nine, which reach the summary's eighty
+  characters, rather than rendered whole and cut: a 10 MB string held a thousand times in a
+  failing list took 17 s to report. The summary is the same but for its quote, which `repr` picks
+  from the head alone where a single quote lies past it.
 
 ## [0.0.25] - 2026-11-09
 

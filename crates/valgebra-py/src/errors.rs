@@ -8,7 +8,8 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyCode, PyCodeInput, PyCodeMethods, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple,
+    PyByteArray, PyBytes, PyCode, PyCodeInput, PyCodeMethods, PyDict, PyFrozenSet, PyList, PySet,
+    PySlice, PyString, PyTuple,
 };
 use valgebra_core::{PathSegment, Violation};
 
@@ -184,7 +185,9 @@ pub(crate) fn unless_fatal<T>(result: PyResult<T>, py: Python<'_>, fallback: T) 
 /// with the number of mistakes in it.
 ///
 /// A scalar keeps the direct path: its repr is its size, there is nothing to
-/// bound, and it is the common case in an error message.
+/// bound, and it is the common case in an error message. Text is a scalar
+/// whose size is its length, so a long one is rendered from its head
+/// ([`head_of`]).
 ///
 /// A `__repr__` raising an ordinary exception is an object that cannot render,
 /// and the summary says so. A fatal signal propagates: the interpreter is
@@ -206,7 +209,7 @@ pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
         && !value.is_instance_of::<PySet>()
         && !value.is_instance_of::<PyFrozenSet>()
     {
-        return Ok(shorten(stored(&value.repr()?), SUMMARY_CHARS));
+        return Ok(shorten(stored(&head_of(value)?.repr()?), SUMMARY_CHARS));
     }
     let py = value.py();
     let rendered = match bounded_repr(py) {
@@ -231,6 +234,35 @@ pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
         // message right rather than trading correctness for the bound.
         None => Ok(shorten(stored(&value.repr()?), SUMMARY_CHARS)),
     }
+}
+
+/// The items of a text a summary renders where the text is past the bound: one
+/// fewer than [`SUMMARY_CHARS`], since a render opens with a quote at least and
+/// an item renders as one character or more, so these reach the bound.
+const SUMMARY_ITEMS: isize = 79;
+
+/// `value`, or the head of it a summary shows where it is text past the bound.
+///
+/// A `str`, `bytes` or `bytearray` renders in a time and a space its length
+/// sets, and the summary keeps [`SUMMARY_CHARS`] characters of the render,
+/// which its first [`SUMMARY_ITEMS`] items reach. Rendered whole, a value
+/// aliased in a container is rendered once per alias -- a 10 MB string held a
+/// thousand times took 17 s to report -- and cut to the same eighty characters
+/// each time. Sliced, the render is the same but for one case: `repr` picks the
+/// quote from the whole text, so a single quote past the head and no double one
+/// turns the opening quote double, and the head picks it alone. Text at the
+/// bound or under it is rendered whole, quote and all.
+///
+/// The exact types only: a subclass's `__repr__` is its own, and its slice is
+/// the base type's.
+fn head_of<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let text = value.is_exact_instance_of::<PyString>()
+        || value.is_exact_instance_of::<PyBytes>()
+        || value.is_exact_instance_of::<PyByteArray>();
+    if text && value.len()? > SUMMARY_CHARS {
+        return value.get_item(PySlice::new(value.py(), 0, SUMMARY_ITEMS, 1));
+    }
+    Ok(value.clone())
 }
 
 /// The text a `str` holds, read from its storage.

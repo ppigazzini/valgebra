@@ -17,6 +17,7 @@ sentence the page wrote the rule for.
 from __future__ import annotations
 
 import re
+import sys
 import typing
 from typing import TYPE_CHECKING, Annotated, Literal
 
@@ -275,6 +276,50 @@ def test_a_long_value_is_cut_at_the_summary_bound_and_says_it_was() -> None:
     with pytest.raises(ValidationError) as short:
         Validator(int).validate("xyz")
     assert short.value.errors[0]["value"] == "'xyz'"
+
+
+@pytest.mark.skipif(
+    sys.implementation.name != "cpython",
+    reason="tracemalloc traces CPython's allocator",
+)
+def test_long_text_is_rendered_from_its_head() -> None:
+    """A summary of long text renders its head, so each alias pays eighty items.
+
+    Rendered whole and then cut, a value held many times in one container is
+    rendered in full once per failure: a 10 MB string held a thousand times
+    took 17 s to report eighty characters of it a thousand times.
+    """
+    import tracemalloc  # noqa: PLC0415 -- PyPy ships no `_tracemalloc`
+
+    for text in ("x" * 1_000_000, b"x" * 1_000_000, bytearray(b"x" * 1_000_000)):
+        aliased = [text] * 20
+        tracemalloc.start()
+        try:
+            with pytest.raises(ValidationError) as caught:
+                Validator(list[int]).validate(aliased)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        assert peak < 1_000_000, (type(text).__name__, peak)
+        assert len(caught.value.errors) == 20
+        assert caught.value.errors[0]["value"] == repr(text)[:80] + "..."
+
+
+def test_text_at_the_summary_bound_is_rendered_whole() -> None:
+    """Text of eighty items or fewer is rendered whole, so `repr` picks its quote.
+
+    Past the bound the head picks the quote alone: the single quote that turns
+    the whole text's opening quote double lies past the head.
+    """
+    at_the_bound = "x" * 79 + "'"
+    with pytest.raises(ValidationError) as caught:
+        Validator(int).validate(at_the_bound)
+    assert caught.value.errors[0]["value"] == repr(at_the_bound)[:80] + "..."
+    assert str(caught.value.errors[0]["value"]).startswith('"x')
+    past = "x" * 80 + "'"
+    with pytest.raises(ValidationError) as caught:
+        Validator(int).validate(past)
+    assert str(caught.value.errors[0]["value"]).startswith("'x")
 
 
 def test_a_parse_failure_carries_the_parser_s_own_diagnostic() -> None:
