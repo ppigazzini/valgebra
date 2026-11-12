@@ -1592,20 +1592,33 @@ goals (below).
 subterms finitely many: a schema is a finite tree with back edges into a finite
 table of definitions, and unfolding a reference reaches a body that table holds.
 A rule asks a pair of the children of the pair it was asked, or unfolds a
-reference, except in four places, and each builds out of the subterms rather
+reference, except in six places, and each builds out of the subterms rather
 than past them. The product rule meets a component with the complements of
 branch components, and the record rule a field with the complements of member
 fields, so what either asks is a meet of subterms and their complements.
 The union rule asks the subject against the branches it can meet, a union of
 some members of a union it was handed, at any depth: a nested union is read as
 its members or kept whole, so `X ∪ (Y ∪ ¬c)` is respelled `X ∪ Y`, which names
-members of two subterms, and a finite tree holds finitely many members. And a
-meet or a complement folds to the
-top or the bottom. So every goal is a pair drawn from a finite closure `C` --
-which stands where the `N(A)` of [FCB08, §6.9] stands, the normal forms over
-the atoms a type mentions, read over schemas, though a record narrowing builds a
-record atom no subterm is; that such new types are finitely many is the argument
-of [LN26, §5.1] -- and a query asks at most `|C|²` distinct goals.
+members of two subterms, and a finite tree holds finitely many members. A pair
+every decider declined against a complement `¬c` is asked as the meet of the
+subject and `c` below the bottom, and as `c` below the subject's complement. A
+sequence or a mapping below a union asks its one item against the union of
+what the branches hold at one position, which are children of the branches. A
+meet of sequences is asked as the one sequence of its items' meets under the
+members' bounds, each item a meet of the items the members hold at one
+position. And a meet or a complement folds to the top or the bottom. So every
+goal is a pair drawn from a finite closure `C` -- which stands where the `N(A)`
+of [FCB08, §6.9] stands, the normal forms over the atoms a type mentions, read
+over schemas, though a record narrowing builds a record atom no subterm is and
+the sequence reading a sequence none is; that such new types are finitely many
+is the argument of [LN26, §5.1], which pushes a meet below a product -- and a
+query asks at most `|C|²` distinct goals.
+
+A reading that builds a goal in a seventh way lands with its place named in the
+paragraph above, admitted by `in_closure` in `decision/goal_tests.rs`, which
+the closure laws read every goal against, and with a fixed pair that reaches
+it. Without them the drawn law finds the place on a shape nobody chose, at a
+depth the nightly draws and a push may not.
 
 That bounds the goals and not yet a path, and the trail is what ends one. Every
 step but an unfolding asks a smaller pair: children are smaller than their
