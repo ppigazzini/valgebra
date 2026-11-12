@@ -5832,6 +5832,11 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
             beside(constant, &mut mine);
         }
         Schema::Refine { base, constraints } => {
+            for constraint in constraints.iter() {
+                if let Constraint::MinLen(len) | Constraint::MaxLen(len) = constraint {
+                    mine.extend(sequences_around(base, *len));
+                }
+            }
             mine.extend(edges_of(base, out));
             for constraint in constraints.iter() {
                 match constraint {
@@ -5956,6 +5961,42 @@ fn candidates(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
 /// cannot do. `[Any, X]` against `[Any, int]` is separated only by a two-element
 /// list whose *second* element is an `X` outside `int`, and a corpus of
 /// single-element containers holds no such value whatever it holds at depth one.
+/// Sequences of `base`'s own items at `len` and at its two neighbors.
+///
+/// `containers_of` puts an integer at every position, which is a value of a
+/// refinement only where its base admits one. `list[float]` under `MinLen(2)`
+/// is separated from `list[Any, Any]` by three floats, and a universe whose
+/// lists of three hold integers holds no member of the refinement that long:
+/// at a position of a fixed shape, where the cap leaves a node a quarter of its
+/// values, the refutation then has no witness. So a tailed sequence is filled
+/// past its prefix with a member of its tail, ahead of the base's own edges,
+/// since the bound is what the refinement adds to them.
+fn sequences_around(base: &Schema, len: usize) -> Vec<Obj> {
+    let Schema::Seq { container, shape } = base else {
+        return Vec::new();
+    };
+    let prefix: Option<Vec<Obj>> = shape
+        .prefix
+        .iter()
+        .map(|element| a_member(element, MEMBER_FUEL))
+        .collect();
+    let tail = shape
+        .tail
+        .as_deref()
+        .and_then(|tail| a_member(tail, MEMBER_FUEL));
+    let (Some(prefix), Some(tail)) = (prefix, tail) else {
+        return Vec::new();
+    };
+    (len.saturating_sub(EDGE_SPAN)..=len + EDGE_SPAN)
+        .filter(|width| *width >= prefix.len())
+        .map(|width| {
+            let mut items = prefix.clone();
+            items.resize(width, tail.clone());
+            hold(*container, items)
+        })
+        .collect()
+}
+
 fn sequence_edges(container: SeqKind, shape: &SeqShape, out: &mut Vec<Obj>) -> Vec<Obj> {
     let mut mine = Vec::new();
     let base: Option<Vec<Obj>> = shape
@@ -7911,6 +7952,45 @@ fn a_meet_of_sequences_has_the_member_its_positions_meet_in() {
         .into(),
     );
     assert_eq!(a_member(&two_containers, MEMBER_FUEL), None);
+}
+
+// THEORY: subtyping-is-inclusion
+/// A length bound at a position of a fixed shape is probed one past it with the
+/// refinement's own items.
+///
+/// `[list[float] & MinLen(2), D1] <= [list[Any, Top], D1]`, with `D1` the
+/// fixpoint `int | list[~D1]`, is refuted on `[[0.0, 0.0, 0.0], 0]`: a list of
+/// three floats is no list of exactly two. The law drew it and found no value,
+/// the universe holding lists of floats of no length past two. Read through
+/// the law's own pipeline, since a simpler pair holds fewer values and misses
+/// the cap that thinned this one.
+#[test]
+fn a_length_bound_at_a_position_is_probed_one_past_it() {
+    let defs = fixpoint_defs();
+    let list = |shape| Schema::Seq {
+        container: SeqKind::List,
+        shape,
+    };
+    let floats = Schema::refine(
+        list(SeqShape::homogeneous(Schema::Float)),
+        vec![Constraint::MinLen(2)],
+    );
+    let pair = Schema::Union(
+        vec![list(SeqShape::fixed([
+            Schema::Anything(Spelling::Any),
+            Schema::ANYTHING,
+        ]))]
+        .into(),
+    );
+    let a = list(SeqShape::fixed([floats, Schema::Ref(DefIx::new(1))]));
+    let b = list(SeqShape::fixed([pair, Schema::Ref(DefIx::new(1))]));
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(a_value_parts(&subject, &other));
 }
 
 proptest! {
