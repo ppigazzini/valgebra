@@ -458,10 +458,10 @@ def test_a_forced_color_variable_does_not_reach_a_step(
 ) -> None:
     """A step sees the environment a runner has, not the caller's terminal.
 
-    The plant: `FORCE_COLOR` set in the caller's shell. Reaching `uv export`, it
-    writes ANSI escapes into the requirements file the step generates, and
-    `pip-audit` refuses the file: a failed step for a property of the terminal
-    the gate is run from.
+    The plant: `FORCE_COLOR` set in the caller's shell. Reaching `uv export`
+    redirected to a file, it writes ANSI escapes into the file, and a tool
+    reading it refuses it: a failed step for a property of the terminal the
+    gate is run from.
 
     The second plant: `VIRTUAL_ENV`, which `uv run` sets for the gate itself.
     Reaching a clone step's `uv pip install`, it installs the wheel into the

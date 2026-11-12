@@ -2746,6 +2746,11 @@ jobs:
       needs['nightly-dispatch'].outputs.dispatched == 'false')
     # Supply-chain audit of the locked Python dependencies (dev, bench, and docs
     # groups — everything CI installs) against the PyPI advisory database.
+    # pip-audit reads the lock as a PEP 751 file: it installs nothing, and it
+    # reads every package, one whose marker excludes this runner included -- a
+    # requirements file read through pip on 3.15 skips the numpy the 3.11 legs
+    # install. `--strict` fails the job on a package it cannot audit, where a
+    # plain run would only skip it.
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
@@ -2757,8 +2762,8 @@ jobs:
           python-version: "3.15"
       - name: Audit the locked Python dependencies
         run: |
-          uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt
-          uvx pip-audit==2.10.1 -r requirements-audit.txt
+          uv export --locked --format pylock.toml --no-emit-project --all-groups -o audit/pylock.toml
+          uvx pip-audit==2.10.1 --strict --locked audit
 
   zizmor:
     name: zizmor

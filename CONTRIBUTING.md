@@ -160,7 +160,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | where a change starts, for the bench gate and the diff sweeps, a force-push included | `scripts/change_base.py` | `uv run --no-sync pytest tests/test_change_base.py` |
 | a diff sweep mutates the functions whose code a change touches, and none whose diff is comments alone | `scripts/code_changes.py` | `uv run --no-sync pytest tests/test_code_changes.py` |
 | supply chain (Rust) | `deny.toml` | `cargo deny check` |
-| supply chain (Python) | `uv.lock` | `uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt && uvx pip-audit -r requirements-audit.txt` |
+| supply chain (Python) | `uv.lock` | `uv export --locked --format pylock.toml --no-emit-project --all-groups -o audit/pylock.toml && uvx pip-audit --strict --locked audit` |
 | workflow security | `.github/` | `uvx zizmor .github/` |
 | the commit each action runs | `.github/workflows/actions.lock` | `gh actions-lock --verify` |
 | the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --no-sync --group bench maturin build --release --pgo --out dist` |

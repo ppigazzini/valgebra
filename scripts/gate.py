@@ -742,10 +742,10 @@ def runner_environment() -> dict[str, str]:
     there writes plain text -- including into any file it generates. A
     developer's terminal sets `FORCE_COLOR`, some harnesses set it for every
     child process, and a tool that honors it writes escape codes into that
-    file too. `pip-audit` refuses a requirements file `uv export` wrote that
-    way, and the gate reports a failed step: a verdict about the caller's
-    terminal rather than about the tree, which is the one thing this gate must
-    never give.
+    file too: `uv export` redirected to a file writes them into it, and a tool
+    reading that file refuses it, so the gate reports a failed step -- a
+    verdict about the caller's terminal rather than about the tree, which is
+    the one thing this gate must never give.
 
     Dropped rather than overridden with `NO_COLOR`, because the runner carries
     neither: what a step should see is the absence.

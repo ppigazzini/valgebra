@@ -116,8 +116,8 @@ environment plus the job's and the step's own `env:`, and the runner's own
 absences are not modeled by that -- so a variable a developer's terminal sets
 reaches a step that a lane runs with it unset. One of them gives a false red:
 `FORCE_COLOR` overrides a tool's terminal check, so `uv export` writes escape
-codes into the requirements file it generates, and `pip-audit` refuses the file
-against a dependency tree with no advisory in it. The two variables whose only
+codes into a file its output is redirected to, and a tool reading the file
+refuses it whatever the file says. The two variables whose only
 purpose is that override are dropped (`runner_environment`), and so is
 `VIRTUAL_ENV`, which `uv run` sets for the gate it launches: in the clone it
 sends a step's `uv pip install` to the caller's venv while `uv run` reads the

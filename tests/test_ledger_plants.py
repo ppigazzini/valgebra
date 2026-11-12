@@ -2973,8 +2973,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "CONTRIBUTING.md",
-            "| `uv.lock` | `uv export --locked --format requirements-txt",
-            "| `uv.lock` | uv export --locked --format requirements-txt",
+            "| `uv.lock` | `uv export --locked --format pylock.toml",
+            "| `uv.lock` | uv export --locked --format pylock.toml",
         ),
         trips=("test_every_row_carries_all_three_cells",),
     ),
