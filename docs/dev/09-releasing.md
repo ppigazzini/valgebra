@@ -392,7 +392,10 @@ surface, and each holds answers this tree's gates do not. What that asks of a re
   may move: more proven, fewer undecided. A proof against a containment label, or a new
   disagreement with the `jsonschema` package, is a defect here, and it stops the bump.
 - **A companion re-pins on a minor.** A `0.0.x` minor is a breaking release to them, as their
-  `pyproject.toml` floors say, so each moves its floor with a release of its own.
+  `pyproject.toml` floors say, so each moves its floor with a release of its own, and holds its
+  ceiling at the next minor: `valgebra>=0.0.25,<0.0.26`. A ceiling of `<0.1` admits the next
+  minor before the companion's suite has run on it, so a resolver installs the two together the
+  day this package releases.
 - **The floor and the matrix are theirs too.** A companion's `requires-python` follows
   [Which interpreters a release supports](#which-interpreters-a-release-supports), and it builds no
   wheel, so it reads this package's on each.
