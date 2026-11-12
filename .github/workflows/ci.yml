@@ -397,18 +397,24 @@ jobs:
           # moves in its third digit between runs.
           #
           # The region floor is the one that notices a branch with an arm nobody
-          # reached, and it is three points below the line figure here. The line
+          # reached, and it is seven points below the line figure here. The line
           # floor sits about a point under its figure, which is the tolerance a
           # figure carries between machines and no more; the region floor sits
           # nearer, because the arms for `typing_extensions`' own objects go
           # unreached on 3.13 with the module installed, as the walk baseline's
           # notes say of their mutants.
+          #
+          # A region is what the compiler emits, so the figure belongs to its
+          # release. Rust 1.100 emits a third fewer regions for the same code:
+          # this scope read 20,832 regions and 1,430 unreached, 93.14%, under
+          # 1.99 and 13,568 and 1,314, 90.32%, under 1.100, files no change
+          # touched moving alike. The floor follows the count, not the code.
           # `tests/test_coverage_scope.py` holds this scope to the corpus files
           # the tree has, in both directions.
           ignore='valgebra-core|valgebra-py/src/workload\.rs|/interpreter\.rs$|tests\.rs$'
           cargo llvm-cov report --summary-only \
             --ignore-filename-regex "$ignore" \
-            --fail-under-lines 96 --fail-under-regions 93
+            --fail-under-lines 96 --fail-under-regions 90
           # And the same reading per file, for the same reason the core's lane
           # carries one: this floor is a total too.
           cargo llvm-cov report --json --output-path coverage-binding.json \

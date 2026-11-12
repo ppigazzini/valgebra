@@ -3040,7 +3040,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "--fail-under-lines 96 --fail-under-regions 93",
+            "--fail-under-lines 96 --fail-under-regions 90",
             "--fail-under-lines 96",
         ),
         trips=("test_a_lane_enforces_a_region_floor_beside_its_line_floor",),
