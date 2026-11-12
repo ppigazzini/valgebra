@@ -4130,13 +4130,42 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
 fn sized_past(mine: &Schema, theirs: &Schema) -> Vec<Obj> {
     let pool = const_pool();
     let mut widths = Vec::new();
-    widths_named_by(theirs, &mut widths);
+    every_bound_width(theirs, &mut widths);
     widths
         .into_iter()
-        .flat_map(|(_, len)| len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN))
+        .flat_map(|len| len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN))
         .flat_map(|width| sized_like(mine, width, MEMBER_FUEL))
         .filter(|value| member_full(mine, value, &pool))
         .collect()
+}
+
+/// Every length bound a schema names, over any base, through the wrappers
+/// [`widths_named_by`] looks through.
+///
+/// [`widths_named_by`] keeps the bounds a sequence is built at, with their
+/// container, and so skips a bound over a set or a mapping. A sized schema is
+/// told from such a bound by a value of its own at the bound's width just the
+/// same: `dict[str, None]` below `dict[str, Any]` of at most one entry is
+/// refuted by a dict of two `None`s, which only the subject builds and only at
+/// a width the other schema names.
+fn every_bound_width(schema: &Schema, out: &mut Vec<usize>) {
+    match schema {
+        Schema::Refine { base, constraints } => {
+            for constraint in constraints.iter() {
+                if let Constraint::MinLen(len) | Constraint::MaxLen(len) = constraint {
+                    out.push(*len);
+                }
+            }
+            every_bound_width(base, out);
+        }
+        Schema::Complement(inner) => every_bound_width(inner, out),
+        Schema::Union(members) | Schema::Intersection(members) => {
+            for member in members.iter() {
+                every_bound_width(member, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// How deep the crossing goes past the position it starts at.
@@ -5832,12 +5861,11 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
             beside(constant, &mut mine);
         }
         Schema::Refine { base, constraints } => {
-            for constraint in constraints.iter() {
-                if let Constraint::MinLen(len) | Constraint::MaxLen(len) = constraint {
-                    mine.extend(sequences_around(base, *len));
-                }
-            }
-            mine.extend(edges_of(base, out));
+            // The bound's values first, then the base's. A bound is what the
+            // refinement adds to its base, and the base's edges, read first, fill
+            // the node's cap before a neighbor past the bound is built: a map of
+            // three entries under `MaxLen(2)` was cut that way, and a list of
+            // three floats under `MinLen(2)` at a position of a fixed shape.
             for constraint in constraints.iter() {
                 match constraint {
                     Constraint::Ge(index)
@@ -5848,6 +5876,7 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
                         numbers_around(&const_pool()[index.get()], &mut mine);
                     }
                     Constraint::MinLen(len) | Constraint::MaxLen(len) => {
+                        mine.extend(sequences_around(base, *len));
                         for width in len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN) {
                             containers_of(width, &mut mine);
                         }
@@ -5855,6 +5884,7 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
                     Constraint::Predicate(_) | Constraint::Regex(_) => {}
                 }
             }
+            mine.extend(edges_of(base, out));
         }
         Schema::Seq { container, shape } => {
             mine.extend(sequence_edges(*container, shape, out));
@@ -7984,6 +8014,40 @@ fn a_length_bound_at_a_position_is_probed_one_past_it() {
     );
     let a = list(SeqShape::fixed([floats, Schema::Ref(DefIx::new(1))]));
     let b = list(SeqShape::fixed([pair, Schema::Ref(DefIx::new(1))]));
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(a_value_parts(&subject, &other));
+}
+
+// THEORY: subtyping-is-inclusion
+/// A length bound over a mapping is probed one past it.
+///
+/// `dict[str, Any] <= (dict[str, Any] & MaxLen(2)) | D0`, with `D0` the fixpoint
+/// `str | list[D0]`, is refuted on a dict of three entries, which the
+/// mapping's own edges, read ahead of the bound's, left out of the universe.
+#[test]
+fn a_length_bound_over_a_map_is_probed_one_past_it() {
+    let defs = fixpoint_defs();
+    let words = || Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::Anything(Spelling::Any),
+        }]
+        .into(),
+    };
+    let a = words();
+    let b = Schema::Union(
+        vec![
+            Schema::refine(words(), vec![Constraint::MaxLen(2)]),
+            Schema::Ref(DefIx::new(0)),
+        ]
+        .into(),
+    );
     assert_eq!(
         a.subtype_relation_under(&b, &NoLeafRelations, &defs),
         Relation::Fails

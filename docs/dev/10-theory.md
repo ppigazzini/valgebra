@@ -844,7 +844,7 @@ SOURCE: §13.0 "**Subtyping, defined.** UIN Definition 4"
 
 IMPLEMENTED-BY: decision.rs::Schema::equivalence_relation, decision.rs::Schema::is_subtype_of, decision.rs::Schema::is_equivalent
 
-HELD-BY: a_meet_read_empty_at_the_root_bounds_the_relation, subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_length_bound_at_a_position_is_probed_one_past_it, a_refutation_stands_on_a_length_every_interpreter_builds, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
+HELD-BY: a_meet_read_empty_at_the_root_bounds_the_relation, subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_length_bound_at_a_position_is_probed_one_past_it, a_length_bound_over_a_map_is_probed_one_past_it, a_refutation_stands_on_a_length_every_interpreter_builds, a_map_relation_stands_on_a_dict, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
 
 **A cut reference proves, and refutes past the kinds it reaches.** The
 descriptor decides `a <= b` by
