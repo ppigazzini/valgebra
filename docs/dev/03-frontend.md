@@ -989,6 +989,20 @@ engines accept and read apart, and these reach no reading:
 `tests/test_regex_dialect.py` holds each form the refinements page lists to a
 refusal at the parse that names the pattern, and the page to listing it.
 
+**Keeping a definition that never names itself, so a shared part counts once.**
+A schema built from one part named in many places is a tree holding the part at
+each, and past `MAX_SCHEMA_NODES` it is refused though it holds a few hundred
+distinct parts. Kept as a definition, each use would be one node. Spelled through
+`recursive`, the form fails `test_a_body_that_never_names_the_fixpoint_is_that_body`
+in `tests/test_recursion.py`, which holds a body that never names the fixpoint to
+that body, equal to it and rendered as it. Spelled any other way, it is read
+through a reference, which the set representation unfolds once (`UNFOLDS` in
+`descr/lower.rs`) and cuts past that to the top or the bottom by the side it
+stands on, so the relations decide less on the schema it made buildable than on
+one that fits inline. Where the parts multiply through exactly one of `n`
+branches, which spells each branch `n` times, the size is the caller's to
+remove: a branch proved disjoint from another needs no complement of it.
+
 ## The limit
 
 **The frontend decides meaning; nothing checks it against the typing spec
