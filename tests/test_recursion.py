@@ -941,3 +941,29 @@ def test_a_set_is_below_the_excluded_middle_of_a_set_it_meets() -> None:
     assert (
         flat.relation_to(union(big, intersection(str, complement(big)))) == "not_subset"
     )
+
+
+def test_a_subject_of_finitely_many_values_is_related_by_each() -> None:
+    """A subject of constants is related by the membership of each of its values.
+
+    The spelling is the one a translation from JSON Schema writes for an array
+    constant, a one-item list met with its length, nested: `[[[["1"]]]]` is not a
+    list of lists of numbers, on the string at the bottom, which no rule reads
+    through four exact lengths. A predicate in the supertype leaves the pair
+    undecided, since its code may answer two calls differently.
+    """
+
+    def one(item: object) -> Validator[Any]:
+        return intersection(list[item], Annotated[list[Any], at.Len(1, 1)])  # ty: ignore[invalid-type-form]
+
+    word = one(one(one(one(Literal["1"]))))
+    numbers = Validator(list[list[list[list[int | float]]]])
+    assert word.relation_to(numbers) == "not_subset"
+    assert not word.is_subtype_of(numbers)
+    texts = Validator(list[list[list[list[str]]]])
+    assert word.relation_to(texts) == "subset"
+    assert word.is_subtype_of(texts)
+    checked = Validator(
+        list[list[list[list[Annotated[int, at.Predicate(lambda _: True)]]]]]
+    )
+    assert word.relation_to(checked) == "undecided"

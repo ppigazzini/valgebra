@@ -19,6 +19,7 @@ mod codes;
 mod equality;
 mod errors;
 mod exception;
+mod finite;
 mod input;
 mod oracle;
 mod render;

@@ -176,6 +176,14 @@ class _Node(dict):
 #: whose row has to be re-read, which is the point rather than a cost.
 ROWS: dict[str, Row] = {
     # -- decided exactly -----------------------------------------------------
+    "A subject of finitely many constants.": Decides(
+        intersection(
+            list[intersection(list[Literal["1"]], Annotated[list[Any], at.Len(1, 1)])],  # ty: ignore[invalid-type-form]
+            Annotated[list[Any], at.Len(1, 1)],
+        ),
+        list[list[int]],
+        "not_subset",
+    ),
     "The scalar Boolean algebra.": Decides(
         intersection(int, complement(int)), nothing, "subset"
     ),

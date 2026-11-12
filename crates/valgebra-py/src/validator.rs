@@ -207,6 +207,49 @@ impl Validator {
         )
     }
 
+    /// The inclusion of this schema in `other`, in three answers: the deciders',
+    /// and where both decline, the membership of each value of a subject of
+    /// finitely many ([`finite`](crate::finite)).
+    ///
+    /// The value reading asks the walk of `other`, which runs in Python and spends
+    /// no decision step, so it is asked only of a subject of at most
+    /// [`FINITE_VALUES`](crate::finite::FINITE_VALUES) constants each its whole
+    /// set, and of a supertype whose walk reads every atom as the relation would.
+    fn relation_with(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Relation> {
+        let mut literals = self.relation_pool(py, other);
+        let mut definitions = self.definitions.clone();
+        let other = build_root_inside(other, &mut literals, &mut definitions)?;
+        let oracle = PoolRelations::new(py, literals.items(), &definitions);
+        let relation = self
+            .schema
+            .subtype_relation_under(&other, &oracle, &definitions);
+        oracle.answer(())?;
+        drop(oracle);
+        if relation != Relation::Unknown
+            || !crate::finite::walked_alike(py, &other, literals.items(), &definitions)
+        {
+            return Ok(relation);
+        }
+        let Some(values) = crate::finite::values_of(py, &self.schema, &self.literals)? else {
+            return Ok(relation);
+        };
+        let walker = Validator::new(
+            other,
+            literals
+                .items()
+                .iter()
+                .map(|item| item.clone_ref(py))
+                .collect(),
+            definitions,
+        );
+        for value in &values {
+            if !walker.is_valid(value)? {
+                return Ok(Relation::Fails);
+            }
+        }
+        Ok(Relation::Holds)
+    }
+
     /// Assemble a validator, rejecting one whose schema is too deep, holds too
     /// many recursive definitions, or spans too many nodes. Every growth path —
     /// the `Validator(...)` constructor, the `|`/`union`/`intersection`/
@@ -747,16 +790,7 @@ impl Validator {
     ///         rather than being read as an answer.
     #[pyo3(signature = (other, /))]
     fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        refused_memory_is_memory_error(|| {
-            let mut literals = self.relation_pool(py, other);
-            let mut definitions = self.definitions.clone();
-            let other = build_root_inside(other, &mut literals, &mut definitions)?;
-            let oracle = PoolRelations::new(py, literals.items(), &definitions);
-            let holds = self
-                .schema
-                .is_subtype_of_under(&other, &oracle, &definitions);
-            oracle.answer(holds)
-        })
+        refused_memory_is_memory_error(|| Ok(self.relation_with(py, other)? == Relation::Holds))
     }
 
     /// The inclusion in three answers rather than two.
@@ -808,18 +842,11 @@ impl Validator {
         other: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyString>> {
         refused_memory_is_memory_error(|| {
-            let mut literals = self.relation_pool(py, other);
-            let mut definitions = self.definitions.clone();
-            let other = build_root_inside(other, &mut literals, &mut definitions)?;
-            let oracle = PoolRelations::new(py, literals.items(), &definitions);
-            let relation = self
-                .schema
-                .subtype_relation_under(&other, &oracle, &definitions);
-            let answer = oracle.answer(match relation {
+            let answer = match self.relation_with(py, other)? {
                 Relation::Holds => "subset",
                 Relation::Fails => "not_subset",
                 Relation::Unknown => "undecided",
-            })?;
+            };
             // Made here rather than by the return's conversion, which runs past the
             // catch.
             Ok(PyString::new(py, answer))

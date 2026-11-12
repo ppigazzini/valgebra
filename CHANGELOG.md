@@ -20,10 +20,19 @@ answer of its own, or a repair to a change not yet released.
 - fix: long text is rendered from its head in a value summary
 - feat: a set inside c that holds a value is refuted below the complement of c
 - feat: a pair the deciders declined is split on a set its supertype negates
+- feat: a relation from finitely many constants reads each value
 
 -->
 
 ### Added
+
+- **A relation from finitely many constants reads each value.** A subject built from literals,
+  `None`, `bool`, fixed sequences, sequences of one exact length, closed records and unions of
+  them, holding at most sixty-four values, is related by the membership of each where both
+  deciders decline: the nested one-item list `[[[["1"]]]]` a translation from JSON Schema writes is
+  `not_subset` of `list[list[list[list[int | float]]]]`, where it stayed `undecided`. A supertype
+  holding a predicate, a class or an attribute is not read this way. 47 of `valgebra-jsonschema`'s
+  undecided containment questions are decided by it, none against a label.
 
 - **A pair the deciders declined is split on a set its supertype negates.** `U <= T` is asked as
   `U & C <= T` and `U & ~C <= T`, for a `C` the supertype holds under a complement, so `J` the JSON

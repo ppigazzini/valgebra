@@ -533,6 +533,17 @@ whether a value is a member, and the laws hold every operation to it. Those
 three ship because lowering asks which values a set holds. The components are crate-private, so a part no
 relation reaches is dead code the compiler reports.
 
+**Past both deciders, a subject of finitely many values** is read by the binding
+value by value (`crates/valgebra-py/src/finite.rs`, `relation_with` in
+`validator.rs`): `t ⊆ s` is no value of `t` outside `s` [FCB08, §4.1], so a
+subject of at most `FINITE_VALUES` constants, each the whole set its literal
+denotes, is related by walking the supertype on each. The walk reads the
+supertype as a proof would only where no atom of it runs code a second call
+may answer differently, so a predicate, a class or an attribute anywhere in it,
+or a constant `==` widens, leaves the pair to the deciders. The relation of such
+a subject is then the walk's: the two are one procedure there, not two held to
+each other.
+
 ## Why every rule stays
 
 A rule earns its place by reaching a shape the descriptor refuses, or by

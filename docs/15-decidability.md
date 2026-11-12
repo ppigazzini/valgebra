@@ -57,6 +57,16 @@ value of the subject is outside the other schema, and `"undecided"` where no
 rule and no set reading answers. Everything in the conservative list below
 answers `"undecided"`.
 
+- **A subject of finitely many constants.** A schema built from literals, `None`,
+  `bool`, fixed sequences, sequences of one exact length, closed records and
+  unions of them denotes finitely many values, and where it denotes at most
+  sixty-four, each an `int`, `bool`, `str`, `bytes`, `None` or a float, its
+  relation to a schema is the membership of each value: `"not_subset"` on the
+  first value outside, `"subset"` where every value is inside. A schema holding a
+  predicate, a class or an attribute is not read this way, since its code may
+  answer two calls differently, and neither is a constant whose class `==`
+  widens past itself. It is the shape a translation from JSON Schema writes for
+  `const` and `enum`.
 - **The scalar Boolean algebra.** Every union, intersection, and complement of the
   scalar atoms (`None`, `bool`, `int`, `float`, `str`, `bytes`), with `bool` a
   subtype of `int`. The complement laws hold: `int & ~int` is empty, `int | ~int`

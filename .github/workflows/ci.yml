@@ -95,6 +95,7 @@ env:
     crates/valgebra-py/src/build/dialect.rs
     crates/valgebra-py/src/equality.rs
     crates/valgebra-py/src/oracle.rs
+    crates/valgebra-py/src/finite.rs
     crates/valgebra-py/src/codes.rs
 
 jobs:
