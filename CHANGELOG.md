@@ -13,20 +13,36 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- feat: every sequence of a meet is read at once
-- feat: a meet of sequences is read as the one sequence of its items' meet
-- fix: a long key is cut where a message writes its location
-- fix: the failures under one key share its string in errors
-- fix: long text is rendered from its head in a value summary
-- feat: a set inside c that holds a value is refuted below the complement of c
-- feat: a pair the deciders declined is split on a set its supertype negates
-- feat: a relation from finitely many constants reads each value
-- feat: a split's halves are asked of their parts
-- feat: a recursive subject is narrowed twice where once found no value
-- feat: an integer bound past 64 bits is held up to 2**120
-- feat: a meet of sequences is read as its one sequence at every goal
-
 -->
+
+## [0.0.26] - 2026-11-13
+
+A release of answers, with eight additions and no node. Each reads a pair 0.0.25 left
+`undecided`: a meet of sequences read as the one sequence of its items' meet, a set holding a
+value refuted below a complement it lies inside, a declined pair split on a set its supertype
+negates and each half asked of its parts, a subject of finitely many constants related by each
+of its values, a recursive subject narrowed through two unfoldings, and an integer bound held
+past 64 bits. Three fixes bound what a report builds over a long key or long text. Over the
+60,000 pairs each generation of a fuzzer draws, the relations give 117 answers more than 0.0.25
+on the second and 22 more on the first, and lose none. The JSON Schema containment suite, read
+through `valgebra-jsonschema`, proves 200 more of its labeled inclusions and refutes 13 more,
+with no proof against a label; each of the 11 more refutations against a label is a wrong label
+the `jsonschema` package admits a witness against.
+
+Against 0.0.25 built here from its tag, on CPython 3.15, the instruction gate's 44 workloads
+count from 0.07% fewer instructions to 0.35% more, each within its ceiling. On the
+profiled wheels of CPython 3.11 through 3.15 every shape counts within 0.5% of 0.0.25's but
+two. A relation between two built validators counts 3.7% to 4.2% more, 79 instructions a call
+on 3.15, for the relation by values a subject of finitely many constants gets where both
+deciders decline; the call's entry was read out of line and the count did not move, the
+profiled build placing the decider apart. The explaining walk of a scalar counts 0.4% to 0.5%
+more, 1.4% on 3.11, where a summary renders long text from its head and a report shares a key's
+string across its failures. The JSON shapes that count otherwise do so at one size of the
+environment and not at the other, which is an allocator's, but a union of records on 3.13,
+which counts 2.2% fewer at both. On the free-threaded 3.14 and 3.15 a count of a shape of a few
+thousand instructions does not repeat from one build to another: two builds whose walks count
+alike on every interpreter with the GIL read different shapes higher in each of three counts,
+the explaining walk of a scalar by 0.6% to 3.0% in one and a literal by 11% to 49% in the other.
 
 ### Added
 
@@ -4875,7 +4891,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.25...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.26...HEAD
+[0.0.26]: https://github.com/ppigazzini/valgebra/compare/v0.0.25...v0.0.26
 [0.0.25]: https://github.com/ppigazzini/valgebra/compare/v0.0.24...v0.0.25
 [0.0.24]: https://github.com/ppigazzini/valgebra/compare/v0.0.23...v0.0.24
 [0.0.23]: https://github.com/ppigazzini/valgebra/compare/v0.0.22...v0.0.23
