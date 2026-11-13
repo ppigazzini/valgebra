@@ -43,16 +43,18 @@ pub enum Operand {
     NoneType,
     /// An instance of a pure class.
     Instance(Class),
-    /// A bound's `Fraction` or finite `Decimal`, as the integers at its floor
-    /// and at its ceiling, one integer where it is whole, and the floats beside
-    /// it, one float where it is one. Python compares an `int` and a `float`
-    /// with either exactly, so a bound over the integers reads the first two,
-    /// one over the floats the last two, and nothing else reads it.
+    /// A bound's `Fraction` or finite `Decimal`, or an `int` past the range an
+    /// [`Operand::Integer`] holds, as the integers at its floor and at its
+    /// ceiling, one integer where it is whole, and the floats beside it, one
+    /// float where it is one. Python compares an `int` and a `float` with each
+    /// exactly, so a bound over the integers reads the first two, one over the
+    /// floats the last two, and nothing else reads it. The integers lie within
+    /// [`WIDE`] of zero.
     Rational {
         /// The greatest integer at or below the value.
-        floor: i64,
+        floor: i128,
         /// The least integer at or above the value.
-        ceil: i64,
+        ceil: i128,
         /// The greatest float at or below the value.
         below: f64,
         /// The least float at or above the value.
@@ -1723,8 +1725,8 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
     let lower = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
     let strict = matches!(constraint, Constraint::Gt(_) | Constraint::Lt(_));
     let bound = match *operand {
-        Operand::Integer(value) => value,
-        Operand::Boolean(value) => i64::from(value),
+        Operand::Integer(value) => i128::from(value),
+        Operand::Boolean(value) => i128::from(value),
         Operand::Float(value) if value.is_infinite() => {
             return Some(if value.is_sign_positive() == lower {
                 IntSet::empty()
@@ -1738,14 +1740,14 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
             } else {
                 value.ceil()
             };
-            if !(-I64_EDGE..I64_EDGE).contains(&near) {
+            if !(-WIDE_EDGE..=WIDE_EDGE).contains(&near) {
                 return None;
             }
             #[expect(
                 clippy::cast_possible_truncation,
-                reason = "an integral float inside the i64 range converts exactly"
+                reason = "an integral float within 2^120 of zero converts exactly"
             )]
-            let near = near as i64;
+            let near = near as i128;
             near
         }
         Operand::Rational { floor, ceil, .. } => {
@@ -1757,6 +1759,9 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
         }
         _ => return None,
     };
+    if !(-WIDE..=WIDE).contains(&bound) {
+        return None;
+    }
     Some(match (lower, strict) {
         (true, false) => IntSet::between(Some(bound), None),
         (true, true) => IntSet::between(Some(bound.checked_add(1)?), None),
@@ -1768,6 +1773,17 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
 /// `2^63`, the first float past the integers an `i64` holds; `-2^63` is the
 /// least one it holds. `nan` is inside no range, so it declines here too.
 const I64_EDGE: f64 = 9_223_372_036_854_775_808.0;
+
+/// The magnitude an integer bound may reach, `2^120`.
+///
+/// It holds every bound JSON Schema's 64-bit limits write, and a span holds it
+/// with room to spare, since a residue table shifts a bound by a step and a
+/// complement by one. A bound past it declines, as an integer is unbounded and
+/// the carrier is not.
+pub const WIDE: i128 = 1 << 120;
+
+/// [`WIDE`] as a float, which holds it exactly.
+const WIDE_EDGE: f64 = 1_329_227_995_784_915_872_903_807_060_280_344_576.0;
 
 /// The floats a comparison bound admits, for a base that is the floats.
 ///

@@ -1699,8 +1699,8 @@ proptest! {
         .nth(which)
         .expect("one of four");
         let rational = Operand::Rational {
-            floor: p.div_euclid(q),
-            ceil: -(-p).div_euclid(q),
+            floor: i128::from(p.div_euclid(q)),
+            ceil: i128::from(-(-p).div_euclid(q)),
             below: f64::NAN,
             above: f64::NAN,
         };

@@ -23,6 +23,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a relation from finitely many constants reads each value
 - feat: a split's halves are asked of their parts
 - feat: a recursive subject is narrowed twice where once found no value
+- feat: an integer bound past 64 bits is held up to 2**120
 
 -->
 
@@ -35,6 +36,12 @@ answer of its own, or a repair to a change not yet released.
   `not_subset` of `list[list[list[list[int | float]]]]`, where it stayed `undecided`. A supertype
   holding a predicate, a class or an attribute is not read this way. 47 of `valgebra-jsonschema`'s
   undecided containment questions are decided by it, none against a label.
+
+- **An integer bound past 64 bits is held up to `2**120`.** `Annotated[int, Le(9223372036854776000)]`,
+  the largest `int64` as JavaScript prints it, is `subset` of `Annotated[int,
+  Le(18446744073709551615)]` and the converse `not_subset`, where both stayed `undecided`: a bound
+  is read within `2**120` of zero, a Python `int` past the 64-bit range among them. Past `2**120`
+  a bound still declines, and a constant, a key and a step are still read within 64 bits.
 
 - **A recursive subject is narrowed twice where once found no value.** Where every reading left
   a relation undecided and its subject holds a reference, the subject is unfolded twice before

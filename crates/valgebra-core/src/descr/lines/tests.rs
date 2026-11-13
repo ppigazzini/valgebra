@@ -117,7 +117,7 @@ fn lines() -> impl Strategy<Value = Lines> {
         Just(IntSet::all()),
         Just(IntSet::empty()),
         (-2i64..=2).prop_map(IntSet::just),
-        (-2i64..=2).prop_map(|lo| IntSet::between(Some(lo), None)),
+        (-2i128..=2).prop_map(|lo| IntSet::between(Some(lo), None)),
     ];
     let objects = prop_oneof![
         Just(RecordLattice::all()),

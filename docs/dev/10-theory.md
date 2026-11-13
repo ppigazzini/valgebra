@@ -1551,10 +1551,11 @@ IMPLEMENTED-BY: valgebra-py/src/check/walk.rs::member, valgebra-py/src/check/wal
 
 HELD-BY: test_a_complement_refuses_a_value_its_inner_walk_stopped_on, test_a_complement_refuses_a_document_its_inner_walk_stopped_on, a_complement_refuses_a_value_its_inner_walk_stopped_on
 
-**The integer and float carriers are `i64` and `f64`.** Membership is exact --
-the walk reads the Python object -- and a relation *declines* where deciding it
-takes a value the carrier cannot spell. A rounded carrier would be wrong in one
-direction, so it refuses.
+**The integer and float carriers are `i64` and `f64`, and an integer bound
+reaches `2**120`.** Membership is exact -- the walk reads the Python object --
+and a relation *declines* where deciding it takes a value the carrier cannot
+spell: a constant, a key or a step past `i64`, a bound past `2**120`. A rounded
+carrier would be wrong in one direction, so it refuses.
 
 What that bounds is narrower than the whole question, and the narrowing is the
 same under both operators. An **inclusion** is settled by the operands rather

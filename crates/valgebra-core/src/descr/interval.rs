@@ -21,12 +21,12 @@ use core::cmp::{max, min};
 /// that there is one.
 ///
 /// **The ends are wider than the bounds a schema can name.** A caller's bound
-/// arrives as an `i64`, and complementing a span needs the integer just outside
-/// it: the complement of `Ge(i64::MIN)` begins at `i64::MIN - 1`, which is a
-/// Python integer and not an `i64`. Naming the ends in the same width as the
-/// bounds would leave that gap unrepresentable, and the complement would drop
-/// it -- deciding `int` below `Annotated[int, Ge(-2**63)]`, which `-2**63 - 1`
-/// refutes. One step of headroom on each side is all the operations need: a
+/// arrives within `2^120` of zero ([`WIDE`](super::lower::WIDE)), and
+/// complementing a span needs the integer just outside it: the complement of
+/// `Ge(-2**120)` begins at `-2**120 - 1`. Naming the ends in the same width as
+/// the bounds would leave that gap unrepresentable, and the complement would
+/// drop it -- deciding `int` below `Annotated[int, Ge(-2**120)]`, which
+/// `-2**120 - 1` refutes. One step of headroom on each side is all the operations need: a
 /// complement moves a boundary by one and moves it back, and a union or a meet
 /// only ever picks a boundary one of its operands already carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -112,13 +112,11 @@ impl IntervalSet {
 
     /// The integers from `lo` to `hi` inclusive, with `None` unbounded.
     #[must_use]
-    pub(crate) fn between(lo: Option<i64>, hi: Option<i64>) -> IntervalSet {
-        // The bounds a schema names are `i64`; the span holds them wider, so
-        // the complement of one has room for the integer just outside it.
-        let span = Span {
-            lo: lo.map(i128::from),
-            hi: hi.map(i128::from),
-        };
+    pub(crate) fn between(lo: Option<i128>, hi: Option<i128>) -> IntervalSet {
+        // The bounds a schema names lie within `2^120` of zero; the span's ends
+        // reach far past them, so the complement of one has room for the
+        // integer just outside it.
+        let span = Span { lo, hi };
         if span.is_empty() {
             IntervalSet::empty()
         } else {
@@ -129,7 +127,7 @@ impl IntervalSet {
     /// The one-element set.
     #[must_use]
     pub(crate) fn just(value: i64) -> IntervalSet {
-        IntervalSet::between(Some(value), Some(value))
+        IntervalSet::between(Some(i128::from(value)), Some(i128::from(value)))
     }
 
     /// Whether this set holds no integer.

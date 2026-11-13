@@ -1,11 +1,11 @@
 """What the numeric carriers can spell, and what they decline at the edge.
 
 A relation between two schemas is decided on the *sets* they denote, and the
-integer component spells a set as intervals over `i64` with a residue class per
-step. Python's integers are unbounded and the carrier is not, so a bound the
-carrier cannot name is a bound the relation declines -- which is deviation 11 of
-the theory ledger, and it is sound: a decline is "not proven", never a wrong
-proof.
+integer component spells a set as intervals whose bounds lie within `2**120` of
+zero, with a residue class per step. Python's integers are unbounded and the
+carrier is not, so a bound the carrier cannot name is a bound the relation
+declines -- which is deviation 11 of the theory ledger, and it is sound: a
+decline is "not proven", never a wrong proof.
 
 The edge of the carrier is where declining is easy to get wrong. A span with no
 lower end means *every* integer, and a span beginning at the smallest `i64` means
@@ -95,12 +95,31 @@ def test_a_strict_bound_at_the_end_names_a_set_the_carrier_spells() -> None:
 
 def test_a_bound_past_the_carrier_declines() -> None:
     """Deviation 11 as the page states it, with the queries it names."""
-    wide = Annotated[int, at.Ge(2**70)]
-    wider = Annotated[int, at.Ge(2**70 + 1)]
+    wide = Annotated[int, at.Ge(2**121)]
+    wider = Annotated[int, at.Ge(2**121 + 1)]
     assert Validator(wide).relation_to(wider) == "undecided"
     # The schema still validates exactly: membership reads the Python integer.
-    assert Validator(wide).is_valid(2**70) is True
-    assert Validator(wide).is_valid(2**70 - 1) is False
+    assert Validator(wide).is_valid(2**121) is True
+    assert Validator(wide).is_valid(2**121 - 1) is False
+
+
+def test_a_bound_past_64_bits_is_decided_by_a_value_between() -> None:
+    """The 64-bit limits a JSON generator writes are bounds the carrier spells.
+
+    `9223372036854776000` is `2**63` as JavaScript prints it, 192 past the
+    largest `i64`, and `18446744073709551615` the largest unsigned one: a field
+    widened from one to the other is a relation decided both ways.
+    """
+    signed = Annotated[int, at.Le(9223372036854776000)]
+    unsigned = Annotated[int, at.Le(18446744073709551615)]
+    assert Validator(signed).relation_to(unsigned) == "subset"
+    assert Validator(unsigned).relation_to(signed) == "not_subset"
+    assert Validator(signed).is_valid(9223372036854776001) is False
+    assert Validator(unsigned).is_valid(9223372036854776001) is True
+    wide = Annotated[int, at.Ge(2**70)]
+    assert Validator(wide).relation_to(Annotated[int, at.Ge(2**70 + 1)]) == (
+        "not_subset"
+    )
 
 
 # THEORY: the-carriers-are-i64-and-f64
@@ -122,11 +141,11 @@ def test_a_bound_past_the_carrier_is_proved_by_the_order() -> None:
     A contradiction is decided the same way, because two bounds that cross
     cross wherever they are written.
     """
-    wide = Annotated[int, at.Ge(2**70)]
-    wider = Annotated[int, at.Ge(2**70 + 1)]
+    wide = Annotated[int, at.Ge(2**121)]
+    wider = Annotated[int, at.Ge(2**121 + 1)]
     # The proof runs in the direction the order gives, at any size.
     assert Validator(wider).relation_to(wide) == "subset"
-    assert Validator(wide).relation_to(Annotated[int, at.Ge(2**69)]) == "subset"
+    assert Validator(wide).relation_to(Annotated[int, at.Ge(2**120)]) == "subset"
     assert (
         Validator(Annotated[int, at.Ge(I64_MAX + 1)]).relation_to(
             Annotated[int, at.Ge(I64_MAX)]
@@ -143,7 +162,7 @@ def test_a_bound_past_the_carrier_is_proved_by_the_order() -> None:
     assert Validator(Annotated[int, at.Ge(0)]).relation_to(wide) == "undecided"
     assert Validator(wide).relation_to(wider) == "undecided"
     # A pair that cannot hold together holds nothing, however large the bounds.
-    assert Validator(Annotated[int, at.Gt(2**70), at.Lt(2**70 + 1)]).is_empty()
+    assert Validator(Annotated[int, at.Gt(2**121), at.Lt(2**121 + 1)]).is_empty()
 
 
 def test_a_step_no_machine_word_holds_the_magnitude_of_is_not_zero_alone() -> None:

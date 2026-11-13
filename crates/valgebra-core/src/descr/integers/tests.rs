@@ -60,9 +60,9 @@ fn int_set() -> impl Strategy<Value = IntSet> {
         Just(IntSet::empty()),
         Just(IntSet::all()),
         (-9i64..=9).prop_map(IntSet::just),
-        (-9i64..=9).prop_map(|lo| IntSet::between(Some(lo), None)),
-        (-9i64..=9).prop_map(|hi| IntSet::between(None, Some(hi))),
-        (-9i64..=9, -9i64..=9).prop_map(|(a, b)| IntSet::between(Some(a.min(b)), Some(a.max(b)))),
+        (-9i128..=9).prop_map(|lo| IntSet::between(Some(lo), None)),
+        (-9i128..=9).prop_map(|hi| IntSet::between(None, Some(hi))),
+        (-9i128..=9, -9i128..=9).prop_map(|(a, b)| IntSet::between(Some(a.min(b)), Some(a.max(b)))),
         (1i64..=5).prop_map(|step| IntSet::multiple_of(step).expect("a small step")),
     ];
     leaf.prop_recursive(4, 24, 2, |inner| {

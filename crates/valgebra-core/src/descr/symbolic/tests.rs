@@ -551,7 +551,7 @@ fn a_product_past_the_row_bound_refuses() {
         edges: vec![
             (0..count)
                 .map(|n| Edge {
-                    guard: Some(IntSet::between(Some(-n), None)),
+                    guard: Some(IntSet::between(Some(i128::from(-n)), None)),
                     target: 0,
                 })
                 .collect(),
@@ -594,7 +594,10 @@ fn a_product_past_the_edge_bound_refuses() {
                     u32::try_from(state + usize::from(state + 1 < states)).unwrap_or(u32::MAX);
                 (0..WIDTH)
                     .map(|n| Edge {
-                        guard: Some(IntSet::between(Some(-i64::try_from(n).unwrap_or(0)), None)),
+                        guard: Some(IntSet::between(
+                            Some(i128::from(-i64::try_from(n).unwrap_or(0))),
+                            None,
+                        )),
                         target: next,
                     })
                     .collect()

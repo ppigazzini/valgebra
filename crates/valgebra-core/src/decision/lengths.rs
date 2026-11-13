@@ -95,7 +95,7 @@ impl ByLength<'_> {
             .lengths
             .intersect(&lengths_held())
             .intersect(&lengths_up_to(REACHED))
-            .intersect(&IntervalSet::between(Some(length), None))
+            .intersect(&IntervalSet::between(Some(i128::from(length)), None))
             .is_empty()
     }
 
@@ -159,7 +159,7 @@ fn lengths_held() -> IntervalSet {
 
 /// The lengths from zero to `most`.
 fn lengths_up_to(most: usize) -> IntervalSet {
-    IntervalSet::between(Some(0), i64::try_from(most).ok())
+    IntervalSet::between(Some(0), i128::try_from(most).ok())
 }
 
 /// The term `schema` read as its lengths, with `depth` levels left; `None`
@@ -188,7 +188,7 @@ fn lengths_of(schema: &Schema, depth: u32) -> Option<ByLength<'_>> {
                 .ok()?;
             Some(ByLength {
                 base: Some(base),
-                lengths: IntervalSet::between(Some(least), most),
+                lengths: IntervalSet::between(Some(i128::from(least)), most.map(i128::from)),
                 beyond: false,
             })
         }

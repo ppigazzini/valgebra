@@ -373,16 +373,16 @@ ROWS: dict[str, Row] = {
         # Two members `==` keeps apart refute as before.
         beside=(set[int | str], union(set[int], set[str]), "not_subset"),
     ),
-    "An integer bound outside the 64-bit range.": Declines(
-        Annotated[int, at.Ge(2**70)],
-        Annotated[int, at.Ge(2**70 + 1)],
-        "a carrier wider than the 64-bit intervals the integer component holds",
+    "An integer bound past 120 bits.": Declines(
+        Annotated[int, at.Ge(2**121)],
+        Annotated[int, at.Ge(2**121 + 1)],
+        "a carrier wider than the intervals within 2**120 the integer component holds",
         # The direction the carrier proves: an inclusion between two bounds is
         # settled by comparing the bounds, so the size of either is beside the
         # point and only the refutation wants an interval.
         beside=(
-            Annotated[int, at.Ge(2**70 + 1)],
-            Annotated[int, at.Ge(2**70)],
+            Annotated[int, at.Ge(2**121 + 1)],
+            Annotated[int, at.Ge(2**121)],
             "subset",
         ),
     ),

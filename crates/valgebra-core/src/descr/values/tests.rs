@@ -142,7 +142,7 @@ fn values() -> impl Strategy<Value = Values<IntSet>> {
         Just(Values::Every),
         Just(Values::Only(IntSet::empty())),
         (-2i64..=2).prop_map(|n| Values::Only(IntSet::just(n))),
-        (-2i64..=2).prop_map(|lo| Values::Only(IntSet::between(Some(lo), None))),
+        (-2i128..=2).prop_map(|lo| Values::Only(IntSet::between(Some(lo), None))),
     ];
     leaf.prop_recursive(3, 12, 2, |inner| {
         prop_oneof![

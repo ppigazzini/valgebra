@@ -33,9 +33,9 @@ fn interval_set() -> impl Strategy<Value = IntervalSet> {
         Just(IntervalSet::empty()),
         Just(IntervalSet::all()),
         (-8i64..=8).prop_map(IntervalSet::just),
-        (-8i64..=8).prop_map(|lo| IntervalSet::between(Some(lo), None)),
-        (-8i64..=8).prop_map(|hi| IntervalSet::between(None, Some(hi))),
-        (-8i64..=8, -8i64..=8)
+        (-8i128..=8).prop_map(|lo| IntervalSet::between(Some(lo), None)),
+        (-8i128..=8).prop_map(|hi| IntervalSet::between(None, Some(hi))),
+        (-8i128..=8, -8i128..=8)
             .prop_map(|(a, b)| IntervalSet::between(Some(a.min(b)), Some(a.max(b)))),
     ];
     leaf.prop_recursive(4, 24, 2, |inner| {
@@ -163,7 +163,7 @@ fn a_lower_bound_above_its_upper_bound_holds_nothing() {
 fn a_residue_class_at_the_bottom_of_the_range_keeps_its_members() {
     const WIDTH: i128 = 8;
     let low = i128::from(i64::MIN);
-    let span = IntervalSet::between(Some(i64::MIN), Some(i64::MIN + 8));
+    let span = IntervalSet::between(Some(i128::from(i64::MIN)), Some(i128::from(i64::MIN) + 8));
 
     for stride in [1i64, 2, 3, 5] {
         for offset in 0..stride {
@@ -197,7 +197,7 @@ fn a_residue_class_at_the_bottom_of_the_range_keeps_its_members() {
 /// operations ask for.
 #[test]
 fn a_half_line_at_the_end_of_the_bounds_keeps_its_complement() {
-    let from_the_bottom = IntervalSet::between(Some(i64::MIN), None);
+    let from_the_bottom = IntervalSet::between(Some(i128::from(i64::MIN)), None);
     let below = from_the_bottom.complement();
     assert!(!below.is_empty(), "the integers under the smallest bound");
     assert!(
@@ -206,7 +206,7 @@ fn a_half_line_at_the_end_of_the_bounds_keeps_its_complement() {
     );
     assert!(!below.holds(0));
 
-    let to_the_top = IntervalSet::between(None, Some(i64::MAX));
+    let to_the_top = IntervalSet::between(None, Some(i128::from(i64::MAX)));
     let above = to_the_top.complement();
     assert!(!above.is_empty(), "the integers over the largest bound");
     assert!(!above.holds(i64::MAX));
@@ -231,7 +231,7 @@ fn a_half_line_at_the_end_of_the_bounds_keeps_its_complement() {
 /// A bounded span at either end is unaffected: it names a set the bounds spell.
 #[test]
 fn a_bounded_span_at_the_end_of_the_range_is_the_set_it_names() {
-    let least = IntervalSet::between(Some(i64::MIN), Some(i64::MIN));
+    let least = IntervalSet::between(Some(i128::from(i64::MIN)), Some(i128::from(i64::MIN)));
     assert_eq!(least, IntervalSet::just(i64::MIN));
     assert!(least.holds(i64::MIN));
     assert!(!least.complement().holds(i64::MIN));

@@ -28,7 +28,7 @@ use pyo3::types::{
 };
 use rustc_hash::FxHashMap;
 use valgebra_core::descr::classes::{Attributes, Class, Hook, Member, Namespace, Reach};
-use valgebra_core::descr::lower::{Constants, Operand};
+use valgebra_core::descr::lower::{Constants, Operand, WIDE};
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 
 use crate::check::{
@@ -1495,12 +1495,13 @@ impl<'py> PoolRelations<'py, '_> {
         None
     }
 
-    /// A pooled bound operand that is exactly a `Fraction` or a `Decimal`, as
-    /// the integers at its floor and at its ceiling and the floats beside it:
-    /// Python compares an `int` and a `float` with either exactly, so a bound
-    /// reads what its base holds. One with no finite value, or past the integers
-    /// an `i64` holds, is not read. The range is asked by comparison first, so a
-    /// `Decimal` with a vast exponent is never made an `int`.
+    /// A pooled bound operand that is exactly a `Fraction` or a `Decimal`, or an
+    /// exact `int` past the range an `i64` holds, as the integers at its floor
+    /// and at its ceiling and the floats beside it: Python compares an `int` and
+    /// a `float` with each exactly, so a bound reads what its base holds. One
+    /// with no finite value, or past [`WIDE`] of zero, is not read. The range is
+    /// asked by comparison first, so a `Decimal` with a vast exponent is never
+    /// made an `int`.
     ///
     /// The float is the nearest one, and comparing it with the value says which
     /// side it landed on. So a value below the smallest float is read beside
@@ -1508,18 +1509,19 @@ impl<'py> PoolRelations<'py, '_> {
     /// comparison, is not read, as the walk refuses it.
     fn rational(&self, slot: usize) -> Option<Operand> {
         let value = self.literals.get(slot)?.bind(self.py);
-        if !self.heard(is_exact_rational(&value.get_type()))? {
+        let ty = value.get_type();
+        if !(ty.is(PyInt::type_object(self.py)) || self.heard(is_exact_rational(&ty))?) {
             return None;
         }
-        if !self.heard(value.ge(i64::MIN))? {
+        if !self.heard(value.ge(-WIDE))? {
             return None;
         }
-        if !self.heard(value.lt(1u64 << 63))? {
+        if !self.heard(value.le(WIDE))? {
             return None;
         }
         let at = |method| {
             self.heard(value.call_method0(method))?
-                .extract::<i64>()
+                .extract::<i128>()
                 .ok()
         };
         let nearest = self

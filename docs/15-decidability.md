@@ -1168,14 +1168,16 @@ the shape. What is left below is what the descriptor cannot hold.
   integers, or two number kinds with other numbers to choose, as
   `frozenset[int | float]` against the frozensets of each -- are refuted.
 
-- **An integer bound outside the 64-bit range.** The integer component carries
-  its bounds as `i64`, so `Annotated[int, Ge(2**70)]` is held as the widest set
-  the carrier spells rather than as the half-line it names. The schema validates
-  exactly -- membership reads the Python integer -- and a *relation* between two
-  such bounds declines: `Ge(2**70)` against `Ge(2**70 + 1)` is `undecided` in
-  the direction a value refutes, and `subset` in the direction the carrier
-  proves. Python's integers are unbounded and the carrier is not, which is a
-  property of the representation rather than of the schema.
+- **An integer bound past 120 bits.** The integer component carries its bounds
+  within `2**120` of zero, which holds every 64-bit limit a JSON generator writes,
+  `2**63` as JavaScript prints it and the largest unsigned one included, so
+  `Ge(2**70)` against `Ge(2**70 + 1)` is refuted on `2**70`. Past it a bound
+  declines: the schema validates exactly -- membership reads the Python integer
+  -- and `Ge(2**121)` against `Ge(2**121 + 1)` is `undecided` in the direction a
+  value refutes, and `subset` in the direction the carrier proves. Python's
+  integers are unbounded and the carrier is not, which is a property of the
+  representation rather than of the schema. A constant, a key and a step are
+  still read as an `i64`.
 
 - **A length past the one every interpreter builds.** A container holds its
   items in one allocation, which the allocator refuses past `sys.maxsize`

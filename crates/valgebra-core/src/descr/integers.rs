@@ -148,7 +148,7 @@ impl IntSet {
 
     /// The integers from `lo` to `hi` inclusive, with `None` unbounded.
     #[must_use]
-    pub(crate) fn between(lo: Option<i64>, hi: Option<i64>) -> IntSet {
+    pub(crate) fn between(lo: Option<i128>, hi: Option<i128>) -> IntSet {
         IntSet::build(1, |_| IntervalSet::between(lo, hi))
     }
 
