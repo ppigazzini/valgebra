@@ -9859,9 +9859,11 @@ proptest! {
 }
 
 proptest! {
+    // THEORY: a-sequence-splits-across-a-union
     /// A meet of sequences, a length bound over every list and a union of sequences
     /// among them, is one set with the one sequence it is read as [HSHP20, §4.2], so
-    /// neither inclusion between the two is refuted.
+    /// neither inclusion between the two is refuted, and as a list's item met with a
+    /// list of anything the meet is proved below a list of the one sequence.
     #[test]
     fn a_meet_of_sequences_is_the_one_sequence_it_is_read_as(
         items in proptest::collection::vec(
@@ -9894,6 +9896,18 @@ proptest! {
                 "{:?} below {:?}", below, above
             );
         }
+        // Below a meet the meet is a goal of its own, read as the one sequence there.
+        let items = |item: &Schema| {
+            Schema::meet([list_of(Schema::Anything(Spelling::Any)), list_of(item.clone())])
+        };
+        prop_assert_eq!(
+            items(&meet).subtype_relation_under(&list_of(one.clone()), &NoLeafRelations, &[]),
+            Relation::Holds
+        );
+        prop_assert_ne!(
+            list_of(one).subtype_relation_under(&items(&meet), &NoLeafRelations, &[]),
+            Relation::Fails
+        );
     }
 }
 

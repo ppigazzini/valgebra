@@ -1130,7 +1130,8 @@ fn a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure() 
 /// A meet of sequences asked as the one sequence of its items' meets asks goals
 /// inside the closure, in each of the three forms the reading builds: the one
 /// sequence alone, a union of them where a union of sequences is distributed,
-/// and a meet of one with a member no sequence is.
+/// and a meet of one with a member no sequence is; at the root of a query, and
+/// as a list's item below it.
 ///
 /// The subjects are the meets a translation from JSON Schema writes for
 /// `items` beside `minItems`, below a list of records with a required key: the
@@ -1194,8 +1195,24 @@ fn a_meet_of_sequences_is_asked_as_one_sequence_inside_the_closure() {
         at_least_one,
         Schema::Complement(Arc::new(Schema::set(Schema::Int))),
     ]);
-    for subject in [one, a_union, with_a_member] {
-        let (outside, built) = outside_the_closure(&subject, &records, &defs);
+    // Each again as a list's item met with a list of anything, a goal below the root.
+    let below = |subject: &Schema| {
+        Schema::meet([
+            list_of(Schema::Anything(Spelling::Any)),
+            list_of(subject.clone()),
+        ])
+    };
+    let nested = [below(&one), below(&a_union), below(&with_a_member)];
+    for (subject, supertype) in [one, a_union, with_a_member]
+        .into_iter()
+        .map(|subject| (subject, records.clone()))
+        .chain(
+            nested
+                .into_iter()
+                .map(|subject| (subject, list_of(records.clone()))),
+        )
+    {
+        let (outside, built) = outside_the_closure(&subject, &supertype, &defs);
         assert!(outside.is_empty(), "asked outside the closure: {outside:?}");
         assert!(built >= 1, "{subject:?} reached no reading that builds");
     }

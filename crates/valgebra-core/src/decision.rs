@@ -594,15 +594,19 @@ fn flat_members(members: &[Schema]) -> impl Iterator<Item = &Schema> {
     })
 }
 
-/// A meet narrowed by the complements beside its unions ([`narrowed_meet`]),
-/// the same set, below `other`; `Unknown` where nothing narrows.
+/// A meet respelled as the same set below `other`: narrowed by the complements
+/// beside its unions ([`narrowed_meet`]), then, a meet of sequences, read as the
+/// one sequence of its items' meet ([`one_sequence_below`]); `Unknown` where
+/// neither answers.
 ///
-/// Asked under an allowance of its own, [`RESPELLING`] steps of what the query
-/// has left, as a respelled pair is: the meet arm asks it last, and a narrowed
-/// meet that declines spent the steps the readings after the arm -- the
-/// subject's own emptiness among them -- would have decided the pair with.
+/// Each is asked under an allowance of its own, [`RESPELLING`] steps of what the
+/// query has left, as a respelled pair is: the meet arm asks them last, and a
+/// respelling that declines spent the steps the readings after the arm -- the
+/// subject's own emptiness among them -- would have decided the pair with. Asked
+/// with the query's steps, the one sequence starved them of 49 refutations over
+/// 60,000 drawn Boolean combinations of lists.
 ///
-/// A narrowed meet asked inside another's question is asked with that
+/// A respelled meet asked inside another's question is asked with that
 /// question's steps and its trail, and is given no allowance of its own
 /// ([`NARROWING`]). Given one, its steps were counted by nothing above it, and
 /// a fixpoint met with the complement of its own lists, `μt. (int | list[t] |
@@ -612,7 +616,7 @@ fn flat_members(members: &[Schema]) -> impl Iterator<Item = &Schema> {
 /// question's trail, the goal met again is the assumption it is, and the pair
 /// is `subset`.
 ///
-/// A narrowed meet asked outside another's question is asked once a query for
+/// A respelled meet asked outside another's question is asked once a query for
 /// a supertype and an allowance, and its answer read back after
 /// ([`ASKED_NARROWED`]). The question runs on a trail and a budget of its own
 /// and nothing it spends is charged to the query, so its answer rests on no
@@ -626,12 +630,14 @@ fn flat_members(members: &[Schema]) -> impl Iterator<Item = &Schema> {
 /// Out of line, since the meet arm it is asked from is inlined into the goal
 /// recursion, and a meet with no union answers at the first look.
 #[inline(never)]
-fn narrowed_meet_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+fn a_meet_respelled_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Relation {
     let query = cx.query();
     if NARROWING.with(Cell::get) == query {
-        return narrowed_meet(members, cx).map_or(Relation::Unknown, |narrowed| {
-            narrowed.is_subtype_rec(other, cx)
-        });
+        return narrowed_meet(members, cx)
+            .map_or(Relation::Unknown, |narrowed| {
+                narrowed.is_subtype_rec(other, cx)
+            })
+            .or_else(|| one_sequence_below(members, other, cx));
     }
     let given = cx.budget.left().min(respelling());
     let key = (query, Arc::as_ptr(members).cast::<Schema>().addr(), given);
@@ -646,11 +652,17 @@ fn narrowed_meet_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Re
     if let Some(answer) = asked {
         return answer;
     }
-    let answer = narrowed_meet(members, cx).map_or(Relation::Unknown, |narrowed| {
-        let allowance = Budget::new(given);
-        let _open = Narrowing::open(query);
-        narrowed.is_subtype_rec(other, &mut cx.within_this_query(&allowance))
-    });
+    let answer = narrowed_meet(members, cx)
+        .map_or(Relation::Unknown, |narrowed| {
+            let allowance = Budget::new(given);
+            let _open = Narrowing::open(query);
+            narrowed.is_subtype_rec(other, &mut cx.within_this_query(&allowance))
+        })
+        .or_else(|| {
+            let allowance = Budget::new(given);
+            let _open = Narrowing::open(query);
+            one_sequence_below(members, other, &mut cx.within_this_query(&allowance))
+        });
     ASKED_NARROWED.with_borrow_mut(|asked| {
         if asked.len() >= READINGS_HELD {
             asked.clear();
@@ -663,7 +675,28 @@ fn narrowed_meet_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Re
     answer
 }
 
-/// The narrowed meet's question open on this thread, closed when dropped: the
+/// A meet of sequences of one container below `other`, asked as the one sequence of
+/// its items' meet under every bound of the meet
+/// ([`readings::a_meet_of_sequences_as_one`]), the same set: an `allOf` of arrays is
+/// one array of the items' meet wherever it stands [HSHP20, §4.2]. A meet below a
+/// record's field, a list's items or a mapping's values is a goal of its own, so the
+/// reading is asked at every goal: `dict[str, J] & {"a?": list[J] & list[str] &
+/// Annotated[list[Any], MaxLen(5)]}`, for `J` the JSON value, is below `{"a?":
+/// Annotated[list[str], MaxLen(5)]}` by its field's one sequence, which no member of
+/// the field's meet is below alone.
+///
+/// The one sequence is a goal of the closure the termination argument counts, each
+/// item a meet of the items the members hold at one position [LN26, §5.1]. Asked
+/// after every reading of the meet as written, and under the allowance a respelled
+/// meet is given ([`a_meet_respelled_below`]); a meet holding fewer than two
+/// sequences is counted and left at the first look.
+#[inline(never)]
+fn one_sequence_below(members: &[Schema], other: &Schema, cx: &mut Cx<'_>) -> Relation {
+    readings::a_meet_of_sequences_as_one(members, cx.defs)
+        .map_or(Relation::Unknown, |one| one.is_subtype_rec(other, cx))
+}
+
+/// A respelled meet's question open on this thread, closed when dropped: the
 /// query that was open before is open again.
 struct Narrowing(u64);
 
@@ -1113,7 +1146,6 @@ impl Schema {
             .or_else(|| {
                 if by_branch {
                     self.decided_as_respelled(other, cx)
-                        .or_else(|| self.asked_as_one_sequence(other, cx))
                         .or_else(|| self.split_on_a_set_it_negates(other, cx))
                 } else {
                     Relation::Unknown
@@ -1331,22 +1363,6 @@ impl Schema {
             ),
             _ => Relation::Unknown,
         }
-    }
-
-    /// A meet of sequences asked again as the one sequence of its items' meet under its
-    /// bounds [HSHP20, §4.2], the spelling the rules read a refinement of a sequence in:
-    /// a translation from JSON Schema writes `minItems` over every list, beside the
-    /// items' own sequence. It shares the respelling's allowance of the query's steps.
-    #[inline(never)]
-    fn asked_as_one_sequence(&self, other: &Schema, cx: &Cx<'_>) -> Relation {
-        let Schema::Intersection(members) = self else {
-            return Relation::Unknown;
-        };
-        let Some(one) = readings::a_meet_of_sequences_as_one(members, cx.defs) else {
-            return Relation::Unknown;
-        };
-        let allowance = Budget::new(cx.budget.left().min(respelling()));
-        one.is_subtype_rec(other, &mut cx.within_this_query(&allowance))
     }
 
     /// The pair asked in the spellings the Boolean algebra gives it, where
@@ -1893,13 +1909,45 @@ impl Schema {
             {
                 return answer;
             }
-            let verdict = self.verdict_rec(cx);
+            let verdict = match self.verdict_rec(cx) {
+                Verdict::Unknown => self.verdict_as_one_sequence(cx),
+                verdict => verdict,
+            };
             if verdict == Verdict::Unknown && cx.reads_leaves {
                 return self.a_meet_read_by_its_member(cx);
             }
             return Relation::of_mismatch(verdict);
         }
         answer
+    }
+
+    /// A meet of sequences read as the one sequence of its items' meet, where the meet's
+    /// own reading leaves its emptiness open: the one sequence is the meet's set, an
+    /// `allOf` of arrays being one array of the items' meet [HSHP20, §4.2]
+    /// ([`readings::a_meet_of_sequences_as_one`]). A refutation the one sequence reaches ([`one_sequence_below`])
+    /// stands on a value of it: `list[J] & ([] | list[str]) & Annotated[list[Any],
+    /// MinLen(1)]`, for `J` the JSON value, reads as neither empty nor inhabited as
+    /// written, and its one sequence holds `[""]`.
+    ///
+    /// Read as a respelled meet is asked ([`a_meet_respelled_below`]): inside another's
+    /// question with its steps, and outside one under an allowance of its own and on a
+    /// trail of its own, so its verdict rests on no hypothesis of the query's. Read with
+    /// the query's steps, it starved a refutation the readings after it reach.
+    #[inline(never)]
+    fn verdict_as_one_sequence(&self, cx: &mut Cx<'_>) -> Verdict {
+        let Schema::Intersection(members) = self else {
+            return Verdict::Unknown;
+        };
+        let Some(one) = readings::a_meet_of_sequences_as_one(members, cx.defs) else {
+            return Verdict::Unknown;
+        };
+        let query = cx.query();
+        if NARROWING.with(Cell::get) == query {
+            return one.verdict_rec(cx);
+        }
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
+        let _open = Narrowing::open(query);
+        one.verdict_rec(&mut cx.within_this_query(&allowance))
     }
 
     /// A meet read as one of its members holds what that member holds, where the
@@ -2860,7 +2908,8 @@ impl Schema {
             // what a record's tag narrows to, and is asked as one once the
             // member rule has not placed it, and a meet a complement beside its
             // union narrows is the narrowed meet, the same set, asked after
-            // every other reading (`narrowed_meet_below`). A meet of keyed maps is one record,
+            // every other reading, and a meet of sequences the one sequence of
+            // its items' meet (`a_meet_respelled_below`). A meet of keyed maps is one record,
             // their pointwise meet, asked below a map or a union of maps; and a
             // meet below a complement is a meet sharing no value with its inner,
             // asked as the arm below asks it of any other subject.
@@ -2868,7 +2917,7 @@ impl Schema {
                 .meet_below(other, members, cx)
                 .or_else(|| finite_meet_below(members, other, cx.oracle))
                 .or_else(|| self.a_meet_read_whole(members, other, cx))
-                .or_else(|| narrowed_meet_below(members, other, cx)),
+                .or_else(|| a_meet_respelled_below(members, other, cx)),
             // A table of constants is a union of literals, and holds no kind of
             // infinitely many values whole, which the branches read alone
             // cannot say; asked where the branches have declined.
@@ -3364,10 +3413,10 @@ thread_local! {
     static READINGS: RefCell<Readings> = RefCell::new(Readings::default());
     /// The pairs the last askings on this thread read by the sets, by query number.
     static LEAVES: RefCell<Leaves> = RefCell::new(Leaves::default());
-    /// The query whose narrowed meet is being asked on this thread, or zero
-    /// where none is ([`narrowed_meet_below`]). Held beside the query for the
+    /// The query whose respelled meet is being asked on this thread, or zero
+    /// where none is ([`a_meet_respelled_below`]). Held beside the query for the
     /// reason [`Readings`] is, and by number, so a query a callback starts
-    /// inside the question asks its own narrowed meets as a query of its own.
+    /// inside the question asks its own respelled meets as a query of its own.
     static NARROWING: Cell<u64> = const { Cell::new(0) };
     /// The number the next query to read on this thread is given.
     static QUERIES: Cell<u64> = const { Cell::new(0) };
@@ -3389,8 +3438,8 @@ thread_local! {
     /// kept, and the members' storage is held, so no other meet's members are
     /// at that address while the record stands.
     static HELD: RefCell<Option<Held>> = const { RefCell::new(None) };
-    /// The answers of the narrowed meets the queries on this thread asked
-    /// outside another's question ([`narrowed_meet_below`]): by the query's
+    /// The answers of the respelled meets the queries on this thread asked
+    /// outside another's question ([`a_meet_respelled_below`]): by the query's
     /// number, the address of the meet's members and the allowance the
     /// question ran under, each supertype asked beside its answer. Held beside
     /// the query for the reason [`Readings`] is, and by number; the members'

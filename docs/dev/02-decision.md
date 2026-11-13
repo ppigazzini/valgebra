@@ -1723,7 +1723,7 @@ nothing, so it runs on at most `RESPELLING` of the steps the query has left and
 is charged what it spends (`Budget::within`): on all of them, a distribution
 that declined left the readings after it none. A meet *subject* the member rule does not
 place is narrowed the same way and asked in its own place
-(`narrowed_meet_below`), after the readings of the meet as written: the same set, so its relation to the supertype is the
+(`a_meet_respelled_below`), after the readings of the meet as written: the same set, so its relation to the supertype is the
 meet's, and the guard a translation writes, `K ∩ (¬K ∪ R)`, is the record `R`
 met with `K`. It is asked under steps apart from the query's, and a narrowed
 meet asked inside another's question with that question's steps and trail,
@@ -1978,15 +1978,32 @@ meet of the complements, against any supertype and under an allowance of its
 own (`decided_as_respelled`): `¬(¬X ∪ Y) ⊆ dict` is `X ∩ ¬Y ⊆ dict`, which a
 member of `X` places, and the meet is of the subject's own signed branches.
 `a_complement_is_below_its_complements_pushed_in` holds them with one step to
-spend, over drawn schemas. A meet of sequences is asked again as the one sequence of
-its items' meet under every bound of the meet (`a_meet_of_sequences_as_one`), the
-canonical array of [HSHP20, §4.2], one union of sequences beside it distributed, a
-branch a bound leaves no value of dropped, and an item a neighbor's union holds
-absorbed: `list[J] & ([] | list[str]) & Annotated[list[Any], MinLen(1)]`, the
-spelling of `minItems` beside the items, is `Annotated[list[str], MinLen(1)]`, which
-the rules read where they decline the meet. The respelling is the one set, so it
-decides both ways, and `a_meet_of_sequences_is_the_one_sequence_it_is_read_as` holds
-the two to it over drawn meets.
+spend, over drawn schemas.
+
+**A meet of sequences is asked as the one sequence of its items' meet, at every
+goal.** The meet arm asks it last, after the narrowed meet and under an allowance
+of its own as that meet is (`a_meet_respelled_below`, `one_sequence_below`): asked
+with the query's steps, it starved the readings after the arm of 49 refutations over
+60,000 drawn Boolean combinations of lists. The reading is the one sequence under
+every bound of the meet (`a_meet_of_sequences_as_one`), the canonical array of
+[HSHP20, §4.2], one union of
+sequences beside it distributed, a branch a bound leaves no value of dropped, and an
+item a neighbor's union holds absorbed. `list[J] & ([] | list[str]) &
+Annotated[list[Any], MinLen(1)]`, the spelling of `minItems` beside the items, is
+`Annotated[list[str], MinLen(1)]`. HSHP20's simplifier rewrites an `allOf` of arrays
+wherever it stands, and a meet below a record's field, a list's items or a mapping's
+values is a goal of its own, which the rules alone are asked: the set representation
+reads the whole pair once, and thins a member nested past its depth out of it. So
+`dict[str, J] & {"a?": list[J] & list[str] & Annotated[list[Any], MaxLen(5)]}` is
+below `{"a?": Annotated[list[str], MaxLen(5)]}` by its field's one sequence, which the
+lowering never reaches: the meet with the mapping is a level, and `J` unfolded once
+nests its `list[J]` past the depth. The one sequence is the meet's set, so a
+refutation it reaches stands on its value, and the witness guard reads a meet whose
+own reading is neither empty nor inhabited through it (`verdict_as_one_sequence`):
+the words' meet above is neither as written, and its one sequence holds `[""]`. The
+respelling decides both ways, and `a_meet_of_sequences_is_the_one_sequence_it_is_read_as`
+holds the two to it over drawn meets, at the root and as a list's item. A meet with
+fewer than two sequences is counted and left before anything is built.
 
 **The universe bound reads a union one De Morgan step in, where the region
 walk passes over the member that covers the rest.** The complete walk carries

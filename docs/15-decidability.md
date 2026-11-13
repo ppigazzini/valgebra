@@ -643,7 +643,12 @@ answers `"undecided"`.
   sequences is read as the one sequence of its items' meet under all its bounds, so
   `intersection(list[J], union([], list[str]), Annotated[list[Any], MinLen(1)])` is
   refuted below a list of records on `["x"]`, as `Annotated[list[str], MinLen(1)]` is.
-  This is the
+  It is read so wherever it stands, as a record's field, a list's items or a
+  mapping's values: `intersection(dict[str, J], {"a?": intersection(list[J],
+  union([], list[str]), Annotated[list[Any], MaxLen(5)])})`, a closed object with a
+  bounded array property as a translation from JSON Schema writes it, is `subset` of
+  `{"a?": Annotated[list[str], MaxLen(5)]}` and `not_subset` of the same object under
+  `MaxLen(4)`, on five words. This is the
   semantic-subtyping reduction applied where no structural rule can help — a
   complement has no shape on the right to recurse into.
 - **Recursion.** Equirecursive schemas compare at their greatest fixpoint; the

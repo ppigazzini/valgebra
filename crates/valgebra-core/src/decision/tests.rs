@@ -13012,7 +13012,7 @@ fn a_narrowed_meet_is_asked_once_a_query_an_allowance() {
             });
         }
         let _open = inside.then(|| Narrowing::open(query));
-        let answer = narrowed_meet_below(&members, &Schema::Int, &mut cx);
+        let answer = a_meet_respelled_below(&members, &Schema::Int, &mut cx);
         assert_eq!(
             budget.left() < steps,
             inside,
@@ -13062,7 +13062,7 @@ fn the_narrowed_questions_held_are_bounded() {
     let budget = Budget::new(DECISION_BUDGET);
     let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
     assert_eq!(
-        narrowed_meet_below(&members, &Schema::Int, &mut cx),
+        a_meet_respelled_below(&members, &Schema::Int, &mut cx),
         Relation::Holds
     );
     assert_eq!(ASKED_NARROWED.with_borrow(FxHashMap::len), 1);
@@ -13086,10 +13086,10 @@ proptest! {
         let members: Members = vec![a, Schema::union([b.clone(), c]), b.complement()].into();
         let budget = Budget::new(DECISION_BUDGET);
         let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
-        let first = narrowed_meet_below(&members, &d, &mut cx);
-        let back = narrowed_meet_below(&members, &d, &mut cx);
+        let first = a_meet_respelled_below(&members, &d, &mut cx);
+        let back = a_meet_respelled_below(&members, &d, &mut cx);
         ASKED_NARROWED.with_borrow_mut(FxHashMap::clear);
-        let again = narrowed_meet_below(&members, &d, &mut cx);
+        let again = a_meet_respelled_below(&members, &d, &mut cx);
         prop_assert_eq!((first, back), (again, again));
         prop_assert_eq!(budget.left(), DECISION_BUDGET);
     }
@@ -16267,6 +16267,7 @@ mod a_meet_of_sequences {
         );
     }
 
+    // THEORY: a-sequence-splits-across-a-union
     /// The meet a translation from JSON Schema writes for `minItems` beside the items:
     /// the union of `[]` and the items' list is distributed, the `[]` branch holds
     /// none of the bound's values, and the JSON values absorb `str`.
@@ -16328,6 +16329,28 @@ mod a_meet_of_sequences {
         assert_eq!(readings::a_meet_of_sequences_as_one(&members, &[]), None);
     }
 
+    /// A union with a branch that is no sequence is not distributed: it stays a member
+    /// of the meet beside the one sequence the others are read as.
+    #[test]
+    fn a_union_with_a_branch_that_is_no_sequence_stays_a_member() {
+        let words = at_least(list_of(Schema::Str), 1);
+        for union in [
+            Schema::union([Schema::NoneType, list_of(Schema::Int)]),
+            Schema::union([list_of(Schema::Int), Schema::Str]),
+        ] {
+            let members = [
+                list_of(Schema::Str),
+                at_least(list_of(Schema::Anything(Spelling::Any)), 1),
+                union.clone(),
+            ];
+            assert_eq!(
+                readings::a_meet_of_sequences_as_one(&members, &[]),
+                Some(Schema::meet([union, words.clone()])),
+            );
+        }
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
     /// A list of at least one word, as a translation from JSON
     /// Schema writes it, is refuted below a list of records with a required key, on
     /// `["x"]`, and is still proved below the list of words it refines.
@@ -16362,6 +16385,213 @@ mod a_meet_of_sequences {
                 &defs
             ),
             Relation::Holds
+        );
+    }
+
+    fn at_most(base: Schema, n: usize) -> Schema {
+        Schema::refine(base, vec![Constraint::MaxLen(n)])
+    }
+
+    /// The meet a translation from JSON Schema writes for an array of words under one
+    /// length bound: the items' list, the union of `[]` and the words' list, and the
+    /// bound over every list.
+    fn words_under(json: &Schema, bound: Schema) -> Schema {
+        Schema::meet([
+            list_of(json.clone()),
+            Schema::union([Schema::list(SeqShape::fixed([])), list_of(Schema::Str)]),
+            bound,
+        ])
+    }
+
+    /// `dict[str, J] & {"a?": field}`, a closed object as the translation writes it.
+    fn object_of(json: &Schema, value: Schema) -> Schema {
+        let map = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: json.clone(),
+            }],
+        );
+        Schema::meet([
+            map,
+            Schema::record(vec![field("a", value, false)], Openness::Closed),
+        ])
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
+    /// One sequence beside a union of sequences is read with the union distributed:
+    /// `list[str | int] & (list[int | bytes] | list[str | bytes])` is the lists of
+    /// integers or of words, which no member of the meet is below alone.
+    #[test]
+    fn one_sequence_beside_a_union_of_them_is_read_as_their_union() {
+        let subject = Schema::meet([
+            list_of(Schema::union([Schema::Str, Schema::Int])),
+            Schema::union([
+                list_of(Schema::union([Schema::Int, Schema::Bytes])),
+                list_of(Schema::union([Schema::Str, Schema::Bytes])),
+            ]),
+        ]);
+        let supertype = Schema::union([list_of(Schema::Int), list_of(Schema::Str)]);
+        let budget = Budget::new(DECISION_BUDGET);
+        assert_eq!(
+            subject.subtype_relation(&supertype, &NoLeafRelations, &[], &budget),
+            Relation::Holds
+        );
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
+    /// A meet of sequences below a meet is a goal of its own, read as its one sequence
+    /// there by the rules alone: as a list's item, a mapping's value and an object's
+    /// field, each below the refined list it is, where no member of it is below alone.
+    #[test]
+    fn a_meet_of_sequences_below_a_meet_is_read_as_its_one_sequence() {
+        let (json, defs) = json();
+        let any = || Schema::Anything(Spelling::Any);
+        let words = || at_most(list_of(Schema::Str), 5);
+        let words_meet = Schema::meet([
+            list_of(json.clone()),
+            list_of(Schema::Str),
+            at_most(list_of(any()), 5),
+        ]);
+        let a_map_of = |value: Schema| {
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value,
+                }],
+            )
+        };
+        let rules = |subject: &Schema, supertype: &Schema| {
+            let budget = Budget::new(DECISION_BUDGET);
+            subject.subtype_relation(supertype, &NoLeafRelations, &defs, &budget)
+        };
+        let record =
+            |value: Schema| Schema::record(vec![field("a", value, false)], Openness::Closed);
+        for (subject, supertype) in [
+            (
+                Schema::meet([list_of(any()), list_of(words_meet.clone())]),
+                list_of(words()),
+            ),
+            (
+                Schema::meet([a_map_of(any()), a_map_of(words_meet.clone())]),
+                a_map_of(words()),
+            ),
+            (
+                Schema::meet([a_map_of(any()), record(words_meet)]),
+                record(words()),
+            ),
+            (
+                object_of(&json, words_under(&json, at_most(list_of(any()), 5))),
+                record(words()),
+            ),
+        ] {
+            assert_eq!(rules(&subject, &supertype), Relation::Holds, "{subject:?}");
+        }
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
+    /// A length bound tightened below a meet is refuted, in an object's field and in a
+    /// list's items, on a value of the one sequence: six words, and one.
+    #[test]
+    fn a_length_bound_tightened_below_a_meet_is_refuted() {
+        let (json, defs) = json();
+        let any = || list_of(Schema::Anything(Spelling::Any));
+        let field = |bound: Schema| object_of(&json, words_under(&json, bound));
+        let items = |bound: Schema| {
+            Schema::meet([list_of(json.clone()), list_of(words_under(&json, bound))])
+        };
+        for (wide, narrow) in [
+            (field(at_most(any(), 6)), field(at_most(any(), 5))),
+            (field(at_least(any(), 1)), field(at_least(any(), 2))),
+            (items(at_most(any(), 6)), items(at_most(any(), 5))),
+            (items(at_least(any(), 1)), items(at_least(any(), 2))),
+        ] {
+            assert_eq!(
+                wide.subtype_relation_under(&narrow, &NoLeafRelations, &defs),
+                Relation::Fails,
+                "{wide:?}"
+            );
+            assert_eq!(
+                narrow.subtype_relation_under(&wide, &NoLeafRelations, &defs),
+                Relation::Holds,
+                "{narrow:?}"
+            );
+        }
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
+    /// A meet of sequences met inside another one sequence's question is read as its
+    /// own one sequence with that question's steps: `list[F1] & list[F2]`, whose items
+    /// meet in `list[J] & list[str] & Annotated[list[Any], MaxLen(5)]`, is below the
+    /// lists of at most five words, and with `MinLen` bounds a tightened one is refuted
+    /// on the item's value, where no member is below alone.
+    #[test]
+    fn a_meet_of_sequences_inside_a_one_sequence_question_is_read_as_one() {
+        let (json, defs) = json();
+        let any = || list_of(Schema::Anything(Spelling::Any));
+        let rules = |subject: &Schema, supertype: &Schema| {
+            let budget = Budget::new(DECISION_BUDGET);
+            subject.subtype_relation(supertype, &NoLeafRelations, &defs, &budget)
+        };
+        let proved = Schema::meet([
+            list_of(Schema::meet([list_of(json.clone()), list_of(Schema::Str)])),
+            list_of(at_most(any(), 5)),
+        ]);
+        assert_eq!(
+            rules(&proved, &list_of(at_most(list_of(Schema::Str), 5))),
+            Relation::Holds
+        );
+        let empty = Schema::list(SeqShape::fixed([]));
+        let refuted = Schema::meet([
+            list_of(Schema::meet([
+                list_of(json),
+                Schema::union([empty, list_of(Schema::Str)]),
+            ])),
+            list_of(at_least(any(), 1)),
+        ]);
+        assert_eq!(
+            rules(&refuted, &list_of(at_least(any(), 2))),
+            Relation::Fails
+        );
+    }
+
+    /// The witness guard reads a meet's one sequence under an allowance of its own
+    /// outside a respelled meet's question, so the query's steps are left as they
+    /// were, and with the question's steps inside one.
+    #[test]
+    fn the_one_sequence_is_read_on_the_query_s_steps_only_inside_a_question() {
+        let (json, defs) = json();
+        let words = words_under(&json, at_least(list_of(Schema::Anything(Spelling::Any)), 1));
+        let outside = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &defs, &outside);
+        assert_eq!(words.verdict_as_one_sequence(&mut cx), Verdict::Inhabited);
+        assert_eq!(outside.left(), DECISION_BUDGET);
+        let inside = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &defs, &inside);
+        let _open = Narrowing::open(cx.query());
+        assert_eq!(words.verdict_as_one_sequence(&mut cx), Verdict::Inhabited);
+        assert!(inside.left() < DECISION_BUDGET);
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
+    /// A refutation the one sequence reaches stands on its value where the meet as
+    /// written reads as neither empty nor inhabited: `[""]` is a value of the words'
+    /// list of at least one, outside every list of at least two.
+    #[test]
+    fn a_refutation_through_the_one_sequence_stands_on_its_value() {
+        let (json, defs) = json();
+        let any = || list_of(Schema::Anything(Spelling::Any));
+        let words = words_under(&json, at_least(any(), 1));
+        let budget = Budget::new(DECISION_BUDGET);
+        assert_eq!(
+            words.verdict_rec(&mut Cx::new(&NoLeafRelations, &defs, &budget)),
+            Verdict::Unknown
+        );
+        let budget = Budget::new(DECISION_BUDGET);
+        assert_eq!(
+            words.subtype_relation(&at_least(any(), 2), &NoLeafRelations, &defs, &budget),
+            Relation::Fails
         );
     }
 }

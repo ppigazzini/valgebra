@@ -1088,7 +1088,20 @@ pub(super) fn spills_a_kind_into(subject: &Schema, other: &Schema, cx: &Cx<'_>) 
 /// `Annotated[list[J & str], MinLen(1)]`, its `[]` branch holding none of the bound's
 /// values: the one spelling the rules read a refinement of a sequence in. `None`
 /// where the meet holds fewer than two such members.
+///
+/// The rules ask it of every meet their other readings decline, and most hold fewer
+/// than two, so those are counted first and nothing is allocated where they are.
 pub(crate) fn a_meet_of_sequences_as_one(members: &[Schema], defs: &[Schema]) -> Option<Schema> {
+    let sequences = members
+        .iter()
+        .filter(|member| a_sequence(member).is_some())
+        .count();
+    let spreads = members
+        .iter()
+        .any(|member| a_union_of_sequences(member).is_some());
+    if sequences + usize::from(spreads) < 2 {
+        return None;
+    }
     let mut container = None;
     let mut parts: Vec<&Schema> = Vec::new();
     let mut spread: Option<&[Schema]> = None;
@@ -1099,18 +1112,13 @@ pub(crate) fn a_meet_of_sequences_as_one(members: &[Schema], defs: &[Schema]) ->
                 return None;
             }
             parts.push(member);
-        } else if let Schema::Union(branches) = member
-            && spread.is_none()
-            && !branches.is_empty()
-            && branches.iter().all(|branch| a_sequence(branch).is_some())
+        } else if spread.is_none()
+            && let Some(branches) = a_union_of_sequences(member)
         {
             spread = Some(branches);
         } else {
             rest.push(member.clone());
         }
-    }
-    if parts.len() + usize::from(spread.is_some()) < 2 {
-        return None;
     }
     let one = |extra: Option<&Schema>| -> Option<Schema> {
         let all: Vec<&Schema> = parts.iter().copied().chain(extra).collect();
@@ -1152,6 +1160,19 @@ fn absorbed(items: &[&Schema], defs: &[Schema]) -> Schema {
         })
     });
     Schema::meet_within(kept.map(|(_, item)| (*item).clone()), defs)
+}
+
+/// The branches of a union every one of which is a sequence, or a refinement of one.
+fn a_union_of_sequences(member: &Schema) -> Option<&[Schema]> {
+    match member {
+        Schema::Union(branches)
+            if !branches.is_empty()
+                && branches.iter().all(|branch| a_sequence(branch).is_some()) =>
+        {
+            Some(branches)
+        }
+        _ => None,
+    }
 }
 
 /// The sequence, or refinement of one, of a container, with its shape and its bounds.

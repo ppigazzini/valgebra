@@ -266,11 +266,12 @@ explains for the arity-`n` case [Cas23, App. D].
 with no negative product: a meet of sequences is the sequence of its items' meets,
 empty where the meet at a position every value holds is, every sequence of the meet
 read at once (`sequences_meeting_in_nothing`), the lemma with `N` empty, as an `allOf`
-of arrays is one array of the items' meet [HSHP20, §4.2]. A pair the rules decline
-with a meet of sequences as its subject is asked again of that one sequence, under
-every bound of the meet, a refinement being its base met with the bound [JV20, §3.2],
-one union of sequences beside the meet distributed and an item a neighbor's union
-holds absorbed [FCB08, Def. 4.1] (`a_meet_of_sequences_as_one`). So the same
+of arrays is one array of the items' meet [HSHP20, §4.2]. The rules ask a meet of
+sequences as that one sequence, under every bound of the meet, a refinement being
+its base met with the bound [JV20, §3.2], one union of sequences beside the meet
+distributed and an item a neighbor's union holds absorbed [FCB08, Def. 4.1]
+(`a_meet_of_sequences_as_one`): at every goal, after the readings of the meet as
+written, a refutation it reaches read against the one sequence's value. So the same
 relation asked as a meet with a complement is left to the set representation, which
 decides it where the
 difference fits the build bounds -- `tuple[int | str, int]` against its two
@@ -286,9 +287,9 @@ product's once beside `Φ`.
 
 SOURCE: §13.1 "**The product decomposition.**"
 
-IMPLEMENTED-BY: decision/products.rs::fixed_components, decision/products.rs::product_subtype, decision/products.rs::seq_splits_across_union, decision/products.rs, decision/emptiness.rs::sequences_meeting_in_nothing, decision/readings.rs::a_meet_of_sequences_as_one, decision/readings.rs::absorbed, decision.rs::Schema::asked_as_one_sequence
+IMPLEMENTED-BY: decision/products.rs::fixed_components, decision/products.rs::product_subtype, decision/products.rs::seq_splits_across_union, decision/products.rs, decision/emptiness.rs::sequences_meeting_in_nothing, decision/readings.rs::a_meet_of_sequences_as_one, decision/readings.rs::absorbed, decision.rs::one_sequence_below, decision.rs::Schema::verdict_as_one_sequence
 
-HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches, the_product_rule_is_lemma_6_5_at_three_positions, the_product_rule_decides_every_covering_split, the_product_rule_decides_scalar_pairs_as_the_values_do, a_product_is_below_its_corners_and_refuted_by_a_missing_one, a_member_the_product_rule_sets_aside_withholds_its_refutation
+HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches, the_product_rule_is_lemma_6_5_at_three_positions, the_product_rule_decides_every_covering_split, the_product_rule_decides_scalar_pairs_as_the_values_do, a_product_is_below_its_corners_and_refuted_by_a_missing_one, a_member_the_product_rule_sets_aside_withholds_its_refutation, a_meet_of_sequences_is_the_one_sequence_it_is_read_as, the_json_spelling_of_min_items_is_one_refined_list, a_list_of_at_least_one_word_is_refuted_below_a_list_of_records, one_sequence_beside_a_union_of_them_is_read_as_their_union, a_meet_of_sequences_below_a_meet_is_read_as_its_one_sequence, a_length_bound_tightened_below_a_meet_is_refuted, a_refutation_through_the_one_sequence_stands_on_its_value, a_meet_of_sequences_inside_a_one_sequence_question_is_read_as_one
 
 ## Records and maps
 
@@ -1065,7 +1066,7 @@ recursive meet of maps is read under its cycle rather than unfolded again.
 
 SOURCE: §14.2 "Regularity bounds the number of distinct"
 
-IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference, valgebra-py/src/build.rs::refuse_a_growing_argument, decision.rs::Schema::split_on_a_set_it_negates
+IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference, valgebra-py/src/build.rs::refuse_a_growing_argument, decision.rs::Schema::split_on_a_set_it_negates, decision.rs::one_sequence_below
 
 HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure, a_split_asks_its_halves_past_the_rules_inside_the_closure, a_meet_of_sequences_is_asked_as_one_sequence_inside_the_closure, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
 
