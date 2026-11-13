@@ -54,7 +54,7 @@ class _Dtype(_Generic):
         if scalar is _Floating:
             msg = "no dtype of an abstract scalar"
             raise TypeError(msg)
-        self.type, self.kind, self.itemsize = scalar, scalar.kind, scalar.itemsize  # ty: ignore[unresolved-attribute]
+        self.type, self.kind, self.itemsize = scalar, scalar.kind, scalar.itemsize  # ty: ignore[missing-attribute]
 
 
 class _Ndarray(_Generic):
@@ -66,8 +66,8 @@ class _Ndarray(_Generic):
 @pytest.fixture
 def numpy() -> Iterator[types.ModuleType]:
     stand_in = types.ModuleType("numpy")
-    stand_in.ndarray = _Ndarray  # ty: ignore[unresolved-attribute]
-    stand_in.dtype = _Dtype  # ty: ignore[unresolved-attribute]
+    stand_in.ndarray = _Ndarray  # ty: ignore[missing-attribute]
+    stand_in.dtype = _Dtype  # ty: ignore[missing-attribute]
     with pytest.MonkeyPatch.context() as patch:
         patch.setitem(sys.modules, "numpy", stand_in)
         yield stand_in

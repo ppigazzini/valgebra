@@ -1260,7 +1260,7 @@ class _Point:
 class _Labeled(_Point):
     label: str
     # Narrowed on purpose: the redeclared field is the one the test reads.
-    x: bool  # ty: ignore[invalid-mutable-override]
+    x: bool  # ty: ignore[incompatible-mutable-override]
 
 
 def test_a_dataclass_reads_the_annotations_of_every_base() -> None:
@@ -1850,7 +1850,7 @@ _Class = typing.TypeVar("_Class", bound=type)
 
 def _slots_after(cls: _Class) -> _Class:
     """Name a class's annotations as its ``__slots__`` after it is made."""
-    cls.__slots__ = tuple(cls.__annotations__)  # ty: ignore[unresolved-attribute]
+    cls.__slots__ = tuple(cls.__annotations__)  # ty: ignore[missing-attribute]
     return cls
 
 

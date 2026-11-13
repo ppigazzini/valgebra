@@ -676,10 +676,10 @@ PLANTS = (
         lambda tree: _edits(
             tree,
             "pyproject.toml",
-            ('    "syrupy>=6.1.1",\n', ""),
+            ('    "syrupy>=7.0.0",\n', ""),
             (
                 '    { include-group = "test" },\n',
-                '    { include-group = "test" },\n    "syrupy>=6.1.1",\n',
+                '    { include-group = "test" },\n    "syrupy>=7.0.0",\n',
             ),
         ),
         trips=("test_the_dev_group_is_the_test_group_and_its_tools",),

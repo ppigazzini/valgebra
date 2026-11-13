@@ -481,7 +481,7 @@ def test_an_attribute_the_model_does_not_have_is_still_an_attribute_error() -> N
     with pytest.raises(ValidationError) as info:
         Validator(int).validate("x")
     with pytest.raises(AttributeError, match="nonesuch"):
-        _ = info.value.nonesuch  # ty: ignore[unresolved-attribute]
+        _ = info.value.nonesuch  # ty: ignore[missing-attribute]
 
 
 def test_the_model_survives_a_process_boundary() -> None:

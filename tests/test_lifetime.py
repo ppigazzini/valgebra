@@ -64,7 +64,7 @@ def _classes_alive(count: int, *, own_validator: bool) -> int:
         model = type("Model", (), {"__annotations__": {"a": int}})
         held = Validator(model)
         if own_validator:
-            model.validator = held  # ty: ignore[unresolved-attribute]
+            model.validator = held  # ty: ignore[missing-attribute]
         watches.append(weakref.ref(model))
         del model, held
     gc.collect()
@@ -117,7 +117,7 @@ def test_a_predicate_reaching_back_to_its_class_is_collected() -> None:
             """Hold the class in a default, so the pool entry reaches it."""
             return isinstance(value, int)
 
-        model.validator = Validator(  # ty: ignore[unresolved-attribute]
+        model.validator = Validator(  # ty: ignore[missing-attribute]
             Annotated[int, at.Predicate(only_ints)]
         )
         watches.append(weakref.ref(model))

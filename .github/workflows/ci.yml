@@ -1413,7 +1413,7 @@ jobs:
       # against a committed baseline.
       - uses: taiki-e/install-action@v2.90.3
         with:
-          tool: cargo-mutants@27.1.0,cargo-nextest@0.9.145
+          tool: cargo-mutants@27.1.0,cargo-nextest@0.9.151
       - name: List the Rust files the diff touches
         id: diff
         # Both values reach the script through the environment rather than
@@ -2202,7 +2202,7 @@ jobs:
       # set that moves with the tool moves the baseline under the ratchet.
       - uses: taiki-e/install-action@v2.90.3
         with:
-          tool: cargo-mutants@27.1.0,cargo-nextest@0.9.145
+          tool: cargo-mutants@27.1.0,cargo-nextest@0.9.151
       - name: Mutation report over the core
         run: |
           # cargo-mutants exit codes: 0 clean, 2 missed mutants, 3 timeouts,

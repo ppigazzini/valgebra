@@ -215,7 +215,7 @@ class _Protocol(Protocol):
 
 
 def _endless_protocol() -> object:
-    _Protocol.__protocol_attrs__ = itertools.repeat("x")  # ty: ignore[unresolved-attribute]
+    _Protocol.__protocol_attrs__ = itertools.repeat("x")  # ty: ignore[missing-attribute]
     return _Protocol
 
 

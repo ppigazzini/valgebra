@@ -48,7 +48,7 @@ test = [
     # workflow is YAML: parsing it with a regex is how a gate ends up disagreeing
     # with the lane it claims to reproduce.
     "pyyaml>=6.0.3",
-    "syrupy>=6.1.1",
+    "syrupy>=7.0.0",
     # The suite reads a PEP 728 `TypedDict` from each implementation that takes
     # its keywords, and `typing_extensions` takes them on every release.
     "typing-extensions>=4.16.0",
@@ -61,8 +61,8 @@ dev = [
     "pyright>=1.1.414",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
-    "ruff>=0.17.4",
-    "ty>=0.0.99",
+    "ruff>=0.17.5",
+    "ty>=0.0.103",
 ]
 # The wall-clock harness and the external comparison points: the libraries the
 # benchmarks time valgebra against, and the same libraries the boundary suite

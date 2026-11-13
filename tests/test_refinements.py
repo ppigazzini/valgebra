@@ -965,9 +965,9 @@ def test_a_marker_is_read_however_its_type_keeps_its_names() -> None:
         __module__ = "annotated_types"
 
     lower = Loose()
-    lower.ge = 5  # ty: ignore[unresolved-attribute]
+    lower.ge = 5  # ty: ignore[missing-attribute]
     upper = Loose()
-    upper.le = 9  # ty: ignore[unresolved-attribute]
+    upper.le = 9  # ty: ignore[missing-attribute]
 
     at_least = Validator(Annotated[int, lower])
     assert at_least.is_valid(5)

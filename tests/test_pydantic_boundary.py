@@ -132,7 +132,7 @@ def test_instance_revalidation_is_read_off_the_class_not_the_adapter() -> None:
         lr: float
         steps: int
 
-    Configured.__pydantic_config__ = ConfigDict(  # ty: ignore[unresolved-attribute]
+    Configured.__pydantic_config__ = ConfigDict(  # ty: ignore[missing-attribute]
         revalidate_instances="always"
     )
     bad = _unchecked(Configured, lr=0.1, steps="ten")

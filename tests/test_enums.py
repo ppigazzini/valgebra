@@ -142,7 +142,7 @@ class _HideMeta(enum.EnumMeta):
 
     def __iter__(cls):  # noqa: ANN204 - the metaclass's own signature
         members = super().__iter__()
-        return (member for member in members if member.name != "HIDDEN")  # ty: ignore[unresolved-attribute]
+        return (member for member in members if member.name != "HIDDEN")  # ty: ignore[missing-attribute]
 
 
 class _Hidden(enum.Enum, metaclass=_HideMeta):
@@ -267,7 +267,7 @@ def test_an_enumeration_is_its_members_to_a_refutation_as_to_a_proof() -> None:
     tuples = intersection(tuple, holding)
     assert tuples.relation_to(complement(pair)) == "subset"
 
-    _Marked.A.x = 1  # ty: ignore[unresolved-attribute]
+    _Marked.A.x = 1  # ty: ignore[missing-attribute]
     try:
         marked = Validator(_Marked)
         assert marked.relation_to(not_x) == "not_subset"
@@ -277,7 +277,7 @@ def test_an_enumeration_is_its_members_to_a_refutation_as_to_a_proof() -> None:
         assert not x_marked.is_empty()
         assert x_marked.relation_to(nothing) != "subset"
     finally:
-        del _Marked.A.x  # ty: ignore[unresolved-attribute]
+        del _Marked.A.x  # ty: ignore[missing-attribute]
 
 
 @pytest.mark.xfail(

@@ -145,7 +145,7 @@ EXPECTED: tuple[Expected, ...] = (
         "built from",
     ),
     Expected("ty", "docs/16-api.md", "invalid-argument-type", 1, _WRONG_JSON),
-    Expected("ty", "docs/17-boundaries.md", "unresolved-attribute", 1, _UNDECLARED),
+    Expected("ty", "docs/17-boundaries.md", "missing-attribute", 1, _UNDECLARED),
     Expected("mypy", "CHANGELOG.md", "valid-type", 2, _VALIDATOR_IN_A_TYPE),
     Expected("mypy", "README.md", "assignment", 1, _MUTATION),
     Expected("mypy", "docs/03-schema-language.md", "arg-type", 1, _WRONG_POINT),

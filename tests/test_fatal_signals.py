@@ -391,7 +391,7 @@ def test_a_signal_while_a_relation_reads_a_class_propagates(
             raise signal
 
     class Opaque:
-        __eq__ = Raising()  # ty: ignore[invalid-attribute-override]
+        __eq__ = Raising()  # ty: ignore[incompatible-attribute-override]
         __hash__ = object.__hash__
 
     with pytest.raises(signal):

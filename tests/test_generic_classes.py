@@ -135,7 +135,7 @@ def test_a_type_variable_is_its_own_classs_parameter() -> None:
 
     @dataclasses.dataclass
     class Again(DBox[int], typing.Generic[T]):
-        a: T  # ty: ignore[invalid-attribute-override]
+        a: T  # ty: ignore[incompatible-attribute-override]
 
     class Pair(typing.TypedDict, typing.Generic[T, U]):
         first: T
@@ -150,7 +150,7 @@ def test_a_type_variable_is_its_own_classs_parameter() -> None:
 
     @dataclasses.dataclass
     class Right(DBox[int], typing.Generic[U]):
-        a: U  # ty: ignore[invalid-attribute-override]
+        a: U  # ty: ignore[incompatible-attribute-override]
 
     @dataclasses.dataclass
     class Diamond(Left, Right[str]):
