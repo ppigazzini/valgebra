@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import math
 import sys
 import threading
 from collections.abc import Callable
@@ -941,6 +942,32 @@ def test_a_set_is_below_the_excluded_middle_of_a_set_it_meets() -> None:
     assert (
         flat.relation_to(union(big, intersection(str, complement(big)))) == "not_subset"
     )
+
+
+def test_a_conditional_is_below_its_excluded_middle_split_twice_over() -> None:
+    """`U <= X | (U & ~X)` for the conditional a translation from JSON Schema writes.
+
+    `if: {exclusiveMaximum: 0}, else: {multipleOf: 2}` is `(N & U) | (E & ~N & U)`,
+    each keyword guarded by the values that are no number. The supertype negates
+    two sets: the split on the first decides nothing, and asked of their parts its
+    halves spend the steps the split on the second proves with, so every set's
+    halves are asked of the rules and the sets first.
+    """
+    real = Annotated[float, at.Ge(-math.inf)]
+    json_values = recursive(lambda j: union(None, bool, int, str, [j], {str: j}, real))
+    no_number = complement(intersection(union(int, real), complement(bool)))
+
+    def guarded(constraint: object) -> object:
+        number = union(Annotated[float, constraint], Annotated[int, constraint])
+        return union(intersection(number, complement(bool)), no_number)
+
+    negative, even = guarded(at.Lt(0)), guarded(at.MultipleOf(2))
+    conditional = union(
+        intersection(negative, json_values),
+        intersection(even, complement(negative), json_values),
+    )
+    middle = union(intersection(complement(conditional), json_values), conditional)
+    assert json_values.relation_to(middle) == "subset"
 
 
 def test_a_subject_of_finitely_many_values_is_related_by_each() -> None:

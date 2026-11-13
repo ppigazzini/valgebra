@@ -810,6 +810,57 @@ fn every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms() {
 }
 
 // THEORY: regularity-bounds-the-goals
+/// A split's halves, asked of their parts once every set's halves declined
+/// before the rules and the sets, ask goals inside the closure.
+///
+/// `J ⊆ {ref: a} ∪ (J ∧ ¬{ref: b})` is refuted only there: the half inside
+/// `{ref: b}` is a value of the set the supertype complements. A half is a meet
+/// of signed subterms, and its parts are asked as any pair's are, with no split
+/// below the one under way.
+#[test]
+fn a_split_asks_its_halves_past_the_rules_inside_the_closure() {
+    let json = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::union([
+        Schema::NoneType,
+        Schema::Bool,
+        Schema::Int,
+        Schema::Float,
+        Schema::Str,
+        list_of(json.clone()),
+        Schema::keyed_map(
+            Vec::new(),
+            vec![crate::ir::MapClause {
+                key: Schema::Str,
+                value: json.clone(),
+            }],
+        ),
+    ])];
+    let record = |word: usize| {
+        Schema::record(
+            vec![crate::ir::Field {
+                name: "ref".into(),
+                schema: Schema::Literal(crate::ir::ConstIx::new(word)),
+                required: true,
+            }],
+            crate::ir::Openness::Closed,
+        )
+    };
+    let renamed = Schema::union([
+        record(0),
+        Schema::meet([json.clone(), record(1).complement()]),
+    ]);
+    let (answer, asked) =
+        goals::recorded(|| json.subtype_relation_under(&renamed, &super::tests::Words, &defs));
+    assert_eq!(answer, Relation::Fails);
+    let found = [subterms(&json, &defs), subterms(&renamed, &defs)].concat();
+    let outside: Vec<_> = asked
+        .into_iter()
+        .filter(|(a, b)| !in_closure(a, &found) || !in_closure(b, &found))
+        .collect();
+    assert!(outside.is_empty(), "asked outside the closure: {outside:?}");
+}
+
+// THEORY: regularity-bounds-the-goals
 /// The distinct goals a query asks, measured against the pairs of subterms the
 /// two schemas have.
 ///

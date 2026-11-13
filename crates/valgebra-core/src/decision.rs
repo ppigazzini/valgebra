@@ -1475,10 +1475,13 @@ impl Schema {
     /// values. Either half refuted refutes the pair, since each is a part of `U`.
     /// `C` must denote a set: a predicate answering two calls apart obeys no
     /// excluded middle. Both goals are meets of signed subterms, asked of the
-    /// rules and the set representation and not of the respellings, which would
-    /// ask a half below the complement of another and so past the closure; a
-    /// half already holding `C` or `¬C` is not split on it again. A supertype
-    /// that is itself `¬C` is not split: its halves ask the pair again.
+    /// rules and the set representation for every set first, and only where none
+    /// decided there of their parts ([`decided_by_parts`](Self::decided_by_parts)):
+    /// a union supertype narrowed to the branches the half meets, a meet one
+    /// conjunct at a time. Not of the respellings, which would ask a half below
+    /// the complement of another and so past the closure; a half already holding
+    /// `C` or `¬C` is not split on it again. A supertype that is itself `¬C` is
+    /// not split: its halves ask the pair again.
     #[inline(never)]
     fn split_on_a_set_it_negates(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
         fn read<'a>(schema: &'a Schema, out: &mut Vec<&'a Schema>) {
@@ -1510,24 +1513,35 @@ impl Schema {
             }),
             subject => subject == set,
         };
+        negated.retain(|set| !held(set) && denotes_a_set_within(set, cx.oracle, cx.defs));
+        negated.truncate(SPLITS);
         let allowance = Budget::new(cx.budget.left().min(respelling()));
         let cx = &mut cx.within_this_query(&allowance);
-        for set in negated.into_iter().take(SPLITS) {
-            if held(set) || !denotes_a_set_within(set, cx.oracle, cx.defs) {
-                continue;
-            }
-            let mut halves = [set.clone(), set.clone().complement()]
-                .into_iter()
-                .map(|side| {
-                    let half = Schema::meet_within([self.clone(), side], cx.defs);
-                    half.is_subtype_rec(other, cx)
-                        .or_else(|| half.descriptor_contained_in(other, cx.oracle, cx.defs))
-                });
-            SPLITTING.with(|splitting| splitting.set(true));
-            let answer = Relation::all(&mut halves);
-            SPLITTING.with(|splitting| splitting.set(false));
-            if answer != Relation::Unknown {
-                return answer;
+        // Every set's halves are asked of the rules and the set representation
+        // first, and of their parts only where none decided: a half the parts
+        // decline spends what a later set's halves prove with.
+        for by_parts in [false, true] {
+            for set in &negated {
+                let mut halves = [(*set).clone(), (*set).clone().complement()]
+                    .into_iter()
+                    .map(|side| {
+                        let half = Schema::meet_within([self.clone(), side], cx.defs);
+                        half.is_subtype_rec(other, cx)
+                            .or_else(|| half.descriptor_contained_in(other, cx.oracle, cx.defs))
+                            .or_else(|| {
+                                if by_parts {
+                                    half.decided_by_parts(other, cx, true)
+                                } else {
+                                    Relation::Unknown
+                                }
+                            })
+                    });
+                SPLITTING.with(|splitting| splitting.set(true));
+                let answer = Relation::all(&mut halves);
+                SPLITTING.with(|splitting| splitting.set(false));
+                if answer != Relation::Unknown {
+                    return answer;
+                }
             }
         }
         Relation::Unknown

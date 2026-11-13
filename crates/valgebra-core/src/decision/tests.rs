@@ -8577,7 +8577,7 @@ fn the_product_rule_decides_its_corners_in_a_bounded_number_of_steps() {
 
 /// An oracle naming constants by value: indices 0 and 2 are the string `"a"`,
 /// 1 is `"b"`, and 3 is the integer 1, so two indices name one value.
-struct Words;
+pub(super) struct Words;
 
 impl Words {
     fn at(index: ConstIx) -> Option<Operand> {
@@ -16136,6 +16136,20 @@ fn a_declined_pair_is_split_on_a_set_its_supertype_negates() {
     assert_eq!(
         split(&json, &past(super::SPLITS), &mut cx),
         Relation::Unknown
+    );
+    // A half the rules and the set representation decline is asked of its
+    // parts, once every set's halves were asked of the two: `J ⊆ {ref: a} ∪
+    // (J ∧ ¬{ref: b})` is refuted on `{ref: b}`, the half inside `{ref: b}`
+    // meeting the second branch alone and being a value of the set it complements.
+    let record = |word: Schema| Schema::record(vec![field("ref", word, true)], Openness::Closed);
+    let renamed = Schema::union([
+        record(Schema::Literal(ConstIx::new(0))),
+        Schema::meet([json.clone(), record(word).complement()]),
+    ]);
+    assert_eq!(split(&json, &renamed, &mut cx), Relation::Fails);
+    assert_eq!(
+        json.subtype_relation_under(&renamed, &Words, &defs),
+        Relation::Fails
     );
 }
 

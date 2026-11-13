@@ -192,7 +192,19 @@ conjunct of one: `U ⊆ T` is `U ∧ C ⊆ T` and `U ∧ ¬C ⊆ T`, so `J ⊆ Y
 the excluded middle a translation from JSON Schema writes for `anyOf [Y, not Y]`,
 is proved, and a half refuted refutes the pair (`split_on_a_set_it_negates`).
 `C` denotes a set, a half already holding `C` is not split on it, and a query
-splits once, on at most four sets. Against a union
+splits once, on at most four sets. Each set's halves are asked of the rules and
+the set representation first, and where no set's halves decide there, of their
+parts (`decided_by_parts`: a union supertype narrowed to the branches a half
+meets, a meet one conjunct at a time), with no split below: `J ⊆ {ref: a} ∪
+(J ∧ ¬{ref: b})` is refuted only there, on `{ref: b}`. The order keeps the cheap
+answers: a half asked of its parts spends the allowance the next set's halves
+prove with, and the conditional's excluded middle a translation writes for `if`
+and `else` is proved on the second set it negates. Asked of every reading past
+the pair, a declined split spent its whole allowance on each such pair, 2006 of
+60,000 drawn pairs read slower; asked of the parts alone, none is slower than
+before. A half is a meet of signed subterms, so what its parts ask is drawn from
+the closure as any pair's is (`a_split_asks_its_halves_past_the_rules_inside_the_closure`).
+Against a union
 holding a complement, `b ∪ ¬c`, the meet
 `a ∧ c` is asked below `b`, and where that declines, `a ∧ ¬(b ∪ ¬c)` is read
 empty the same way, which folds no predicate's complement:

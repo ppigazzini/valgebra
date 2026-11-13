@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a set inside c that holds a value is refuted below the complement of c
 - feat: a pair the deciders declined is split on a set its supertype negates
 - feat: a relation from finitely many constants reads each value
+- feat: a split's halves are asked of their parts
 
 -->
 
@@ -33,6 +34,13 @@ answer of its own, or a repair to a change not yet released.
   `not_subset` of `list[list[list[list[int | float]]]]`, where it stayed `undecided`. A supertype
   holding a predicate, a class or an attribute is not read this way. 47 of `valgebra-jsonschema`'s
   undecided containment questions are decided by it, none against a label.
+
+- **A split's halves are asked of their parts.** Where every set the supertype negates leaves its
+  halves undecided by the rules and the set representation, each half is asked of its parts, a
+  union supertype narrowed to the branches it meets, with no split below: `J` the JSON value is `not_subset` of
+  `union(R("a"), intersection(J, complement(R("b"))))`, `R(w)` the closed record `{"ref":
+  Literal[w]}`, where it stayed `undecided`. It refutes 9 of `valgebra-jsonschema`'s undecided
+  containment questions, each a label its results page shows wrong, and loses none.
 
 - **A pair the deciders declined is split on a set its supertype negates.** `U <= T` is asked as
   `U & C <= T` and `U & ~C <= T`, for a `C` the supertype holds under a complement, so `J` the JSON
