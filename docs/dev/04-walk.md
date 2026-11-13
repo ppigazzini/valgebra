@@ -648,7 +648,19 @@ most of what they cost, and each asks the test directly:
 - **A union's branch.** `int | str | None` tries its branches in order, and a
   scalar branch is its type test (`scalar_member` in `walk/scalar.rs`). A
   string checked against that union costs 18% fewer instructions, and the
-  recursive walk of the binding gate 8.7% fewer.
+  recursive walk of the binding gate 8.7% fewer. A float under order bounds
+  -- JSON's numbers, `int | Annotated[float, Ge(-inf)]`, which leave NaN out
+  -- is walked as any other branch, and reading it as its comparisons is
+  refused. On profile-guided CPython 3.15 builds, asked in the scan, the
+  reading read a float of that union in 220 instructions where the walk reads
+  248, and one of JSON's recursive union in 666 where it reads 756, and every
+  union's walk dearer, the scan being inlined into each: `int | str | None`
+  +2.96%, a recursion through `int | list[T]` +2.76%, a list nested
+  twenty-five deep +2.38%, though none of them asks it. Asked from
+  `scalar_member`, the compiler stopped inlining that at every record field
+  (`--binding-record` +3.5%). Asked inside `check_refine`, the reading costs
+  the union's float 286 instructions, more than the walk's constraint loop,
+  which `floats_compared` already makes two `f64`s.
 - **A sequence whose element is a union of scalars.** `list[int | None]` is read
   the way `list[int]` is, above, with a test per branch
   (`homogeneous_scalar_union`): a thousand elements cost 87% fewer
