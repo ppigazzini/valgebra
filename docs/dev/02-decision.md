@@ -489,7 +489,14 @@ the dearer route below.
 
 **What no component holds is a cycle**, which is why a recursive schema is
 lowered by unfolding its body once, with a lattice bound where the reference was
-(`UNFOLDS` in `descr/lower.rs`), and belongs to the rules past that. The other
+(`UNFOLDS` in `descr/lower.rs`), and belongs to the rules past that. One reading
+reaches a second unfolding: a relation every reading left undecided, its subject
+holding a reference, narrows the subject twice and refutes on a value of the
+difference (`refuted_narrowed_deeper`), sound because every unfolding of a
+fixpoint lies inside it [FCB08, §4.3]. It is asked once, at the root, so a
+decided pair pays one comparison, and never where one unfolding answers: the
+deeper term spends the build budget first, and asked in place of the first it
+left a corpus of recursive schemas less decided. The other
 refusals are size: each representation has a ceiling it will not exceed, because
 a union too wide is complemented into one too *narrow*, so rounding is never the
 alternative to refusing. `descr/budget.rs` bounds the work spent reaching a

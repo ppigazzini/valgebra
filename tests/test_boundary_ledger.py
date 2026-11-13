@@ -166,10 +166,6 @@ _JSON = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 _CHAIN = recursive(lambda t: union(None, {"next": t}))
 
 
-class _Node(dict):
-    """A dict subclass, a class one of the chain's links can be an instance of."""
-
-
 #: Every bullet the page carries, with the query that drives it.
 #:
 #: The key is the bullet's lead-in, verbatim: a bullet reworded is a bullet
@@ -348,18 +344,6 @@ ROWS: dict[str, Row] = {
         # The entry's own contrast: a literal key of another kind lands in its
         # part, and the relation is decided.
         beside=(dict[Literal[1], int], dict[int, int], "subset"),
-    ),
-    "An inhabited meet with a recursive reference, beside a class.": Declines(
-        intersection(_CHAIN, _Node),
-        nothing,
-        "a value of a class met with a record, which the rules name only for a "
-        "class read with the attributes its instances carry",
-        # Beside an open record the meet is one record, which holds a value.
-        beside=(
-            intersection(_CHAIN, Validator({"next": None}).open()),
-            nothing,
-            "not_subset",
-        ),
     ),
     "Recursion, past one unfolding.": Declines(
         {"next": intersection(dict, complement(_CHAIN))},

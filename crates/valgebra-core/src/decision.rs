@@ -25,10 +25,11 @@ use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
-use crate::descr::budget;
 use crate::descr::lower::{
-    Constants, WORK, an_empty_reading_stands, lower_unfolded, parts_a_cut_reaches, read_widened,
+    Constants, UNFOLDS, WORK, an_empty_reading_stands, lower, lower_unfolded, parts_a_cut_reaches,
+    read_widened,
 };
+use crate::descr::{Descr, budget};
 use crate::ir::{Constraint, DefIx, Members, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::unordered_pairs;
@@ -883,7 +884,8 @@ impl Schema {
     /// bottom empties its record, so a deeper unfolding could find a value this
     /// one does not, but the wider term spends [`BUDGET`](crate::descr::lower)
     /// first: two unfoldings left 17% more of a corpus of recursive lists and
-    /// maps undecided.
+    /// maps undecided. [`refuted_narrowed_deeper`](Self::refuted_narrowed_deeper)
+    /// asks the second, past every other reading.
     #[inline(never)]
     pub(crate) fn refuted_narrowed(
         &self,
@@ -892,10 +894,55 @@ impl Schema {
         defs: &[Schema],
         pool: &dyn Constants,
     ) -> Relation {
+        Self::refuted_below(
+            || lower_unfolded(self, defs, Polarity::Narrow, pool),
+            read,
+            side,
+            defs,
+            pool,
+        )
+    }
+
+    /// `Fails` where a value of the subject outside the supertype lies one
+    /// unfolding past [`refuted_narrowed`](Self::refuted_narrowed)'s reading:
+    /// the subject's references unfolded twice before the cut.
+    ///
+    /// A recursive set holds every value built by finitely many unfoldings of its
+    /// body [FCB08, §4.3], so the subject narrowed through two unfoldings lies
+    /// inside it as it does through one, and a value its difference with the
+    /// supertype holds is a value of the real difference: the JSON values are
+    /// outside the mappings whose key `bar` holds a list, on `{"bar": None}`,
+    /// which one unfolding cuts to the empty mapping. Asked once, at the root, of
+    /// a query every reading left undecided and whose subject holds a reference,
+    /// with the definitions it names, so a decided pair pays one comparison and
+    /// an answer the one unfolding gives is never asked of the deeper term,
+    /// which spends the build budget first.
+    #[inline(never)]
+    fn refuted_narrowed_deeper(
+        &self,
+        other: &Schema,
+        pool: &dyn Constants,
+        defs: &[Schema],
+    ) -> Relation {
+        let (read, side) = other.read_as_a_supertype();
+        let deeper = || lower(&self.unfolded(defs, UNFOLDS + 1, Polarity::Narrow), pool);
+        Self::refuted_below(deeper, read, side, defs, pool)
+    }
+
+    /// `Fails` where the narrowed subject `mine` lowers to holds a value outside
+    /// the supertype `read`, read on `side` as
+    /// [`read_as_a_supertype`](Self::read_as_a_supertype) gives it.
+    fn refuted_below(
+        mine: impl FnOnce() -> Option<Descr>,
+        read: &Schema,
+        side: Polarity,
+        defs: &[Schema],
+        pool: &dyn Constants,
+    ) -> Relation {
         #[cfg(test)]
         goal_tests::goals::read_by_the_sets();
         let refuted = || {
-            let mine = lower_unfolded(self, defs, Polarity::Narrow, pool)?;
+            let mine = mine()?;
             let theirs = lower_unfolded(read, defs, side.flipped(), pool)?;
             budget::under(WORK, || {
                 let difference = if side == Polarity::Narrow {
@@ -1012,15 +1059,20 @@ impl Schema {
         let first = self
             .is_subtype_rec(other, &mut cx)
             .or_else(|| self.decided_by_sets(other, &mut cx, true));
-        if first == Relation::Unknown && asks_again(met, &budget) {
-            return asked_again(|budget| {
+        let answer = if first == Relation::Unknown && asks_again(met, &budget) {
+            asked_again(|budget| {
                 let mut cx = Cx::new(oracle, defs, budget);
                 self.is_subtype_rec(other, &mut cx)
                     .or_else(|| self.a_side_with_no_value(other, &mut cx))
                     .or_else(|| self.decided_past_the_whole_pair(other, &mut cx, true))
-            });
+            })
+        } else {
+            first
+        };
+        if answer == Relation::Unknown && !defs.is_empty() && self.has_reference() {
+            return self.refuted_narrowed_deeper(other, oracle, defs);
         }
-        first
+        answer
     }
 
     /// The set representation of the pair, then both deciders asked of its

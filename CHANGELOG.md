@@ -22,6 +22,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a pair the deciders declined is split on a set its supertype negates
 - feat: a relation from finitely many constants reads each value
 - feat: a split's halves are asked of their parts
+- feat: a recursive subject is narrowed twice where once found no value
 
 -->
 
@@ -34,6 +35,12 @@ answer of its own, or a repair to a change not yet released.
   `not_subset` of `list[list[list[list[int | float]]]]`, where it stayed `undecided`. A supertype
   holding a predicate, a class or an attribute is not read this way. 47 of `valgebra-jsonschema`'s
   undecided containment questions are decided by it, none against a label.
+
+- **A recursive subject is narrowed twice where once found no value.** Where every reading left
+  a relation undecided and its subject holds a reference, the subject is unfolded twice before
+  the cut, and a value of its difference with the supertype refutes: the JSON values are
+  `not_subset` of `union(complement(list), Annotated[list, MaxLen(2)])` met with them, on
+  `[1, 1, 1]`, where it stayed `undecided`. A decided pair pays one comparison for it.
 
 - **A split's halves are asked of their parts.** Where every set the supertype negates leaves its
   halves undecided by the rules and the set representation, each half is asked of its parts, a

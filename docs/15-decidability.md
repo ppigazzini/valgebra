@@ -661,7 +661,14 @@ answers `"undecided"`.
   is not below `int`, which an object whose `x` is `[]` is outside. A value a
   second unfolding would place is named where it is a sequence or a mapping of one
   item: `list[str]` is `not_subset` of `recursive(lambda t: union(Validator([]),
-  [t]))` on `["a"]`. Past that it is not named.
+  [t]))` on `["a"]`. Where every reading declined a relation, its subject is
+  narrowed through two unfoldings and a value of the difference there is named:
+  the JSON values are `not_subset` of `union(complement(list),
+  Annotated[list, MaxLen(2)])` met with them, on `[1, 1, 1]`, which one unfolding
+  cuts to the empty list, and a fixpoint of records met with a class whose
+  instances are mappings holds a value: `intersection(recursive(lambda t:
+  union(None, {"next": t})), Node)` is not empty, on `Node(next=None)`, for
+  `class Node(dict)`. Past that it is not named.
 - **A meet with a recursive reference.** A reference denotes its definition,
   so a meet with one is the definition met with the rest, and a definition that
   is a union is the union of its branches each met with the rest. The meet of
@@ -1136,29 +1143,6 @@ the shape. What is left below is what the descriptor cannot hold.
     nested = intersection(str, complement(intersection(str, json)))
     assert nested.relation_to(nothing) == "subset"
     ```
-- **An inhabited meet with a recursive reference, beside a class.** The
-  meet's emptiness is decided ([above](#decided-exactly)), and a value is named
-  where its records meet in one record whose required fields hold values, open
-  records among them, so a meet with a class that holds a value is not proved
-  to:
-
-    ```python
-    from valgebra import Validator, intersection, nothing, recursive, union
-
-
-    class Node(dict):
-        pass
-
-
-    chain = recursive(lambda t: union(None, {"next": t}))
-    opened = intersection(chain, Validator({"next": None}).open())
-    assert opened.relation_to(nothing) == "not_subset"
-    assert intersection(chain, Validator({"next": int}).open()).is_empty()
-    met = intersection(chain, Node)
-    assert met.is_valid(Node(next=None))
-    assert met.relation_to(nothing) == "undecided"
-    ```
-
 - **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and
   two of the kinds that have one state it: a word's length is a pattern over
   its alphabet, and a *sequence's* is "any element, that many times", which the

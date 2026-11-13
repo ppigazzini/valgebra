@@ -994,3 +994,20 @@ def test_a_subject_of_finitely_many_values_is_related_by_each() -> None:
         list[list[list[list[Annotated[int, at.Predicate(lambda _: True)]]]]]
     )
     assert word.relation_to(checked) == "undecided"
+
+
+# THEORY: a-cut-reference-proves
+def test_a_recursive_set_is_refuted_on_a_value_two_unfoldings_down() -> None:
+    """The JSON values are outside the values whose lists hold at most two items.
+
+    It is `{"maxItems": 2}` as a translation from JSON Schema writes it, met with
+    the JSON values. One unfolding cuts every list to the empty one, which the
+    supertype holds; `[1, 1, 1]` lies two down, and the subject unfolded twice
+    lies inside it, so the value refutes. The float leaf leaves out NaN.
+    """
+    real = Annotated[float, at.Ge(-math.inf)]
+    json_values = recursive(lambda j: union(None, bool, int, real, str, [j], {str: j}))
+    short = union(complement(list), Annotated[list, at.MaxLen(2)])
+    assert json_values.relation_to(intersection(short, json_values)) == "not_subset"
+    assert json_values.is_valid([1, 1, 1])
+    assert not Validator(short).is_valid([1, 1, 1])

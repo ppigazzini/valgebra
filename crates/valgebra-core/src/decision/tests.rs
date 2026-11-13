@@ -11444,6 +11444,14 @@ fn a_meet_disjoint_from_a_meet_it_holds_a_value_of_is_refuted() {
         Relation::Unknown,
         "the sets leave the pair to this reading"
     );
+    // The meets are read together on their own: a recursive subject narrowed
+    // through two unfoldings is refuted below the other meet as well, and would
+    // answer for this reading in the relation.
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        guarded(0).decided_as_respelled(&guarded(1), &Cx::new(&NoLeafRelations, &defs, &budget)),
+        Relation::Fails
+    );
     assert_eq!(relation(&guarded(0), &guarded(1)), Relation::Fails);
     assert_eq!(relation(&guarded(1), &guarded(0)), Relation::Fails);
     let empty = Schema::meet([guarded(0), guarded(1)]);
@@ -13692,7 +13700,8 @@ mod leaves {
     /// A second asking starts past the whole pair's reading, which spends no step
     /// and so declines alike: two lists of lists around a back edge meet the depth
     /// bound, and no part of the pair is read by the sets, so the query reads what
-    /// its first asking does.
+    /// its first asking does, and the subject narrowed twice once
+    /// ([`Schema::refuted_narrowed_deeper`]), past both.
     #[test]
     fn a_second_asking_does_not_read_the_whole_pair_again() {
         use super::super::goal_tests::goals::pairs_read_by_the_sets;
@@ -13718,7 +13727,7 @@ mod leaves {
             mine.subtype_relation_under(&theirs, &Pure, &defs),
             Relation::Unknown
         );
-        assert_eq!(pairs_read_by_the_sets() - before, read);
+        assert_eq!(pairs_read_by_the_sets() - before, read + 1);
     }
 
     /// A refinement only the sets read holds a value there, in the last asking
@@ -16150,6 +16159,57 @@ fn a_declined_pair_is_split_on_a_set_its_supertype_negates() {
     assert_eq!(
         json.subtype_relation_under(&renamed, &Words, &defs),
         Relation::Fails
+    );
+}
+
+// THEORY: a-cut-reference-proves
+/// A recursive subject is narrowed twice where once finds no value, past every
+/// other reading: the JSON values below the same values but mappings of `None`.
+///
+/// One unfolding cuts the subject's mappings to the empty one, which the
+/// supertype holds; two hold `{str: None | bool | ...}`, among them `{"a": 1}`,
+/// which it does not. The second unfolding lies inside the fixpoint as the first
+/// does [FCB08, §4.3], so the value refutes.
+#[test]
+fn a_recursive_subject_is_narrowed_twice_where_once_finds_no_value() {
+    let json = Schema::Ref(DefIx::new(0));
+    let body = |mapped: Schema| {
+        Schema::union([
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            Schema::list(SeqShape::homogeneous(json.clone())),
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: mapped,
+                }],
+            ),
+        ])
+    };
+    let defs = vec![body(json.clone())];
+    let nones = body(Schema::NoneType);
+    let (read, side) = nones.read_as_a_supertype();
+    assert_eq!(
+        json.refuted_narrowed(read, side, &defs, &Words),
+        Relation::Unknown
+    );
+    assert_eq!(
+        json.refuted_narrowed_deeper(&nones, &Words, &defs),
+        Relation::Fails
+    );
+    assert_eq!(
+        json.subtype_relation_under(&nones, &Words, &defs),
+        Relation::Fails
+    );
+    // The supertype holding the subject's own mappings is the subject, and no
+    // unfolding finds a value outside it.
+    assert_eq!(
+        json.refuted_narrowed_deeper(&body(json.clone()), &Words, &defs),
+        Relation::Unknown
     );
 }
 
