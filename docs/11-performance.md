@@ -83,7 +83,7 @@ the manifest), CPython 3.15.2 built from source with
 `--enable-optimizations --with-lto`, `CC=clang` and
 `CFLAGS=-march=native -mtune=native`, and **the GIL enabled**
 (`sysconfig.get_config_var("Py_GIL_DISABLED")` is `0`; the free-threaded build
-of the same version takes 1.3 to 2.6 times as long to walk a container, so a
+of the same version takes 1.4 to 2.8 times as long to walk a container, so a
 figure measured on one is not comparable with the other). Every package version -- the two
 benchmark harnesses and the libraries compared against -- is whichever the bench
 group resolves. `uv.lock` owns them and `scripts/compare_gate.py` prints them
@@ -147,10 +147,10 @@ not the interpreter.
 
 Measured that way on the box above, six readings of each build interleaved, the
 profile buys on five shapes, by the median of the six: the list nested
-twenty-five deep 29%, the JSON document 26%, the one-`int` call and compilation
-18%, and the error report 7%. The accepting walk over a fifty-field record reads
-1.9% faster, between level and 4% faster across the six, and the ten-thousand
-element `list[int]` reads 28% slower, between 24% and 32%. A single reading of
+twenty-five deep 32%, the JSON document 26%, the one-`int` call 19%, compilation
+16%, and the error report 4%. The accepting walk over a fifty-field record reads
+1.5% faster, between 2% slower and 6% faster across the six, and the ten-thousand
+element `list[int]` reads 47% slower, between 44% and 52%. A single reading of
 one shape is not a verdict either way: the first reading after an install can
 part from the five after it by 12%.
 
@@ -158,7 +158,7 @@ The shape the profile costs is the one with the least left to arrange, and what
 moves it is where its code lands rather than what its code does. A list of one
 scalar kind is read by a loop of its own for that kind, a type test per element,
 and that loop counts within 0.9% with a profile and without one. On CPython 3.15
-it takes 0.96 ns an element in the plain wheel and 1.23 in the profiled one. Two
+it takes 0.95 ns an element in the plain wheel and 1.40 in the profiled one. Two
 profiled wheels built from one source count it to the instruction and take 1.0
 and 1.2 ns, and the tables here read the slower, so this figure follows where a
 build lands the loop, the effect
@@ -191,7 +191,7 @@ scan, the comparison gate's list nested twenty-five deep takes 64% longer in the
 PGO wheel, 405 ns against 245 on one box, while the instruction gate's plain
 workloads, which build without a profile, read 0.9%. So the workload reads a list
 of records and a list nested twenty-five deep, and trained on them that shape
-reads 0.105 of pydantic's time on CPython 3.15. The instruction gate holds the
+reads 0.101 of pydantic's time on CPython 3.15. The instruction gate holds the
 training too, counting the comparison gate's shapes on the PGO wheel built at a
 change and at its base (`perf_gate.py --profiled`): built with the nested list's
 training taken out, that shape reads 50.89% more instructions.
@@ -350,18 +350,18 @@ End-to-end validation of a value that passes (lower is better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 12.3 +/- 0.071 us | 87.7 +/- 1.2 us | 25,040 +/- 360 us |
-| Closed record, 50 int fields | 0.491 +/- 0.013 us | 2.24 +/- 0.046 us | 130 +/- 3.3 us |
-| Nested `list[...]`, depth 25 | 0.206 +/- 0.034 us | 2.07 +/- 0.027 us | 76.2 +/- 0.87 us |
+| `list[int]`, 10,000 elements | 13.9 +/- 0.28 us | 86.3 +/- 2.1 us | 24,770 +/- 710 us |
+| Closed record, 50 int fields | 0.485 +/- 0.015 us | 2.16 +/- 0.099 us | 128 +/- 4.8 us |
+| Nested `list[...]`, depth 25 | 0.186 +/- 0.0098 us | 2.03 +/- 0.12 us | 74.7 +/- 2.2 us |
 
 valgebra relative to pydantic on this machine, under the CPython 3.15 the matrix
-above names, as the medians above divide: **10.1x** faster on deep nesting,
-**7.2x** on the large flat array, **4.6x** on the wide record. The comparison
-gate's minimums read the same three at 9.5x, 7.2x and 4.9x (the 3.15 column
-below). It is consistently far ahead of pure-Python jsonschema — 2,040x on the
-array, 371x on the nesting and 265x on the record. The nesting's half-range is its
-two slowest runs of the ten, which read 0.256 and 0.265 us; the other eight read
-0.196 to 0.216.
+above names, as the medians above divide: **10.9x** faster on deep nesting,
+**6.2x** on the large flat array, **4.5x** on the wide record. The comparison
+gate's minimums read the same three at 9.9x, 6.2x and 4.8x (the 3.15 column
+below). It is consistently far ahead of pure-Python jsonschema — 1,780x on the
+array, 402x on the nesting and 264x on the record. The nesting's half-range is its
+two slowest runs of the ten, which read 0.200 us; the other eight read 0.181 to
+0.191.
 
 pydantic does strictly more work on the record (it constructs output), so read
 that shape as a margin over a heavier operation, not a like-for-like loss for
@@ -378,24 +378,24 @@ the fraction of pydantic's time each shape takes, the median over twelve runs on
 
 | Shape | CPython 3.12 | CPython 3.14 | CPython 3.15 | 3.14 free-threaded | 3.15 free-threaded |
 | --- | --- | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 0.161 | 0.110 | 0.139 | 0.141 | 0.133 |
-| Closed record, 50 int fields | 0.198 | 0.214 | 0.204 | 0.235 | 0.224 |
-| Nested `list[...]`, depth 25 | 0.109 | 0.098 | 0.105 | 0.220 | 0.221 |
-| One `int` | 0.160 | 0.159 | 0.171 | 0.161 | 0.174 |
+| `list[int]`, 10,000 elements | 0.155 | 0.109 | 0.160 | 0.146 | 0.133 |
+| Closed record, 50 int fields | 0.196 | 0.211 | 0.207 | 0.240 | 0.228 |
+| Nested `list[...]`, depth 25 | 0.107 | 0.097 | 0.101 | 0.219 | 0.217 |
+| One `int` | 0.162 | 0.156 | 0.172 | 0.164 | 0.178 |
 
 The **element** is what moves, not the check. A list hands out each of its items
 as an owned reference — a count written on the object when the handle is made
 and again when it drops — and the free-threaded build writes each count through
 a call into the interpreter. A schema nested twenty-five deep is twenty-five
 containers of one element, so it is almost nothing but that cost, and it takes
-2.5 times as long there as under a global lock. A flat array of ten
+2.6 to 2.8 times as long there as under a global lock. A flat array of ten
 thousand is read through a snapshot of the list under 3.12 and the free-threaded
 builds, which pays the counts in two loops inside the interpreter and none in the
 walk; CPython 3.14 and 3.15 with their global lock make the counts cheap enough
 that the walk reads the list in place (`snapshot_pays` in
 `crates/valgebra-py/src/check/walk/sequence.rs`). The array's cell parts those two
-for another reason: the loop reads 0.97 ns an element in the 3.14 wheel and 1.23
-in the 3.15 one, and [another build of that source](#baseline-matrix) reads 1.0.
+for another reason: the loop reads 0.96 ns an element in the 3.14 wheel and 1.40
+in the 3.15 one, and [another build of that source](#baseline-matrix) reads 0.95.
 The margin carries across all five.
 
 That is why the ceiling file holds a second set for the free-threaded build:
@@ -433,8 +433,8 @@ fraction of pydantic's time each takes, on the PGO CPython 3.15 build above:
 
 | Shape | ratio | spread across runs |
 | --- | --- | --- |
-| JSON document, 200 records parsed and checked | 0.50 | 0.027 over eighteen runs |
-| Error report, 50-field record with one wrong field | 0.41 | 0.095 over eighteen runs |
+| JSON document, 200 records parsed and checked | 0.50 | 0.026 over eighteen runs |
+| Error report, 50-field record with one wrong field | 0.45 | 0.033 over eighteen runs |
 
 The JSON document is a single pass over bytes for both libraries, which is why
 valgebra takes just over half of pydantic's time here rather than a fraction:
@@ -443,13 +443,11 @@ neither is spending its time in the check. A document's free-form sections are
 narrow object, through a table of last values for a wide one
 (`docs/dev/04-walk.md`).
 
-The error report spreads 0.095 across the eighteen runs, the widest of the
-seven, sixteen of its runs within 0.058 and the two ends reading 0.36 and 0.46;
-beside it the record 0.032, seventeen of its runs within 0.028 and one reading
-0.223, the scalar, which sits near timer resolution, 0.030, seventeen of its runs
-within 0.023 and one reading 0.190, the JSON document 0.027, seventeen of its runs
-within 0.021 and one reading 0.485, the nesting 0.009, the array 0.008 and the
-build 0.0014. The
+The record spreads 0.104 across the eighteen runs, the widest of the seven,
+seventeen of its runs within 0.016 and one reading 0.301; beside it the scalar,
+which sits near timer resolution, 0.052, seventeen of its runs within 0.015 and
+one reading 0.213, the error report 0.033, the JSON document 0.026, the nesting
+0.015, the array 0.008 and the build 0.0005. The
 error report is the only shape timing a path that raises and formats a Python exception,
 so a Python exception's cost is inside the number. It is excluded from the
 gate's drift ratchet, and `scripts/perf_compare.json` gives the reason rather
@@ -473,8 +471,8 @@ exception.
 
 The scalar shape is absent from the table because it sits near timer resolution,
 and most of it is the call rather than the check, as the floor above shows: on
-CPython 3.15 the competitive gate measures it at a 32.2 ns median over eighteen
-runs, between 31.6 and 35.4 ns, around 5.8x.
+CPython 3.15 the competitive gate measures it at a 32.0 ns median over eighteen
+runs, between 31.6 and 40.8 ns, around 5.8x.
 That gate measures it; this record does not.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
@@ -482,7 +480,7 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 | Operation | Corpus | Median |
 | --- | --- | --- |
 | `reindexed` | 64-field pool-indexed record | ~1.2 us |
-| `with_records_open` | record spine, depth 32 | ~4.3 us |
+| `with_records_open` | record spine, depth 32 | ~4.6 us |
 
 ## Honest limits
 
@@ -547,7 +545,7 @@ error model (`docs/dev/05-errors.md`) and the schema representation
   compiles it out; `tests/test_build_flags.py` holds the flags there. The
   instruction gate's boundary shape calls the walk without crossing PyO3's call
   machinery, so the comparison gate's `scalar` is the instrument that reads it:
-  32.0 ns with the pool gone against 33.5 with it, on CPython 3.15 and the
+  31.6 ns with the pool gone against 33.0 with it, on CPython 3.15 and the
   machine named above.
 - **A failure is raised in one step.** `into_pyerr` in
   `crates/valgebra-py/src/errors.rs` builds the `ValidationError` instance and
@@ -1029,7 +1027,7 @@ program that builds validators per request, and to no validation call.
   the value it is about, and a container is rendered through `reprlib` under a
   depth and width bound (`BOUNDED_REPR` in `crates/valgebra-py/src/errors.rs`)
   rather than rendered whole and cut, so reporting on a value nested twenty
-  thousand deep takes about 24 us. A value small enough to print
+  thousand deep takes about 25 us. A value small enough to print
   renders exactly as `repr` would.
 
 ### What a relation between two validators costs
