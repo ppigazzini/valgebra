@@ -281,6 +281,31 @@ def test_one_element_is_a_complement_and_a_count_is_a_predicate() -> None:
     assert twice.relation_to(some_int) == "undecided"
 
 
+def test_distinct_elements_name_an_equality_and_are_a_predicate() -> None:
+    numbers, number_and_boolean = [1, 1.0], [1, True]
+    # Python's `==` repeats an item in both, a literal's equality in neither.
+    assert len(set(numbers)) == len(set(number_and_boolean)) == 1
+    assert not Validator(Literal[1]).is_valid(1.0)
+    assert not Validator(Literal[1]).is_valid(True)
+
+    # JSON's repeats one in the first alone, and a predicate states it.
+    def json_key(item: object) -> tuple[str, object]:
+        if isinstance(item, bool):
+            return ("boolean", item)
+        return ("number", item) if isinstance(item, int | float) else ("other", item)
+
+    distinct = Validator(
+        Annotated[
+            list[Any],
+            at.Predicate(lambda items: len({json_key(i) for i in items}) == len(items)),
+        ]
+    )
+    assert not distinct.is_valid(numbers)
+    assert distinct.is_valid(number_and_boolean)
+    # Exact on membership, and every relation through it declines.
+    assert Validator(list[int]).relation_to(distinct) == "undecided"
+
+
 #: What `tomllib` returns: no `None`, an `int` and a `float` two kinds apart, and the
 #: dates and times as values.
 TOML_VALUE: Validator[Any] = recursive(

@@ -301,6 +301,20 @@ reaches, exact on membership and opaque to relations.
 `test_one_element_is_a_complement_and_a_count_is_a_predicate` in
 `tests/test_universe.py` holds both halves.
 
+**A node for distinct elements, so `uniqueItems` is a set.** Refused. "No two items
+equal" names an equality, and the one JSON Schema means is neither Python's nor the
+algebra's: `[1, 1.0]` repeats an item under JSON's, which makes two numbers equal by
+value, and `[1, True]` does not, a boolean being no number. Python's `==` repeats an
+item in both, and a literal's equality, `type(x) is type(c) and x == c`, in neither.
+A node over one of them denotes a set the keyword does not, and a node taking the
+equality as a parameter is a second algebra. Nor would it carry a procedure:
+inclusion is complete for JSON Schema's other operators [BBC+26, §1, p. 2], and with
+this one it is past tree automata and decided by no implementation
+[BBC+26, §2, p. 2], so every relation through the node would decline as a
+predicate's does. A predicate states JSON's equality exactly.
+`test_distinct_elements_name_an_equality_and_are_a_predicate` in
+`tests/test_universe.py` holds both halves.
+
 **A node for an array's elements, so `Annotated[NDArray[float64], Ge(0)]` reads every
 element.** Refused on the demand it has not shown and the cost it has not paid. The set passes the admission test, since "every element belongs to `E`" is no
 attribute a record reaches and a predicate counts for nothing. Its form would be a
