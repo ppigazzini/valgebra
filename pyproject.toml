@@ -101,8 +101,10 @@ docs = [
     "mkdocs-material>=9.7.7,<10",
     "mkdocstrings[python]>=1.0.6",
     # Generates the /llms.txt manifest and /llms-full.txt full-content export so
-    # AI assistants and coding agents consume the docs as clean Markdown.
-    "mkdocs-llmstxt>=0.5",
+    # AI assistants and coding agents consume the docs as clean Markdown. It reads
+    # HTML through soupsieve, whose fix for CVE-2026-126190, 4.0.0, needs Python
+    # 3.11.5: below it the lock would hold 2.10, so the plugin installs from there.
+    "mkdocs-llmstxt>=0.5; python_full_version >= '3.11.5'",
 ]
 
 [tool.uv]
