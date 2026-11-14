@@ -383,6 +383,22 @@ The soundness is relative to a small, explicit trust base:
   UTF-8. Each is reported as `json_invalid` before a schema sees it, so the JSON path admits
   a subset of what the object path does and never a different value
   ([the JSON path](07-json.md) states both with the queries that show them).
+- **The regular-expression parser reads a class as the set it writes.** A
+  pattern's class is the set of characters its items name, read by the
+  `regex-syntax` crate for the walk and for the relations alike.
+
+  **A negated class whose set is split at the surrogate gap is the one place it
+  does not.** `regex-syntax` 0.8.11 negates a set holding
+  a range that ends at U+D7FF and another that starts at U+E000 into a set that
+  keeps both, so `[^\x{D7FF}\x{E000}]` admits `"\ud7ff"` and `"\ue000"`, and the
+  relations read the same wrong set: it is decided `not_subset` of
+  `[^\x{D7FF}]`, which it is below, and `[^\x{D7FF}]` `subset` of it, which holds
+  U+E000. The two readers agree, so no relation contradicts the walk. A class
+  meets it only where its own ranges stop and start exactly there -- the
+  surrogates excluded by hand, or the union of two properties such as
+  `\p{Cn}` and `\p{Co}` -- and never through a Perl class, since none of
+  `\w`, `\d` and `\s` holds U+E000, a private-use code point. The case is
+  pinned as a known-unsound test, which fails the day a fixed release is read.
 - **The crates contain no `unsafe`.** Both crate roots carry
   `#![forbid(unsafe_code)]`, which makes an `unsafe` block below one a compile
   error rather than a reviewer's job — so there is no memory-safety obligation

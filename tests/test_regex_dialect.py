@@ -360,3 +360,26 @@ def test_a_form_only_re_reads_is_refused_by_the_parse(
     with pytest.raises(ValueError, match="invalid regular expression"):
         Validator(Annotated[str, Regex(pattern)])
     assert f"`{spelled}`" in _PAGE, f"docs/05-refinements.md does not list {spelled}"
+
+
+# TRUST: The regular-expression parser reads a class as the set it writes.
+@pytest.mark.xfail(
+    strict=True,
+    reason="regex-syntax 0.8.11 negates a set split at the surrogate gap into one "
+    "keeping U+D7FF and U+E000",
+)
+def test_a_negated_class_split_at_the_surrogate_gap_is_the_set_it_writes() -> None:
+    """The class of all but two code points refuses both, and is below all but one.
+
+    The class is two ranges that stop and start at the gap, and the parser's
+    negation keeps both ends, so the walk admits each and the relations read
+    the same set: the inclusion that holds is refuted, and the converse, which
+    U+E000 refutes, is proved. A fixed parser passes this, and the strict mark
+    fails until the case leaves the trust base.
+    """
+    both = Validator(Annotated[str, Regex(r"^[^\x{D7FF}\x{E000}]$")])
+    one = Annotated[str, Regex(r"^[^\x{D7FF}]$")]
+    assert not both.is_valid(chr(0xD7FF))
+    assert not both.is_valid(chr(0xE000))
+    assert both.relation_to(one) == "subset"
+    assert Validator(one).relation_to(both) == "not_subset"
