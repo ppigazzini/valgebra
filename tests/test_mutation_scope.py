@@ -191,6 +191,9 @@ def test_every_binding_file_is_swept_or_excluded_by_name() -> None:
     )
 
 
+@pytest.mark.skipif(
+    shutil.which("cargo-mutants") is None, reason="cargo-mutants is not installed"
+)
 def test_an_integration_target_is_not_a_subject() -> None:
     """The sweep mutates the code that ships, and `tests/` is not it.
 
