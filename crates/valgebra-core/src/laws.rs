@@ -8956,6 +8956,24 @@ proptest! {
         }
     }
 
+    /// The order on schemas is total and agrees with their equality: what a
+    /// union or a meet sorts its members by, and what its dedup reads as one
+    /// member, are the same relation, nested payloads included.
+    #[test]
+    fn the_order_on_schemas_is_total_and_agrees_with_equality(
+        a in recursive_schema(),
+        b in recursive_schema(),
+        c in recursive_schema(),
+    ) {
+        use core::cmp::Ordering;
+        prop_assert_eq!(a.cmp(&b) == Ordering::Equal, a == b);
+        prop_assert_eq!(a.cmp(&b), b.cmp(&a).reverse());
+        prop_assert_eq!(a.cmp(&a.clone()), Ordering::Equal);
+        if a <= b && b <= c {
+            prop_assert!(a <= c, "{a:?} <= {b:?} <= {c:?}");
+        }
+    }
+
     // THEORY: a-cut-reference-proves
     /// An unfolding that shares one copy of a body a level is the unfolding
     /// that copies it at every reference.

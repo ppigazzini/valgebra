@@ -997,17 +997,18 @@ HELD-BY: descr/integers/tests.rs::the_lattice_laws_hold_of_the_integers, the_lat
 **A node built alike is one handle.** Interning shares the nodes of two schemas
 built the same way, as Hosoya, Vouillon and Pierce share theirs so that a
 reflexivity check is a comparison of handles [HVP05, §5.1], so the trail's
-comparisons short-circuit on pointer identity and the per-rule caches see one
-handle per DAG member. What it buys is that sharing and nothing about a
+comparisons short-circuit on pointer identity, the order a union sorts its
+members by answers two handles of one node at once, and the per-rule caches see
+one handle per DAG member. What it buys is that sharing and nothing about a
 relation. The table is lossy where theirs keeps every node: a collision evicts
 and an entry is weak, so two schemas built alike are one handle while the first
 lives and holds its slot. **[LOAD-BEARING: a-node-built-alike-is-one-handle]**
 
 SOURCE: §13.6 "**Hash consing.** Hosoya-Vouillon-Pierce"
 
-IMPLEMENTED-BY: ir/intern.rs, ir/intern.rs::node, ir/intern.rs::members, ir/intern.rs::fields, ir/intern.rs::attributes, ir/intern.rs::clauses, ir.rs::Schema::union_within
+IMPLEMENTED-BY: ir/intern.rs, ir/intern.rs::node, ir/intern.rs::members, ir/intern.rs::fields, ir/intern.rs::attributes, ir/intern.rs::clauses, ir.rs::Schema::union_within, ir.rs::<Schema as Ord>::cmp
 
-HELD-BY: a_node_built_twice_is_one_node_in_every_family, sharing_a_child_shares_the_parent_over_it, a_list_built_twice_is_one_list_holding_what_was_built
+HELD-BY: a_node_built_twice_is_one_node_in_every_family, sharing_a_child_shares_the_parent_over_it, a_list_built_twice_is_one_list_holding_what_was_built, two_handles_of_one_node_compare_equal_at_once
 
 ### Obligations
 

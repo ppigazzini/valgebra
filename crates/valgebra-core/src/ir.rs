@@ -863,7 +863,7 @@ pub type Constraints = Arc<[Constraint]>;
 /// That is why the child set is stated in the two child walks rather than per
 /// walk, and `the_functor_and_the_traversal_describe_the_same_children` holds
 /// the two to one set.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Schema {
     /// Top. Denotes every Python value [FCB08, Def. 4.1]; membership always
     /// holds. The payload records how the top was written, and is read by
@@ -1058,6 +1058,115 @@ pub enum Schema {
     /// there: the walk stops on it, which is a refusal and no verdict, and
     /// every decider reads it as a schema it cannot relate.
     SelfRef(u64),
+}
+
+impl Ord for Schema {
+    /// The variant order, and then each payload in the order it is declared --
+    /// the order a derived comparison gives -- with one step first: two handles of
+    /// one node are equal, read off the address alone.
+    ///
+    /// A union and a meet keep their members sorted, so rebuilding one compares
+    /// members, and a member's children are shared handles wherever the interner
+    /// or an unfolding made them one [HVP05, §5.1]. A comparison that walks a
+    /// shared child walks it as a tree, and an unfolded fixpoint is the square of
+    /// its body as a tree, the product of the unfoldings in depth: a union of
+    /// forty prefixes of one recursive set spent most of a relation comparing a
+    /// child with itself. Equality has the step already, from `Arc`'s own
+    /// comparison of two handles; this gives it to the order.
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        if core::ptr::eq(self, other) {
+            return core::cmp::Ordering::Equal;
+        }
+        match (self, other) {
+            (Schema::Literal(a), Schema::Literal(b)) => a.cmp(b),
+            (
+                Schema::Seq {
+                    container: a,
+                    shape: a_shape,
+                },
+                Schema::Seq {
+                    container: b,
+                    shape: b_shape,
+                },
+            ) => a.cmp(b).then_with(|| a_shape.cmp(b_shape)),
+            (
+                Schema::Coll {
+                    container: a,
+                    element: a_element,
+                },
+                Schema::Coll {
+                    container: b,
+                    element: b_element,
+                },
+            ) => a.cmp(b).then_with(|| a_element.cmp(b_element)),
+            (
+                Schema::KeyedMap {
+                    fields: a,
+                    defaults: a_defaults,
+                },
+                Schema::KeyedMap {
+                    fields: b,
+                    defaults: b_defaults,
+                },
+            ) => a.cmp(b).then_with(|| a_defaults.cmp(b_defaults)),
+            (Schema::Union(a), Schema::Union(b))
+            | (Schema::Intersection(a), Schema::Intersection(b)) => a.cmp(b),
+            (Schema::Complement(a), Schema::Complement(b)) => a.cmp(b),
+            (Schema::Instance(a), Schema::Instance(b)) => a.cmp(b),
+            (Schema::AttrRecord { fields: a }, Schema::AttrRecord { fields: b }) => a.cmp(b),
+            (
+                Schema::Refine {
+                    base: a,
+                    constraints: a_constraints,
+                },
+                Schema::Refine {
+                    base: b,
+                    constraints: b_constraints,
+                },
+            ) => a.cmp(b).then_with(|| a_constraints.cmp(b_constraints)),
+            (Schema::Ref(a), Schema::Ref(b)) => a.cmp(b),
+            (Schema::SelfRef(a), Schema::SelfRef(b)) => a.cmp(b),
+            // Two variants apart, one variant with no payload, or two tops,
+            // whose spellings the order reads as one (`Spelling`).
+            _ => self.variant_rank().cmp(&other.variant_rank()),
+        }
+    }
+}
+
+impl PartialOrd for Schema {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Schema {
+    /// The variant's place in the declaration, which is where a derived
+    /// comparison orders two variants apart.
+    #[must_use]
+    pub(crate) fn variant_rank(&self) -> u8 {
+        match self {
+            Schema::Anything(_) => 0,
+            Schema::Nothing => 1,
+            Schema::NoneType => 2,
+            Schema::Bool => 3,
+            Schema::Int => 4,
+            Schema::Float => 5,
+            Schema::Str => 6,
+            Schema::Bytes => 7,
+            Schema::Literal(_) => 8,
+            Schema::Seq { .. } => 9,
+            Schema::Coll { .. } => 10,
+            Schema::KeyedMap { .. } => 11,
+            Schema::Union(_) => 12,
+            Schema::Intersection(_) => 13,
+            Schema::Complement(_) => 14,
+            Schema::Instance(_) => 15,
+            Schema::AttrRecord { .. } => 16,
+            Schema::Refine { .. } => 17,
+            Schema::Ref(_) => 18,
+            Schema::SelfRef(_) => 19,
+        }
+    }
 }
 
 /// Whether a [`Schema::Coll`] denotes sets or frozensets.

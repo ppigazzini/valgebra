@@ -17,6 +17,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the finite reading answers undecided where the walk stopped
 - fix: the finite reading bounds the items it builds
 - fix: an unfolding builds one copy of a body a level
+- perf: two handles of one node compare equal at once
 
 -->
 
@@ -51,8 +52,9 @@ answer of its own, or a repair to a change not yet released.
   unread: `prefixItems` of forty self-references against `uniqueItems`, as `valgebra-jsonschema`
   compiles them, took 14.5 s and 1.6 GB on 0.0.26 and could abort the process under a memory
   limit, and a fixpoint of 32,768 keys against a predicate took 23 s. One copy of a body is built
-  for each definition, unfoldings left and polarity, and every reference holds it: 1.1 s and 42
-  MB, and 12 ms. Every answer is the one it was.
+  for each definition, unfoldings left and polarity, and every reference holds it, and two
+  handles of one node compare equal without being read: 19 ms and 40 MB, and 12 ms, where 0.0.25
+  took 86 ms and 7 ms. Every answer is the one it was.
 
 ## [0.0.26] - 2026-11-13
 

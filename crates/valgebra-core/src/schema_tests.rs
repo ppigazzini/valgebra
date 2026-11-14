@@ -2439,3 +2439,159 @@ fn a_definition_is_entered_once_however_many_paths_reach_it() {
     looped[0] = Schema::Ref(top);
     assert!(looped[127].occurs_unguarded_under(top, Guarded::No, &looped));
 }
+
+// THEORY: a-node-built-alike-is-one-handle
+/// Two handles of one node are equal under the order without the walk: a
+/// tuple of two copies of the level below, sixty-four levels deep, is a tree of
+/// `2^64` nodes held in sixty-four, and two clones of it compare at the first
+/// level, where each child is the same allocation. A walk of the tree would
+/// not end, so the comparison runs on a thread of its own under a deadline.
+#[test]
+fn two_handles_of_one_node_compare_equal_at_once() {
+    let mut node = Schema::Int;
+    for _ in 0..64 {
+        node = Schema::tuple(SeqShape::fixed([node.clone(), node.clone()]));
+    }
+    let (sent, received) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let (left, right) = (node.clone(), node);
+        let _ = sent.send(left.cmp(&right));
+    });
+    assert_eq!(
+        received.recv_timeout(std::time::Duration::from_secs(10)),
+        Ok(core::cmp::Ordering::Equal)
+    );
+}
+
+/// The order is the variant's place in the declaration and then the payload,
+/// as a derived comparison gives it, and it agrees with equality: over one
+/// representative of each variant, and over each against a copy of itself with
+/// another payload.
+#[test]
+fn the_order_agrees_with_equality_over_every_variant() {
+    let variants = every_variant();
+    for (at, left) in variants.iter().enumerate() {
+        for (other, right) in variants.iter().enumerate() {
+            let order = left.cmp(right);
+            assert_eq!(
+                order == core::cmp::Ordering::Equal,
+                left == right,
+                "{left:?} and {right:?}"
+            );
+            assert_eq!(order, right.cmp(left).reverse(), "{left:?} and {right:?}");
+            if left.variant_rank() != right.variant_rank() {
+                assert_eq!(order, left.variant_rank().cmp(&right.variant_rank()));
+            }
+            if at == other {
+                assert_eq!(order, core::cmp::Ordering::Equal);
+            }
+        }
+    }
+    let ranks: Vec<u8> = variants.iter().map(Schema::variant_rank).collect();
+    let mut every: Vec<u8> = ranks.clone();
+    every.sort_unstable();
+    every.dedup();
+    assert_eq!(
+        every,
+        (0..20).collect::<Vec<u8>>(),
+        "a rank for each variant"
+    );
+}
+
+/// One payload apart, each variant orders by the payload, and the two are
+/// neither equal nor ordered alike both ways.
+#[test]
+fn each_variant_orders_by_its_payload() {
+    let pairs = [
+        (
+            Schema::Literal(ConstIx::new(0)),
+            Schema::Literal(ConstIx::new(1)),
+        ),
+        (
+            Schema::Instance(ClassIx::new(0)),
+            Schema::Instance(ClassIx::new(1)),
+        ),
+        (Schema::Ref(DefIx::new(0)), Schema::Ref(DefIx::new(1))),
+        (Schema::SelfRef(0), Schema::SelfRef(1)),
+        (
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::list(SeqShape::homogeneous(Schema::Str)),
+        ),
+        (
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+        ),
+        (Schema::set(Schema::Int), Schema::set(Schema::Str)),
+        (Schema::set(Schema::Int), Schema::frozen_set(Schema::Int)),
+        (
+            Schema::Complement(Arc::new(Schema::Int)),
+            Schema::Complement(Arc::new(Schema::Str)),
+        ),
+        (
+            Schema::Union(vec![Schema::Int, Schema::Str].into()),
+            Schema::Union(vec![Schema::Int, Schema::Bytes].into()),
+        ),
+        (
+            Schema::Intersection(vec![Schema::Int, Schema::Str].into()),
+            Schema::Intersection(vec![Schema::Int, Schema::Bytes].into()),
+        ),
+        (
+            Schema::Refine {
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::MinLen(1)].into(),
+            },
+            Schema::Refine {
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::MinLen(2)].into(),
+            },
+        ),
+        (
+            Schema::Refine {
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::MinLen(1)].into(),
+            },
+            Schema::Refine {
+                base: Arc::new(Schema::Str),
+                constraints: vec![Constraint::MinLen(1)].into(),
+            },
+        ),
+    ];
+    let record = |schema: Schema| {
+        Schema::record(
+            vec![Field {
+                name: "a".into(),
+                schema,
+                required: true,
+            }],
+            Openness::Closed,
+        )
+    };
+    let attributes = |schema: Schema| Schema::AttrRecord {
+        fields: vec![Attribute {
+            name: "a".into(),
+            schema,
+        }]
+        .into(),
+    };
+    let pairs = [
+        pairs.as_slice(),
+        &[
+            (record(Schema::Int), record(Schema::Str)),
+            (attributes(Schema::Int), attributes(Schema::Str)),
+        ],
+    ]
+    .concat();
+    for (low, high) in &pairs {
+        assert_ne!(low, high);
+        assert_eq!(
+            low.cmp(high),
+            high.cmp(low).reverse(),
+            "{low:?} and {high:?}"
+        );
+        assert_ne!(
+            low.cmp(high),
+            core::cmp::Ordering::Equal,
+            "{low:?} and {high:?}"
+        );
+    }
+}

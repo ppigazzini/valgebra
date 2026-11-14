@@ -1291,6 +1291,19 @@ nothing behind them; `--binding-relation` relates two dataclasses through
   or the same value in every field -- so a caller cannot observe which handle
   it got; and the table is what makes two equal schemas cheap for a relation to
   compare.
+- **Two handles of one node compare at once, under the order as under
+  equality.** A union and a meet keep their members sorted, and `Schema`'s
+  order asks whether two nodes are one allocation before it reads them
+  (`impl Ord for Schema` in `ir.rs`), as `Arc`'s equality does. A subtree
+  shared many times is a tree many times its size, and an unfolded fixpoint is
+  one: sorting a union of its prefixes walked each shared child as the whole
+  tree, where a relation over forty such prefixes spent 85% of its
+  instructions comparing a child with itself (callgrind on a profiling build,
+  `<Schema as Ord>::cmp`).
+- **An unfolding builds one copy of a body a level** (`Schema::unfolded`): a
+  reference's unfolding is built once per definition, unfoldings left and
+  polarity, and every reference holds that handle, so a body naming its
+  definition `m` times unfolds twice into two copies rather than `m` of `m`.
 - **A record opened pays one test.** `clauses_over` answers a node with no
   clauses in its caller and reads a clause list out of line (`clauses_over_a_list`
   in `ir.rs`): with the whole function a call, opening the core workload's records
