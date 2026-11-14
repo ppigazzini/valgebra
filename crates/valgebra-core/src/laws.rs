@@ -8957,6 +8957,53 @@ proptest! {
     }
 
     // THEORY: a-cut-reference-proves
+    /// An unfolding that shares one copy of a body a level is the unfolding
+    /// that copies it at every reference.
+    ///
+    /// What a reference unfolds to depends on its definition, the unfoldings
+    /// left and the polarity alone, so building it once for each and handing
+    /// every reference that one handle changes the tree's sharing and not the
+    /// tree: the two are equal as schemas, at the depths the readings unfold
+    /// to and on both sides of the cut. The schema is `a | ~b`, so one
+    /// definition is met at both polarities with the same unfoldings left,
+    /// which a body shared across polarities would confuse.
+    #[test]
+    fn an_unfolding_that_shares_its_bodies_is_the_one_that_copies_them(
+        a in recursive_schema(),
+        b in recursive_schema(),
+        unfolds in 0..=crate::descr::lower::UNFOLDS + 1,
+        narrow in any::<bool>(),
+    ) {
+        fn copying(schema: &Schema, defs: &[Schema], unfolds: u32, polarity: Polarity) -> Schema {
+            let cut = || match polarity {
+                Polarity::Widen => Schema::ANYTHING,
+                Polarity::Narrow => Schema::Nothing,
+            };
+            match schema {
+                Schema::Ref(index) => match defs.get(index.get()) {
+                    Some(body) if unfolds > 0 => copying(body, defs, unfolds - 1, polarity),
+                    _ => cut(),
+                },
+                Schema::SelfRef(_) => cut(),
+                Schema::Complement(inner) => Schema::Complement(Arc::new(copying(
+                    inner,
+                    defs,
+                    unfolds,
+                    polarity.flipped(),
+                ))),
+                other => other.map_children(&|child| copying(child, defs, unfolds, polarity)),
+            }
+        }
+        let defs = fixpoint_defs();
+        let polarity = if narrow { Polarity::Narrow } else { Polarity::Widen };
+        let both = union(a, not(b));
+        prop_assert_eq!(
+            both.unfolded(&defs, unfolds, polarity),
+            copying(&both, &defs, unfolds, polarity)
+        );
+    }
+
+    // THEORY: a-cut-reference-proves
     /// The difference cut the other way lies inside the real one.
     ///
     /// The subject narrowed is below the subject and the supertype widened is

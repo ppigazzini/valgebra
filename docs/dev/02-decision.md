@@ -496,7 +496,12 @@ difference (`refuted_narrowed_deeper`), sound because every unfolding of a
 fixpoint lies inside it [FCB08, §4.3]. It is asked once, at the root, so a
 decided pair pays one comparison, and never where one unfolding answers: the
 deeper term spends the build budget first, and asked in place of the first it
-left a corpus of recursive schemas less decided. The other
+left a corpus of recursive schemas less decided. An unfolding builds one copy
+of a body for each definition, unfoldings left and polarity
+(`Schema::unfolded`), and every reference to it holds that handle: a body
+naming its definition `m` times unfolded twice is two copies of the body,
+where a copy per reference is `m` copies of `m`, built in full before the
+lowering refused it past its budget unread. The other
 refusals are size: each representation has a ceiling it will not exceed, because
 a union too wide is complemented into one too *narrow*, so rounding is never the
 alternative to refusing. `descr/budget.rs` bounds the work spent reaching a

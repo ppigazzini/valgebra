@@ -13,7 +13,10 @@
 //! [`Schema::map_children`] maps rather than against the variants a second
 //! time.
 
+use std::cell::RefCell;
 use std::sync::Arc;
+
+use rustc_hash::FxHashMap;
 
 use super::{
     Attribute, Clauses, Constraint, Constraints, DefIx, DefShift, Field, Fields, MapClause,
@@ -249,7 +252,7 @@ impl SeqShape {
 /// spelled as a `bool`, because the two members are what the soundness of a
 /// difference turns on and a call site reading `true` says nothing about which
 /// side that is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum Polarity {
     /// A cut reference becomes the top, so the lowered set is at least the one
     /// the schema denotes: the subject's side of a difference read for its
@@ -302,6 +305,14 @@ impl Schema {
     ///
     /// A schema with no reference is returned as it stands, so the caller pays
     /// nothing for the common case.
+    ///
+    /// **One body is unfolded once a level.** What a reference unfolds to is a
+    /// function of its definition, the unfoldings left and the polarity alone,
+    /// so each such triple is built once and every reference to it holds that
+    /// one handle. A body naming its definition `m` times unfolded twice is
+    /// then two copies of the body, where a copy per reference is `m` copies of
+    /// `m`: a fixpoint of thousands of keys built that many million nodes, which
+    /// the lowering then refused past its budget unread.
     #[must_use]
     pub(crate) fn unfolded(
         &self,
@@ -309,13 +320,33 @@ impl Schema {
         unfolds: u32,
         polarity: Polarity,
     ) -> Schema {
+        self.unfolded_sharing(definitions, unfolds, polarity, &RefCell::default())
+    }
+
+    /// [`unfolded`](Self::unfolded), with the bodies already unfolded, by
+    /// definition, unfoldings left at the reference and polarity.
+    fn unfolded_sharing(
+        &self,
+        definitions: &[Schema],
+        unfolds: u32,
+        polarity: Polarity,
+        bodies: &RefCell<FxHashMap<(DefIx, u32, Polarity), Schema>>,
+    ) -> Schema {
         let cut = || match polarity {
             Polarity::Widen => Schema::ANYTHING,
             Polarity::Narrow => Schema::Nothing,
         };
         match self {
             Schema::Ref(index) => match definitions.get(index.get()) {
-                Some(body) if unfolds > 0 => body.unfolded(definitions, unfolds - 1, polarity),
+                Some(body) if unfolds > 0 => {
+                    let key = (*index, unfolds, polarity);
+                    if let Some(done) = bodies.borrow().get(&key) {
+                        return done.clone();
+                    }
+                    let done = body.unfolded_sharing(definitions, unfolds - 1, polarity, bodies);
+                    bodies.borrow_mut().insert(key, done.clone());
+                    done
+                }
                 // Out of unfoldings, or a reference to a definition this caller
                 // does not hold: the bound stands in for what is not read.
                 _ => cut(),
@@ -323,12 +354,15 @@ impl Schema {
             // A marker for a definition still being built. Nothing can be read
             // from it, so the bound stands in for it too.
             Schema::SelfRef(_) => cut(),
-            Schema::Complement(inner) => Schema::Complement(share_node(inner.unfolded(
+            Schema::Complement(inner) => Schema::Complement(share_node(inner.unfolded_sharing(
                 definitions,
                 unfolds,
                 polarity.flipped(),
+                bodies,
             ))),
-            other => other.map_children(&|child| child.unfolded(definitions, unfolds, polarity)),
+            other => other.map_children(&|child| {
+                child.unfolded_sharing(definitions, unfolds, polarity, bodies)
+            }),
         }
     }
 
