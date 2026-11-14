@@ -606,9 +606,17 @@ is rebuilt. Sorting is all a relabeling needs, because interning is one-to-one
 -- a pool holds one slot per constant -- so two members are equal after it
 exactly when they were before, and no complement law gains a pair to fold.
 `a_renumbered_set_is_canonical` in `crates/valgebra-core/src/index_laws.rs`
-holds the order. Unfolding a reference does change the shape -- a definition's
+holds the order. The order is written by hand (`impl Ord for Schema` in `ir.rs`):
+the variant's place in the declaration and then each payload, as a derived one
+gives, with two handles of one node equal before either is read. A shared child
+read as a tree is the product of its sharings, so without that step a sort
+compares an unfolded body against itself node by node;
+`the_order_on_schemas_is_total_and_agrees_with_equality` in `laws.rs` holds it
+to equality. Unfolding a reference does change the shape -- a definition's
 union can land inside a union -- and its one reader is the lowering to the set
-representation, which takes a shape as it comes.
+representation, which takes a shape as it comes. An unfolding builds one body
+for each definition, unfoldings left and polarity, every reference holding that
+handle (`Schema::unfolded`).
 
 The cost is that `repr`, `==` and the reported error follow the schema as
 *built*, not as written: `intersection(int, complement(int))` is `nothing` and
