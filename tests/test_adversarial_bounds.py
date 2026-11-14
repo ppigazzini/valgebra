@@ -28,7 +28,7 @@ import sys
 import textwrap
 import time
 import types
-from typing import TYPE_CHECKING, Annotated, Literal, Protocol, TypedDict
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, TypedDict
 
 import annotated_types
 import pytest
@@ -1698,3 +1698,34 @@ def test_a_step_table_beneath_a_length_bound_keeps_to_the_memory_it_may_have(
     )
     assert done.returncode == 0, done.stderr[-300:]
     assert done.stdout.strip() == "undecided"
+
+
+@pytest.mark.parametrize(
+    ("length", "answer"),
+    [
+        (4096, "not_subset"),
+        (4097, "undecided"),
+        (10**5, "undecided"),
+        (2**62, "undecided"),
+        (3 * 10**17, "undecided"),
+    ],
+)
+def test_a_relation_from_one_long_exact_length_builds_at_most_its_bound(
+    length: int, answer: str
+) -> None:
+    """A subject of one value is read value by value up to 4,096 items.
+
+    `list[Literal[1]]` met with an exact length is one value, and the relation
+    reads it by building it where both deciders decline -- here on a bound past
+    120 bits, which `1` is below. At the bound the value is built and refuted;
+    past it nothing is built, since the length is the caller's and its
+    positions would otherwise be allocated first: a panic past `isize::MAX`
+    bytes, and an abort below it. The Rust row holds the bound's edge on each
+    of a value's parts.
+    """
+    exactly = Annotated[
+        list[Any], annotated_types.MinLen(length), annotated_types.MaxLen(length)
+    ]
+    subject = intersection(list[Literal[1]], exactly)
+    supertype = Validator(list[Annotated[int, annotated_types.Ge(2**121)]])
+    assert subject.relation_to(supertype) == answer

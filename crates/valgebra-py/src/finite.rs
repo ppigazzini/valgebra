@@ -28,6 +28,16 @@ use valgebra_core::{Constraint, Field, Schema, SeqKind};
 /// sequence of choices multiplies them.
 pub(crate) const FINITE_VALUES: usize = 64;
 
+/// The parts -- items or fields -- one value may hold for this reading to
+/// build it: as many as [`FINITE_VALUES`] values of [`FINITE_VALUES`] parts.
+///
+/// **This bound is cost**, as that one is. A value of `n` parts is `n`
+/// objects to build and walk, and the bound is read before anything is built:
+/// a length the caller writes, `MinLen(n)` met with `MaxLen(n)`, is otherwise
+/// `n` positions allocated before the first value exists -- a panic past
+/// `isize::MAX` bytes, and an abort where the allocator refuses less.
+pub(crate) const FINITE_PARTS: usize = FINITE_VALUES * FINITE_VALUES;
+
 /// The values `schema` denotes, each built as the Python object it is, where it
 /// denotes at most [`FINITE_VALUES`] and every constant in it is its whole set;
 /// `None` otherwise.
@@ -60,7 +70,9 @@ pub(crate) fn values_of<'py>(
             }
             Some(all)
         }
-        Schema::Seq { container, shape } if shape.tail.is_none() => {
+        Schema::Seq { container, shape }
+            if shape.tail.is_none() && shape.prefix.len() <= FINITE_PARTS =>
+        {
             let mut positions = Vec::with_capacity(shape.prefix.len());
             for item in shape.prefix.iter() {
                 let Some(values) = values_of(py, item, literals)? else {
@@ -74,13 +86,17 @@ pub(crate) fn values_of<'py>(
         // length: the spelling a translation from JSON Schema writes for an
         // array constant, `list[X] & Annotated[list[Any], Len(n, n)]`.
         Schema::Intersection(members) => match exact_length(members) {
-            Some((container, item, length)) => match values_of(py, item, literals)? {
-                Some(values) => sequences(py, container, &vec![values; length])?,
-                None => None,
-            },
-            None => None,
+            Some((container, item, length)) if length <= FINITE_PARTS => {
+                match values_of(py, item, literals)? {
+                    Some(values) => sequences(py, container, &vec![values; length])?,
+                    None => None,
+                }
+            }
+            _ => None,
         },
-        Schema::KeyedMap { fields, defaults } if defaults.is_empty() => {
+        Schema::KeyedMap { fields, defaults }
+            if defaults.is_empty() && fields.len() <= FINITE_PARTS =>
+        {
             records(py, fields, literals)?
         }
         _ => None,
@@ -114,9 +130,9 @@ fn sequences<'py>(
     container: SeqKind,
     positions: &[Vec<Bound<'py, PyAny>>],
 ) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
-    let mut rows: Vec<Vec<Bound<'py, PyAny>>> = vec![Vec::new()];
+    let mut rows: Vec<Vec<Bound<'py, PyAny>>> = vec![Vec::with_capacity(positions.len())];
     for values in positions {
-        let Some(grown) = extended(&rows, values) else {
+        let Some(grown) = extended(rows, values) else {
             return Ok(None);
         };
         rows = grown;
@@ -143,16 +159,25 @@ fn records<'py>(
         let Some(values) = values_of(py, &field.schema, literals)? else {
             return Ok(None);
         };
+        // A row takes its last value in place, as `extended` grows a sequence's.
         let mut next = Vec::new();
-        for row in &rows {
+        for mut row in rows {
+            let Some((last, others)) = values.split_last() else {
+                if !field.required {
+                    next.push(row);
+                }
+                continue;
+            };
             if !field.required {
                 next.push(row.clone());
             }
-            for value in &values {
+            for value in others {
                 let mut grown = row.clone();
                 grown.push((at, value.clone()));
                 next.push(grown);
             }
+            row.push((at, last.clone()));
+            next.push(row);
             if next.len() > FINITE_VALUES {
                 return Ok(None);
             }
@@ -212,24 +237,31 @@ fn exact_length(members: &[Schema]) -> Option<(SeqKind, &Schema, usize)> {
 }
 
 /// Every row of `rows` with one of `values` appended, or `None` past the bound.
+///
+/// A row takes its last value in place and is copied for the others only, so
+/// a position of one value -- every position of a `const` -- copies nothing,
+/// and a value of `n` items is built in `n` steps rather than in the square.
 fn extended<'py>(
-    rows: &[Vec<Bound<'py, PyAny>>],
+    rows: Vec<Vec<Bound<'py, PyAny>>>,
     values: &[Bound<'py, PyAny>],
 ) -> Option<Vec<Vec<Bound<'py, PyAny>>>> {
     if rows.len().checked_mul(values.len())? > FINITE_VALUES {
         return None;
     }
-    Some(
-        rows.iter()
-            .flat_map(|row| {
-                values.iter().map(move |value| {
-                    let mut grown = row.clone();
-                    grown.push(value.clone());
-                    grown
-                })
-            })
-            .collect(),
-    )
+    let Some((last, others)) = values.split_last() else {
+        return Some(Vec::new());
+    };
+    let mut grown = Vec::with_capacity(rows.len().saturating_mul(values.len()));
+    for mut row in rows {
+        for value in others {
+            let mut copy = row.clone();
+            copy.push(value.clone());
+            grown.push(copy);
+        }
+        row.push(last.clone());
+        grown.push(row);
+    }
+    Some(grown)
 }
 
 /// Whether `constant` is the whole set its literal denotes: an exact `int`,

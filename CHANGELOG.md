@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a question about a recursive placeholder is a stop
 - fix: the finite reading answers undecided where the walk stopped
+- fix: the finite reading bounds the items it builds
 
 -->
 
@@ -34,6 +35,14 @@ answer of its own, or a repair to a change not yet released.
   answered `not_subset`: `1` under twenty one-item tuples against a fixpoint whose body admits
   every such nesting, where each level spends a dozen meets of the walk's depth. Each value is
   asked in three answers, so the pair is `undecided`; a value refused still refutes.
+
+- **A subject of one long value is built in time linear in its items, and past 4,096 not at
+  all.** A sequence of one exact length, `list[Literal[1]]` met with `MinLen(n)` and `MaxLen(n)`,
+  was built before its length was read: `n = 2**62` raised a `PanicException` out of
+  `relation_to`, which `except Exception` does not catch, a length near `3 * 10**17` aborted the
+  process, and `10**5` items took 18 s, each item copying the row before it. A value of more than
+  4,096 items or fields is left to the deciders before anything is built, and one within it is
+  built an item at a time: 4,096 items are refuted in milliseconds.
 
 ## [0.0.26] - 2026-11-13
 

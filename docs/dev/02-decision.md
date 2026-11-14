@@ -555,8 +555,9 @@ relation reaches is dead code the compiler reports.
 **Past both deciders, a subject of finitely many values** is read by the binding
 value by value (`crates/valgebra-py/src/finite.rs`, `relation_with` in
 `validator.rs`): `t ⊆ s` is no value of `t` outside `s` [FCB08, §4.1], so a
-subject of at most `FINITE_VALUES` constants, each the whole set its literal
-denotes, is related by walking the supertype on each. The walk reads the
+subject of at most `FINITE_VALUES` values of at most `FINITE_PARTS` items or
+fields, built from constants each the whole set its literal denotes, is
+related by walking the supertype on each. The walk reads the
 supertype as a proof would only where no atom of it runs code a second call
 may answer differently, so a predicate, a class or an attribute anywhere in it,
 or a constant `==` widens, leaves the pair to the deciders. The relation of such

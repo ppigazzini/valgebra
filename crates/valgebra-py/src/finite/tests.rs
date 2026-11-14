@@ -163,6 +163,72 @@ fn a_subject_past_the_bound_is_not_enumerated() {
     });
 }
 
+/// Past [`FINITE_PARTS`] parts in one value -- items of an exact length or
+/// of a fixed sequence, or fields of a record -- a subject is left to the
+/// deciders before anything is built: a length near `isize::MAX` allocates
+/// nothing, where building its positions would abort the process.
+#[test]
+fn a_value_past_the_bound_on_its_parts_is_not_built() {
+    Python::attach(|py| {
+        let literals = pool(py, "[1]");
+        let count = |schema: &Schema| {
+            values_of(py, schema, &literals)
+                .unwrap()
+                .map(|values| values.len())
+        };
+        let any_list = Schema::list(SeqShape::homogeneous(Schema::Anything(Spelling::Any)));
+        let of_length = |n| {
+            Schema::Intersection(
+                vec![
+                    Schema::list(SeqShape::homogeneous(literal(0))),
+                    Schema::refine(
+                        any_list.clone(),
+                        vec![Constraint::MinLen(n), Constraint::MaxLen(n)],
+                    ),
+                ]
+                .into(),
+            )
+        };
+        assert_eq!(count(&of_length(FINITE_PARTS)), Some(1));
+        assert_eq!(count(&of_length(FINITE_PARTS + 1)), None);
+        // The bound is sixty-four values of sixty-four items: a constant of
+        // 4,096 items is read, as a JSON array of that length is.
+        assert_eq!(count(&of_length(4096)), Some(1));
+        assert_eq!(count(&of_length(usize::MAX / 2)), None);
+        let fixed = |n| Schema::tuple(SeqShape::fixed(vec![literal(0); n]));
+        assert_eq!(count(&fixed(FINITE_PARTS)), Some(1));
+        assert_eq!(count(&fixed(FINITE_PARTS + 1)), None);
+        let record = |n: usize| {
+            Schema::record(
+                (0..n)
+                    .map(|at| Field {
+                        name: format!("f{at}").into(),
+                        schema: literal(0),
+                        required: true,
+                    })
+                    .collect(),
+                valgebra_core::Openness::Closed,
+            )
+        };
+        assert_eq!(count(&record(FINITE_PARTS)), Some(1));
+        assert_eq!(count(&record(FINITE_PARTS + 1)), None);
+        // A field with no value: an optional one is absent from the one dict,
+        // and a required one leaves the record none.
+        let of_nothing = |required| {
+            Schema::record(
+                vec![Field {
+                    name: "a".into(),
+                    schema: Schema::Nothing,
+                    required,
+                }],
+                valgebra_core::Openness::Closed,
+            )
+        };
+        assert_eq!(count(&of_nothing(false)), Some(1));
+        assert_eq!(count(&of_nothing(true)), Some(0));
+    });
+}
+
 /// A supertype's walk reads every atom as a proof would only with no
 /// predicate, class or attribute in it and no constant but a whole set, through
 /// every definition a reference reaches.

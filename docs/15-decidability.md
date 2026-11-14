@@ -60,7 +60,8 @@ answers `"undecided"`.
 - **A subject of finitely many constants.** A schema built from literals, `None`,
   `bool`, fixed sequences, sequences of one exact length, closed records and
   unions of them denotes finitely many values, and where it denotes at most
-  sixty-four, each an `int`, `bool`, `str`, `bytes`, `None` or a float, its
+  sixty-four, each of at most 4,096 items or fields, built from an `int`,
+  `bool`, `str`, `bytes`, `None` or a float, its
   relation to a schema is the membership of each value: `"not_subset"` on a
   value outside, `"subset"` where every value is inside, and `"undecided"` where
   the walk of a value stopped -- at the depth bound, say -- and none is outside,
