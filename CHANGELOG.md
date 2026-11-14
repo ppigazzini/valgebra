@@ -93,6 +93,20 @@ thousand instructions does not repeat from one build to another: two builds whos
 alike on every interpreter with the GIL read different shapes higher in each of three counts,
 the explaining walk of a scalar by 0.6% to 3.0% in one and a literal by 11% to 49% in the other.
 
+Read on the wheels PyPI serves, two environments of each release on each of CPython 3.11
+through 3.15, on an AMD Ryzen 7 PRO 7840U under WSL2, every shape counts within 2% of 0.0.25's
+instructions but one: a relation between two built validators counts 3.7% to 3.9% more, the
+relation by values named above, and takes 5% to 10% more time on each interpreter. A JSON document
+refused by `list[int]` counts 5.2% more on 3.12 at one size of the environment, which is an
+allocator's. Twenty shapes moved by 5% or more at the instructions 0.0.25's wheel counts,
+which is where each build placed its loop, and none is charged to a change. Slower: on 3.15 ten
+thousand integers 36%, `list[None]` 24%, `list[str]` 18% and the list nested twenty-five deep 7% to
+11%; on 3.14 `list[None]` 31% and `list[int | None]` 7%; on 3.13 `list[bool]` and `list[None]` 20%;
+on 3.12 `list[int | str]` 10%; on 3.11 a JSON array of `int | str | None` 7% to 8%. Faster: on 3.15
+`list[bool]` 23%, `list[int | str]` 17% and `{str: int, int: bool}` 7%; on 3.14 `list[float]` 15%
+to 16%, `list[str]` 14% and `{str: int, int: bool}` 5%; on 3.13 `list[float]` 12%, `list[int | str]`
+8% to 9% and the JSON array 5% to 6%; on 3.12 `list[int | None]` 5%.
+
 ### Added
 
 - **A relation from finitely many constants reads each value.** A subject built from literals,
