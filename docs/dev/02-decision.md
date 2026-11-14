@@ -558,8 +558,9 @@ three ship because lowering asks which values a set holds. The components are cr
 relation reaches is dead code the compiler reports.
 
 **Past both deciders, a subject of finitely many values** is read by the binding
-value by value (`crates/valgebra-py/src/finite.rs`, `relation_with` in
-`validator.rs`): `t ⊆ s` is no value of `t` outside `s` [FCB08, §4.1], so a
+value by value (`crates/valgebra-py/src/finite.rs`, `relation_between` in
+`validator.rs`, which `relation_to` asks once and `is_equivalent` in each
+direction, so an equivalence is the two inclusions the relation proves): `t ⊆ s` is no value of `t` outside `s` [FCB08, §4.1], so a
 subject of at most `FINITE_VALUES` values of at most `FINITE_PARTS` items or
 fields, built from constants each the whole set its literal denotes, is
 related by walking the supertype on each. The walk reads the

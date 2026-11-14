@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the finite reading bounds the items it builds
 - fix: an unfolding builds one copy of a body a level
 - perf: two handles of one node compare equal at once
+- fix: two validators are equivalent where each is below the other
 
 -->
 
@@ -55,6 +56,13 @@ answer of its own, or a repair to a change not yet released.
   for each definition, unfoldings left and polarity, and every reference holds it, and two
   handles of one node compare equal without being read: 19 ms and 40 MB, and 12 ms, where 0.0.25
   took 86 ms and 7 ms. Every answer is the one it was.
+
+- **Two validators are equivalent where each is below the other.** `is_equivalent` asked both
+  directions on one budget with the rules and the sets alone, so it could answer `False` where
+  `relation_to` proved `"subset"` both ways: an empty tuple of nested lists against `tuple[()]`,
+  which the relation reads by its one value, and two translations from JSON Schema of the
+  non-numbers, which a reading past the rules decides. It asks the two inclusions `relation_to`
+  asks, each on a budget of its own.
 
 ## [0.0.26] - 2026-11-13
 

@@ -10,6 +10,7 @@ answer ``False`` for a true relation it cannot prove), so completeness is not
 asserted.
 """
 
+import math
 from typing import Annotated, Literal, TypedDict
 
 import annotated_types as at
@@ -170,6 +171,58 @@ def test_equivalent_is_mutual_subtyping(a: object, b: object) -> None:
     assert left.is_equivalent(b) == (
         left.is_subtype_of(b) and Validator(b).is_subtype_of(a)
     )
+
+
+def test_two_schemas_each_below_the_other_are_equivalent() -> None:
+    """Equivalence is the two inclusions `relation_to` proves, by every reading.
+
+    The law above draws few pairs that only a dearer reading decides, so two are
+    written out. An empty tuple of nested lists is below `tuple[()]` by its
+    rules, and `tuple[()]` below it by its one value, which the relation walks;
+    and two translations from JSON Schema of the non-numbers -- `{"minimum": 2,
+    "exclusiveMaximum": 0.5}` and the same minimum under a `not` of a `oneOf` --
+    are each below the other by readings past the ones the rules take.
+    """
+    nested = Annotated[
+        list[Annotated[list[object], at.MinLen(2), at.MaxLen(3)]],
+        at.MinLen(2),
+        at.MaxLen(4),
+    ]
+    empty = Validator(Annotated[tuple[nested, ...], at.MaxLen(0)])
+    number = intersection(
+        union(int, Annotated[float, at.Ge(-math.inf)]), complement(bool)
+    )
+    json = recursive(
+        lambda x: union(
+            None, bool, int, str, [x], {str: x}, Annotated[float, at.Ge(-math.inf)]
+        )
+    )
+
+    def bound(marker: object) -> object:
+        meet = intersection(
+            union(Annotated[float, marker], Annotated[int, marker]), complement(bool)
+        )
+        return union(meet, complement(number))
+
+    low = intersection(bound(at.Ge(2)), bound(at.Lt(0.5)), json)
+    outside = complement(
+        intersection(
+            complement(
+                intersection(bound(at.Ge(1)), bound(at.Gt(3.5)), bound(at.Le(0.5)))
+            ),
+            complement(intersection(bound(at.Ge(3.5)), bound(at.Le(-1.0)))),
+            json,
+        )
+    )
+    high = intersection(bound(at.Ge(2)), outside, json)
+    for left, right in (
+        (empty, Validator(tuple[()])),
+        (Validator(low), Validator(high)),
+    ):
+        assert left.relation_to(right) == "subset"
+        assert right.relation_to(left) == "subset"
+        assert left.is_equivalent(right)
+        assert right.is_equivalent(left)
 
 
 @given(a=specs, b=specs, vals=value_lists)

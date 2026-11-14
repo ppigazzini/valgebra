@@ -207,44 +207,21 @@ impl Validator {
         )
     }
 
-    /// The inclusion of this schema in `other`, in three answers: the deciders',
-    /// and where both decline, the membership of each value of a subject of
-    /// finitely many ([`finite`](crate::finite)).
-    ///
-    /// The value reading asks the walk of `other`, which runs in Python and spends
-    /// no decision step, so it is asked only of a subject of at most
-    /// [`FINITE_VALUES`](crate::finite::FINITE_VALUES) constants each its whole
-    /// set, and of a supertype whose walk reads every atom as the relation would.
+    /// The inclusion of this schema in `other`, in three answers
+    /// ([`relation_between`]).
     fn relation_with(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Relation> {
         let mut literals = self.relation_pool(py, other);
         let mut definitions = self.definitions.clone();
         let other = build_root_inside(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
-        let relation = self
-            .schema
-            .subtype_relation_under(&other, &oracle, &definitions);
-        oracle.answer(())?;
-        drop(oracle);
-        if relation != Relation::Unknown
-            || !crate::finite::walked_alike(py, &other, literals.items(), &definitions)
-        {
-            return Ok(relation);
-        }
-        let Some(values) = crate::finite::values_of(py, &self.schema, &self.literals)? else {
-            return Ok(relation);
-        };
-        // Each value is asked in three answers, as a literal's membership is:
-        // a walk that stopped on one -- past the depth bound, say -- has not
-        // put it outside the supertype, and read as a refusal it would refute
-        // an inclusion that holds.
-        let oracle = PoolRelations::new(py, literals.items(), &definitions);
-        let admitted = oracle.admits_every(&other, &values);
-        oracle.answer(())?;
-        Ok(match admitted {
-            Some(true) => Relation::Holds,
-            Some(false) => Relation::Fails,
-            None => Relation::Unknown,
-        })
+        relation_between(
+            py,
+            &oracle,
+            &self.schema,
+            &other,
+            literals.items(),
+            &definitions,
+        )
     }
 
     /// Assemble a validator, rejecting one whose schema is too deep, holds too
@@ -855,12 +832,13 @@ impl Validator {
     /// `other` is any schema spec or compiled validator. Sound, like
     /// `is_subtype_of`: `True` only when the two are provably equivalent,
     /// whatever their syntax (`bool | int` is equivalent to `int`). Bounded by the
-    /// same budget of decision steps as `is_subtype_of`, so on a deeply nested
-    /// adversarial schema a `False` can mean "not proven equivalent within the
-    /// bound".
+    /// same budget of decision steps as `is_subtype_of` in each direction, so on
+    /// a deeply nested adversarial schema a `False` can mean "not proven
+    /// equivalent within the bound".
     ///
-    /// Mutual inclusion, so it calls back into Python wherever `is_subtype_of`
-    /// does.
+    /// Mutual inclusion, the two `relation_to` answers: `True` exactly where
+    /// each schema is `"subset"` of the other, so it calls back into Python
+    /// wherever `is_subtype_of` does.
     ///
     /// Args:
     ///     other: The schema to compare, as a spec or validator.
@@ -883,10 +861,22 @@ impl Validator {
             let mut definitions = self.definitions.clone();
             let other = build_root_inside(other, &mut literals, &mut definitions)?;
             let oracle = PoolRelations::new(py, literals.items(), &definitions);
-            let equivalent = self
-                .schema
-                .is_equivalent_under(&other, &oracle, &definitions);
-            oracle.answer(equivalent)
+            Ok(relation_between(
+                py,
+                &oracle,
+                &self.schema,
+                &other,
+                literals.items(),
+                &definitions,
+            )? == Relation::Holds
+                && relation_between(
+                    py,
+                    &oracle,
+                    &other,
+                    &self.schema,
+                    literals.items(),
+                    &definitions,
+                )? == Relation::Holds)
         })
     }
 
@@ -1109,3 +1099,43 @@ impl Validator {
 // feature, which links an embedded Python.
 #[cfg(all(test, feature = "interpreter-tests"))]
 mod tests;
+
+/// The inclusion of `subject` in `supertype` over the pool and the definitions
+/// the oracle reads, in three answers: the deciders', and where both decline, the
+/// membership of each value of a subject of finitely many
+/// ([`finite`](crate::finite)).
+///
+/// The value reading asks the walk of the supertype, which runs in Python and
+/// spends no decision step, so it is asked only of a subject of at most
+/// [`FINITE_VALUES`](crate::finite::FINITE_VALUES) constants each its whole
+/// set, and of a supertype whose walk reads every atom as the relation would.
+/// Each value is asked in three answers, as a literal's membership is: a walk
+/// that stopped on one -- past the depth bound, say -- has not put it outside
+/// the supertype, and read as a refusal it would refute an inclusion that
+/// holds.
+fn relation_between(
+    py: Python<'_>,
+    oracle: &PoolRelations<'_, '_>,
+    subject: &Schema,
+    supertype: &Schema,
+    literals: &[Py<PyAny>],
+    definitions: &[Schema],
+) -> PyResult<Relation> {
+    let relation = subject.subtype_relation_under(supertype, oracle, definitions);
+    oracle.answer(())?;
+    if relation != Relation::Unknown
+        || !crate::finite::walked_alike(py, supertype, literals, definitions)
+    {
+        return Ok(relation);
+    }
+    let Some(values) = crate::finite::values_of(py, subject, literals)? else {
+        return Ok(relation);
+    };
+    let admitted = oracle.admits_every(supertype, &values);
+    oracle.answer(())?;
+    Ok(match admitted {
+        Some(true) => Relation::Holds,
+        Some(false) => Relation::Fails,
+        None => Relation::Unknown,
+    })
+}
