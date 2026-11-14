@@ -121,11 +121,13 @@ one of them is invisible to a corpus that only raises `KeyboardInterrupt`.
 
 ## A stop is not a non-member
 
-Four refusals say the *walk* stopped rather than that the value is outside a
+Five refusals say the *walk* stopped rather than that the value is outside a
 set: the depth bound (`member`'s level, and the reference trail in
 `check_ref`), a value inside itself (`check_ref`), a value that moved while it
 was read (`mutated`, and the record's deciding pass where it answers a move
-before the explaining pass names it), and a predicate that raised. Each
+before the explaining pass names it), a predicate that raised, and a
+`recursive` placeholder met before its builder returned (`unresolved`), whose
+definition does not exist yet. Each
 answers `false` outside a complement, as a non-member does, and each also
 records its code in a second cell beside the fatal one (`record_stop`), in
 every mode. Unlike a fatal signal a stop does not unwind the walk: a union
@@ -224,10 +226,10 @@ refused chain would cost the square of its depth
 
 **A branch the walk could not answer for keeps its own report.** A branch whose
 first failure says the *walk* stopped -- `recursion_limit`, `recursion_loop`,
-`mutated_during_validation` or `predicate_error`, the codes `walk_declined`
-names -- fails at the union's own location too, so the progress rule would fold
-it into the union error and drop the one sentence that says what to do about
-it. Where no branch makes progress, the first such branch is reported in place
+`mutated_during_validation`, `predicate_error` or `unresolved_recursion`, the
+codes `walk_declined` names -- fails at the union's own location too, so the
+progress rule would fold it into the union error and drop the one sentence that
+says what to do about it. Where no branch makes progress, the first such branch is reported in place
 of the summary. The search reads at most `CLOSEST_BRANCH_PROBE_LIMIT` branches;
 past it a branch is only decided, so a union that wide reports the closest of
 the branches it read, or the summary.

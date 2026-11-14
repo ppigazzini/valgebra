@@ -5,7 +5,6 @@
     "intersection_error": "a meet reports its failing member rather than itself, so the arm is reached only through a node with no members -- which the constructors fold to the top before a walk sees it",
     "object_type": "an attribute record is a meet with the class it came from, so a value of the wrong type is refused by `instance_type` first and the arm stands for a bare attribute record, which the frontend does not build",
     "recursion": "a reference reports through the definition it names, so the walk carries the definition's own code rather than this one",
-    "unresolved_recursion": "the marker a builder leaves behind, resolved before a validator is returned: a compiled schema holds none",
     "validation_error": "the exception's own type name, carried where a report is built from no violation at all: a caller who constructs one by hand. It is the class rather than a code a walk chooses"
   }
 }

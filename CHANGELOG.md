@@ -13,7 +13,20 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a question about a recursive placeholder is a stop
+
 -->
+
+### Fixed
+
+- **A question asked inside a `recursive` builder proves nothing about its placeholder.** The
+  placeholder stands for a definition not built yet, and a walk that meets it stops with
+  `unresolved_recursion` rather than refusing the value, so every decider that reads a walk
+  declines there. Inside the builder of `recursive(lambda t: union(int, [t]))`, `Literal[1]` was
+  `not_subset` of `t` and `subset` of `complement(t)`, and the meet of a non-empty
+  `list[Literal[1]]` with `list[t]` was proved empty, while the finished set holds `1` and `[1]`;
+  each is `undecided` or not proved. `complement(t).is_valid(1)` is `False` there, since a stop
+  refuses a value from a set and from its complement alike.
 
 ## [0.0.26] - 2026-11-13
 

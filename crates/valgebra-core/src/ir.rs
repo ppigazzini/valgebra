@@ -1048,14 +1048,15 @@ pub enum Schema {
     /// fixpoint and its unfolding are one set [AC93, §3.2]. The back edge of a
     /// fixpoint, produced by `recursive`.
     Ref(DefIx),
-    /// Denotes the **empty set**: the walk admits no value against one, and
-    /// every decider reads it as a schema it cannot relate.
+    /// Denotes **no set**: the marker a `recursive` body carries where its own
+    /// back edge will go, standing for a definition that is not built yet.
     ///
-    /// The marker a `recursive` body carries where its own back edge will go,
-    /// resolved to a [`Schema::Ref`] before the validator is returned. A
-    /// finished schema holds none, so the denotation is what a value meets only
-    /// where that resolution did not happen -- which is a build this refuses
-    /// rather than a set a caller can write.
+    /// It is resolved to a [`Schema::Ref`] before the validator is returned, so
+    /// a finished schema holds none, and a schema composed from a placeholder
+    /// that outlived its builder is refused. A question asked inside the
+    /// builder still meets one, and nothing about the definition is known
+    /// there: the walk stops on it, which is a refusal and no verdict, and
+    /// every decider reads it as a schema it cannot relate.
     SelfRef(u64),
 }
 

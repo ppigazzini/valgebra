@@ -556,7 +556,7 @@ dunders the stub declares behind `in`, `|`, `==`, `hash`, `copy` and `pickle`
 | Product | Cells | Named | Asserted | Empty, with a reason |
 |---|---|---|---|---|
 | every public name a caller reaches | 38 | 38 | 38 | 0 |
-| every error code a report can carry | 41 | 35 | 35 | 6 |
+| every error code a report can carry | 41 | 36 | 36 | 5 |
 
 **Named and asserted are two different claims**, and the ratio the lane prints
 is the second. A cell is *named* when the suite spells it, which is what a

@@ -44,7 +44,9 @@ use crate::build::{Pool, build_instances, build_root, combine};
 /// `builder` receives a placeholder validator standing for the schema being
 /// defined and returns its body. The placeholder's self-reference is resolved
 /// to a back edge, and a non-contractive body — one whose recursive reference
-/// is not under a structural constructor — is rejected.
+/// is not under a structural constructor — is rejected. Until the builder
+/// returns, the placeholder denotes no set: a relation to it is
+/// `"undecided"`, and a walk that meets it stops with `unresolved_recursion`.
 ///
 /// Args:
 ///     builder: Called with a placeholder validator, and returns the body of

@@ -264,13 +264,13 @@ walked whole, the same branch is chosen, and all of its failures are reported;
 `fail_fast` reports the one they lead with.
 
 A branch the walk could not answer for keeps its own report rather than the
-summary. `recursion_limit`, `recursion_loop`, `mutated_during_validation` and
-`predicate_error` each say the *walk* stopped rather than that the value is
-outside a set, and one can fail at the union's own location -- a predicate that
+summary. `recursion_limit`, `recursion_loop`, `mutated_during_validation`,
+`predicate_error` and `unresolved_recursion` each say the *walk* stopped rather
+than that the value is outside a set, and one can fail at the union's own location -- a predicate that
 raised on the branch's own value -- where the progress rule would count it as no
 progress and the summary would drop the one sentence saying what to do about it.
 
-A `complement` reads the four the same way. A walk of its inner schema that
+A `complement` reads the five the same way. A walk of its inner schema that
 stopped has not said the value is outside that schema, so the complement does
 not admit the value: it fails at its own location with the code the inner walk
 stopped with, where a decided match fails with `unexpected_match`. A union

@@ -164,6 +164,37 @@ assert node.is_valid({"value": 1, "next": {"value": 2}})
 assert not node.is_valid(Node(1, Node(2)))  # an instance is not a dict
 ```
 
+## Inside the builder
+
+The placeholder stands for a definition the builder has not returned yet, so it
+denotes no set while the builder runs, and nothing asked of it there is an
+answer about the fixpoint. A relation to it is `"undecided"`, `is_empty()` of a
+schema holding it is `False`, and a walk that meets it stops with
+`unresolved_recursion`, which refuses the value from the placeholder and from
+its complement alike. Ask the validator `recursive` returns:
+
+```python
+from typing import Literal
+
+from valgebra import Validator, complement, recursive, union
+
+asked: list[object] = []
+
+
+def body(t: Validator[object]) -> object:
+    asked.append(Validator(Literal[1]).relation_to(t))
+    asked.append(complement(t).is_valid(1))
+    return union(int, [t])
+
+
+tree = recursive(body)
+assert asked == ["undecided", False]
+assert Validator(Literal[1]).relation_to(tree) == "subset"
+```
+
+A placeholder kept past its builder is refused when it is composed into a new
+schema, with `ValueError`.
+
 ## Soundness guarantees
 
 Recursion is bounded so it always terminates cleanly:

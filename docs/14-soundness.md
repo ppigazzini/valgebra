@@ -98,8 +98,9 @@ the members, which is why a coinductive *comparison* at the greatest fixpoint
 never contradicts a membership answer (see [recursion](06-recursion.md)).
 
 **A stop is not a verdict.** Each guard ends the walk without deciding
-membership, as a predicate that raises (`predicate_error`) and a container
-changed under the walk (`mutated_during_validation`) do, and the walk reports
+membership, as a predicate that raises (`predicate_error`), a container
+changed under the walk (`mutated_during_validation`) and a `recursive`
+placeholder met inside its builder (`unresolved_recursion`) do, and the walk reports
 the stop as a refusal. That is sound in the direction that matters, since no
 stop admits a value, and it is where the walk is not exact: a list nested past
 the bound is a member of a recursive `S` and refused by it. `complement(S)`

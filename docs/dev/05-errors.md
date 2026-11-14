@@ -160,7 +160,7 @@ failure raised as a group of one prints its line twice, uncaught or through
 failure, where today the failures stay in Rust until a caller reads one
 (`test_the_error_model_is_built_when_it_is_asked_for`). The one split a
 caller's handling turns on, a walk that stopped against a value refused, is
-in the code already: `docs/08-error-model.md` names the four codes a stopped
+in the code already: `docs/08-error-model.md` names the five codes a stopped
 walk raises.
 
 ## The limit

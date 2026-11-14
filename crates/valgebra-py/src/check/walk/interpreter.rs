@@ -8415,6 +8415,29 @@ fn a_complement_reads_its_inner_walk_in_kleenes_strong_logic() {
             one_then(PyInt::new(py, 2i64).into_any()),
             (false, Some("predicate_error"))
         );
+        // And a `recursive` placeholder met inside its builder: refused by a
+        // set and its complement alike, decided by a refusal beside it, and
+        // reported under a union rather than folded into its summary.
+        let placeholder = Schema::SelfRef(0);
+        let one = PyInt::new(py, 1i64).into_any();
+        assert_eq!(
+            answers(&placeholder, &one),
+            (false, Some("unresolved_recursion"))
+        );
+        assert_eq!(
+            answers(&not(placeholder.clone()), &one),
+            (false, Some("unresolved_recursion"))
+        );
+        let not_placeholder_lists = not(list_of(placeholder.clone()));
+        assert_eq!(
+            answers(&not_placeholder_lists, &pair(&one, &one)),
+            (false, Some("unresolved_recursion"))
+        );
+        assert_eq!(answers(&not_placeholder_lists, &word), (true, None));
+        assert_eq!(
+            answers(&Schema::Union(vec![Schema::Int, placeholder].into()), &word),
+            (false, Some("unresolved_recursion"))
+        );
 
         // A union a later branch admits is admitted, the stop beside it
         // dropped: `~list[~U]` admits `[deep]`, which `U` admits as a list.

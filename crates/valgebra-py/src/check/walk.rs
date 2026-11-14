@@ -413,6 +413,29 @@ pub(super) fn record_move(ctx: Ctx<'_>) {
     record_stop(MUTATED_DURING_VALIDATION, ctx);
 }
 
+/// Stop on a `recursive` placeholder met before its builder returned: the
+/// definition it stands for is not built yet, so the walk can say nothing about
+/// the value against it. Read as a refusal, the stop would be a verdict about a
+/// set that does not exist, and a relation asked inside the builder would
+/// believe it: `Literal[1]` refuted below the definition and proved below its
+/// complement, while the finished set holds 1. Out of line, since a finished
+/// validator holds no marker.
+#[cold]
+#[inline(never)]
+fn unresolved(value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
+    record_stop(UNRESOLVED_RECURSION, ctx);
+    if ctx.mode.explains() {
+        frame.out.push(Violation {
+            code: UNRESOLVED_RECURSION.as_str(),
+            path: frame.path.clone(),
+            expected: "a resolved recursive value".to_owned(),
+            value_summary: summarize_value(value, ctx),
+        });
+    }
+    stopped(ctx.mode)
+}
+
 /// What a walk that stopped answers: a refusal, or `true` in a complement's
 /// inner walk, where a stop is the third value and the scans read past it
 /// ([`WalkMode::Settle`]). Its code is in the stop cell either way, which is
@@ -535,19 +558,9 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
     };
     match schema {
         Schema::Anything(_) => true,
-        // Bottom admits nothing; an unresolved self-reference is never a member.
+        // Bottom admits nothing.
         Schema::Nothing => admit(false, schema, value, frame),
-        Schema::SelfRef(_) => {
-            if ctx.mode.explains() {
-                frame.out.push(Violation {
-                    code: UNRESOLVED_RECURSION.as_str(),
-                    path: frame.path.clone(),
-                    expected: "a resolved recursive value".to_owned(),
-                    value_summary: summarize_value(value, ctx),
-                });
-            }
-            false
-        }
+        Schema::SelfRef(_) => unresolved(value, frame),
         Schema::NoneType => admit(value.is_none(), schema, value, frame),
         Schema::Bool => admit(value.is_bool(), schema, value, frame),
         // bool subclasses int, so True/False are ints: Bool is a subset of Int.
@@ -849,7 +862,8 @@ fn class_name(index: ClassIx, schema: &Schema, ctx: Ctx<'_>, py: Python<'_>) -> 
 ///
 /// A union summary stands in for branches that did not match, and each of these
 /// is something else: the walk ran out of levels, the value contains itself, it
-/// moved while it was read, or a predicate raised. Folding one into "this value
+/// moved while it was read, a predicate raised, or the walk met a `recursive`
+/// placeholder before its builder returned. Folding one into "this value
 /// matched no branch" drops the only sentence that says what to do about it.
 fn walk_declined(code: &str) -> bool {
     // A string rather than a [`Code`], because this reads one back *off* a
@@ -861,6 +875,7 @@ fn walk_declined(code: &str) -> bool {
         RECURSION_LOOP,
         MUTATED_DURING_VALIDATION,
         PREDICATE_ERROR,
+        UNRESOLVED_RECURSION,
     ]
     .iter()
     .any(|declined| declined.as_str() == code)

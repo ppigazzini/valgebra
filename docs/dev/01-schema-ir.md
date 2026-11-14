@@ -477,8 +477,11 @@ judges the walk against something other than itself.
 
 `recursive` builds a fixpoint. The body is compiled with a `SelfRef` marker,
 which `resolve_self` rewrites to a `Ref` into the definitions table before the
-validator is returned — so no compiled schema holds a `SelfRef`, and the walk
-treats one as a non-member if it ever sees one.
+validator is returned — so no compiled schema holds a `SelfRef`. A `SelfRef`
+denotes no set, and a question asked inside the builder still meets one: the
+walk stops on it (`unresolved_recursion`), which refuses the value from the
+marker and from its complement alike and is no verdict, so every decider that
+reads a walk declines there rather than reading the marker as the empty set.
 
 A definition is admitted only when it is **contractive**: every occurrence of the
 self-reference sits under a structural constructor.

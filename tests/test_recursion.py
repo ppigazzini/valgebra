@@ -217,6 +217,103 @@ def test_a_placeholder_does_not_cross_a_thread_into_another_definition() -> None
     assert "unresolved recursive placeholder" in str(outcome[0])
 
 
+# Leaves whose set is the one constant they name, so a relation of one to the
+# finished fixpoint is decided by that constant's membership.
+_CONSTANTS: tuple[object, ...] = (1, 2, "a", "b", True, None, b"x")
+_BODY_KINDS: tuple[object, ...] = (int, str, bool, bytes)
+
+
+def test_a_question_inside_a_builder_proves_nothing_of_the_placeholder() -> None:
+    # The placeholder stands for a definition the builder has not returned yet,
+    # so no answer about it is an answer about that set. Read as a set that
+    # admits nothing, `Literal[1]` would be refuted below the definition and
+    # proved below its complement, and a list of it proved empty beside a list
+    # of the definition -- while the finished set below holds 1.
+    asked: dict[tuple[str, str], object] = {}
+
+    def body(placeholder: Validator) -> object:
+        for constant in _CONSTANTS:
+            leaf = Validator(Literal[constant] if constant is not None else None)  # ty: ignore[invalid-type-form]
+            name = repr(constant)
+            asked[name, "<= X"] = leaf.relation_to(placeholder)
+            asked[name, "<= ~X"] = leaf.relation_to(complement(placeholder))
+            asked[name, "& X empty"] = intersection(leaf, placeholder).is_empty()
+            asked[name, "list & X empty"] = intersection(
+                Validator(list[leaf]),  # ty: ignore[invalid-type-form]
+                Annotated[list[Any], at.MinLen(1)],
+                Validator(list[placeholder]),  # ty: ignore[invalid-type-form]
+            ).is_empty()
+        asked["X", "1 in X"] = placeholder.is_valid(1)
+        asked["X", "1 in ~X"] = complement(placeholder).is_valid(1)
+        return union(int, str, [placeholder])
+
+    finished = recursive(body)
+    assert finished.is_valid(1)
+    assert finished.is_valid([1, ["a"]])
+    decided = {
+        key: answer
+        for key, answer in asked.items()
+        if answer not in ("undecided", False)
+    }
+    assert not decided, f"definite answers about an open placeholder: {decided}"
+
+
+def test_a_walk_of_an_open_placeholder_stops_rather_than_refusing() -> None:
+    # A stop refuses the value from a set and from its complement alike, and the
+    # report names it, as the depth bound's stop does.
+    reports: list[str] = []
+
+    def body(placeholder: Validator) -> object:
+        for schema in (placeholder, complement(placeholder), union(int, placeholder)):
+            with pytest.raises(ValidationError) as caught:
+                schema.validate("x")
+            reports.append(str(caught.value.errors[0]["code"]))
+        return union(None, [placeholder])
+
+    recursive(body)
+    assert reports == ["unresolved_recursion"] * 3
+
+
+@given(
+    constant=st.sampled_from(_CONSTANTS),
+    held=st.lists(st.sampled_from(_CONSTANTS + _BODY_KINDS), min_size=1, max_size=3),
+    container=st.sampled_from(("list", "record", "tuple")),
+)
+def test_a_definite_answer_inside_a_builder_holds_of_the_finished_set(
+    constant: object, held: list[object], container: str
+) -> None:
+    # LAW: an answer the decision gives about the placeholder inside its builder
+    # is true of the fixpoint the builder returns. The subject is one constant,
+    # so its relation to the finished set is that constant's membership.
+    leaf = Validator(Literal[constant] if constant is not None else None)  # ty: ignore[invalid-type-form]
+    asked: dict[str, object] = {}
+
+    def body(placeholder: Validator) -> object:
+        asked["<= X"] = leaf.relation_to(placeholder)
+        asked["<= ~X"] = leaf.relation_to(complement(placeholder))
+        asked["& X empty"] = intersection(leaf, placeholder).is_empty()
+        branch = {
+            "list": Validator(list[placeholder]),  # ty: ignore[invalid-type-form]
+            "record": Validator({"k": placeholder}),
+            "tuple": Validator(tuple[placeholder]),  # ty: ignore[invalid-type-form]
+        }[container]
+        members = [
+            Validator(Literal[item])  # ty: ignore[invalid-type-form]
+            if isinstance(item, (int, str, bytes))
+            else Validator(item)
+            for item in held
+        ]
+        return union(branch, *members)
+
+    finished = recursive(body)
+    inside = finished.is_valid(constant)
+    if asked["<= X"] == "subset" or asked["<= ~X"] == "not_subset":
+        assert inside, asked
+    refuted = asked["<= X"] == "not_subset" or asked["<= ~X"] == "subset"
+    if refuted or asked["& X empty"]:
+        assert not inside, asked
+
+
 def test_self_containing_value_is_rejected_as_a_loop() -> None:
     cyclic: list[object] = []
     cyclic.append(cyclic)

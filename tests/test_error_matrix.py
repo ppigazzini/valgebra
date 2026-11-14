@@ -291,14 +291,16 @@ CASES: dict[str, Case] = {
 
 #: Codes whose shape is not a value beside a schema, with the test that holds
 #: each. A deep value is built by a loop, a cyclic one refers to itself, a
-#: mutating one runs Python while it is read, and a malformed document never
-#: becomes a value at all -- none of them is a row in a table, and each is
+#: mutating one runs Python while it is read, a malformed document never
+#: becomes a value at all, and a placeholder is a schema only inside the
+#: builder it is handed to -- none of them is a row in a table, and each is
 #: named here so the ledger below can tell "handled elsewhere" from "missing".
 ELSEWHERE: dict[str, str] = {
     "recursion_limit": "test_a_value_past_the_depth_bound_reports_the_bound",
     "recursion_loop": "test_a_value_containing_itself_reports_the_cycle",
     "mutated_during_validation": "test_a_value_that_moves_under_the_walk_is_reported",
     "json_invalid": "test_a_document_the_parser_refuses_reports_the_parse",
+    "unresolved_recursion": "test_a_walk_that_meets_an_open_placeholder_reports_it",
 }
 
 
@@ -513,6 +515,26 @@ def test_a_value_containing_itself_reports_the_cycle() -> None:
     cyclic.append(cyclic)
     assert _fail_fast(deep, cyclic).code == "recursion_loop"
     assert "recursion_loop" in _codes_of(_aggregate(deep, cyclic))
+
+
+def test_a_walk_that_meets_an_open_placeholder_reports_it() -> None:
+    """A placeholder walked inside its builder is reported on every path.
+
+    The definition it stands for is not built, so the walk stops on it, and
+    the stop is the report: a value is not refused as though the set were empty.
+    """
+    reports: dict[str, list[str]] = {}
+
+    def body(placeholder: Validator) -> object:
+        reports["fail_fast"] = [_fail_fast(placeholder, 1).code]
+        reports["aggregate"] = _codes_of(_aggregate(placeholder, 1))
+        reports["json"] = [_from_json(placeholder, "1").code]
+        reports["load"] = [_loaded(placeholder, "1", fail_fast=True).code]
+        return union(int, [placeholder])
+
+    recursive(body)
+    paths = ("fail_fast", "aggregate", "json", "load")
+    assert reports == {path: ["unresolved_recursion"] for path in paths}
 
 
 def test_a_value_that_moves_under_the_walk_is_reported() -> None:
