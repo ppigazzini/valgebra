@@ -1385,6 +1385,14 @@ the shape. What is left below is what the descriptor cannot hold.
   assert Validator(int).relation_to(complement(float)) == "subset"
   ```
 
+- **A meet of unions, read through its members.** A meet is placed below a
+  supertype by its members and its own readings, and is not spread over the
+  branches of the unions it holds: for `a = recursive(lambda t: union(None,
+  [t]))`, `(a | str) & (a | bytes)` is `a | (str & bytes)` by distributivity,
+  which is `a`, and the pair is `"undecided"` though the converse is
+  `"subset"`. `str & bytes` is empty, and construction leaves it a meet rather
+  than folding it to `nothing`. Spreading a meet over its unions costs the
+  product of their widths, the cost the budget is there to bound.
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one -- and that is a statement about the
   *predicate*, not about every pair carrying one. A refinement is a subset of
@@ -1696,8 +1704,8 @@ rather than guessing. One constant is still a value of its own literal where
 the literal's walk admits it, so `Literal[Decimal("1.5")]` is `not_subset` of
 `nothing`, and a literal of a `str` subclass equal to `"a"` is `not_subset` of
 `Literal["A"]`; a constant the walk refuses, or raises on, proves nothing.
-A proof does not ask: `Literal[c]` is below `Literal[d]` where `c == d`, which
-holds only of an equality that is transitive, as
+A proof does not ask: `Literal[c]` is below `Literal[d]` where `c == d` and the
+two are of one exact type, which holds only of an equality that is transitive, as
 [the trust base](14-soundness.md#what-this-argument-assumes) says.
 
 What is left under the budget is the Boolean tower: a deeply nested combination

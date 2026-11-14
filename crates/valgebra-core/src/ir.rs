@@ -1677,7 +1677,10 @@ pub enum Constraint {
     /// The value holds at most `n` items, counted as [`Constraint::MinLen`]
     /// counts them.
     MaxLen(usize),
-    /// `value % pool[i] == 0`: a numeric multiple of the operand.
+    /// `value % pool[i] == 0`: a numeric multiple of the operand. Where
+    /// Python's `%` raises -- a float against an integer step past the float
+    /// range -- the value is outside, as a value whose operation raises an
+    /// ordinary exception is (`docs/08-error-model.md`).
     MultipleOf(OperandIx),
     /// `pool[i](value)` is truthy. The documented Python-callback slow path.
     Predicate(PredIx),

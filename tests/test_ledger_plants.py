@@ -3120,9 +3120,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-core/src/ir.rs",
-            "    /// `value % pool[i] == 0`: a numeric multiple of the operand.\n"
             "    MultipleOf(OperandIx),",
-            "    /// `value % pool[i] == 0`: a numeric multiple of the operand.\n"
             "    StepOf(OperandIx),",
         ),
         trips=("test_every_leaf_the_denotation_generator_lists_is_a_kind",),

@@ -352,7 +352,10 @@ answer "are you in this set?" is not in it, the same pragmatic stance
 pydantic-core takes. The one ordinary-exception case carved out is a user
 predicate (`Annotated[..., some_callable]`): a predicate that raises an ordinary
 exception is reported as a distinct `predicate_error`, not folded into an ordinary
-failed match, so a buggy predicate stays visible.
+failed match, so a buggy predicate stays visible. A warning is such an exception
+where the interpreter is told to raise it: a predicate that calls
+`warnings.warn` admits its value by default and refuses it with
+`predicate_error` under `-W error`.
 
 A **fatal interpreter signal is never folded** — at every site, the predicate and
 attribute access included. A base exception that is not an ordinary exception

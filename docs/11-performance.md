@@ -1177,9 +1177,9 @@ as a list against a length-bounded list of the same element.
 - **A wide union asks the rules before it lowers a branch.** A branch the rules refute
   is one the sets never prove, and what the root keeps of that fits 64 branches, so a
   wider union lowered the subject once a branch: `frozenset[Literal[0, ..., 511]]` below
-  the union of the 512 `frozenset[Literal[i]]` read 8.9 billion instructions and declined.
-  Asked of the rules first it reads 350 million and declines alike, with no answer moved
-  over the families and the instruction gate within 0.05%.
+  the union of the 512 `frozenset[Literal[i]]` read 8.9 billion instructions. Asked of the
+  rules first it read 350 million, with no answer moved over the families and the
+  instruction gate within 0.05%.
 - **A product of two automata is charged by its table.** One unit of a build's allowance
   bought a product of any size, thousands of entries for a Unicode class, so a pattern
   over `\w` beneath four lists read 3.7 s before a bound declined the whole. Charged by

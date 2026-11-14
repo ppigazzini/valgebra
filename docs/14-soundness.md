@@ -95,7 +95,7 @@ walk:
 
 On the inhabitants — the finite values — the guarded unfolding accepts exactly
 the members, which is why a coinductive *comparison* at the greatest fixpoint
-never contradicts a membership answer (see [recursion](06-recursion.md)).
+never contradicts a membership verdict (see [recursion](06-recursion.md)).
 
 **A stop is not a verdict.** Each guard ends the walk without deciding
 membership, as a predicate that raises (`predicate_error`), a container

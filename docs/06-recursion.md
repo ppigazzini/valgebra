@@ -236,7 +236,10 @@ that induction. Guardedness is what makes it well founded, which is why a
 non-contractive body is refused rather than resolved somehow. *Inclusion* uses
 the greatest fixpoint coinductively, which is the sound way to relate two such
 definitions without unfolding forever. On the finite values the two agree, so a
-subtype result never contradicts membership.
+subtype result never contradicts a membership verdict. A walk that stops at the
+depth bound gives none: `recursive(lambda t: union(None, [t]))` is equivalent to
+the same body with a `[None]` branch added, and `is_valid` refuses a list nested
+past the bound from either, as it refuses it from a set's complement.
 
 *Emptiness* asks the opposite question and takes the **least** fixpoint: a
 reference reached again while resolving it demands an infinite unfolding, and no

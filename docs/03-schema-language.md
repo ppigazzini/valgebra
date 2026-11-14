@@ -393,7 +393,7 @@ with a message instead:
 | bare `TypedDict` | the base a `TypedDict` class is declared from; the class is what has a set |
 | bare `NamedTuple` | names every named tuple class, and at runtime it is a function `isinstance` cannot ask |
 | bare `Generic` | the base a generic class is declared from; the class deriving from it is what has a set |
-| `Required[NotRequired[X]]` and `NotRequired[Required[X]]` | the typing spec makes the pair an error, and the two qualifiers name two records: the runtime's key sets read the key as required and pydantic as optional |
+| `Required[NotRequired[X]]` and `NotRequired[Required[X]]` | the typing spec makes the pair an error, and the two qualifiers name two records: the runtime's key sets read the key as required and pydantic as optional; refused as a `TypedDict`'s item, and outside a record unwrapped as each qualifier is |
 
 A qualifier is the exception that is read rather than refused:
 `Required[X]`, `NotRequired[X]` and `ReadOnly[X]` survive hint resolution
@@ -509,8 +509,9 @@ assert Validator(Query).is_valid({"page?": 1})
 assert not Validator(Query).is_valid({})  # required
 ```
 
-It is one of the forms whose `repr` reads back quietly as a different schema: it
-renders as `{'page?': int, str: anything}`, which reads back as the optional key
+It is one of the forms whose `repr` does not read back as Python: it renders as
+`{<required: 'page?'>: int, str: anything}`, the mark that says the key named
+`page?` is required, where `{'page?': int}` would read back as the optional key
 `page` ([boundaries](17-boundaries.md), and [stable repr](#stable-repr) below).
 
 Open the record with `open` (undeclared keys admitted) or re-close it with

@@ -245,10 +245,12 @@ The place that bites an inspection script is a deeply nested Boolean
 combination, where the work is a product of the branches. A table of literals on
 the left is not one of them: it denotes a finite set and is decided by
 membership at any width, and a table against a table in either direction. An
-infinite set against a table is another question: refuting `int` below a table
-is the descriptor's to answer, and the descriptor reads at most `BUDGET` schema
-nodes (`crates/valgebra-core/src/descr/lower.rs`), so `int` against a `Literal`
-whose members and union node pass that budget is `"undecided"` — one of the
+infinite set against a table is another question. A whole kind is refuted below
+one by a rule, since the kind holds values the table does not list, so `int`
+against a `Literal` of any width is `"not_subset"`. A part of a kind is the
+descriptor's to answer, and the descriptor reads at most `BUDGET` schema nodes
+(`crates/valgebra-core/src/descr/lower.rs`), so `Annotated[int, Ge(0)]` against
+a `Literal` whose members and union node pass that budget is `"undecided"` — one of the
 bounds the [decidability boundary](15-decidability.md#sound-but-conservative)
 lists under a schema too large to build.
 

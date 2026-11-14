@@ -164,6 +164,7 @@ class _Color(enum.Enum):
 
 _JSON = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 _CHAIN = recursive(lambda t: union(None, {"next": t}))
+_LISTS = recursive(lambda t: union(None, [t]))
 
 
 #: Every bullet the page carries, with the query that drives it.
@@ -471,6 +472,17 @@ ROWS: dict[str, Row] = {
             ]
         ),
         "a larger allowance, which bounds the cost of asking and not the schema",
+    ),
+    "A meet of unions, read through its members.": Declines(
+        intersection(union(_LISTS, str), union(_LISTS, bytes)),
+        _LISTS,
+        "spreading a meet over the branches of its unions",
+        # The entry's own contrast: the converse, which a member settles.
+        beside=(
+            _LISTS,
+            intersection(union(_LISTS, str), union(_LISTS, bytes)),
+            "subset",
+        ),
     ),
     "A predicate.": Declines(
         int,

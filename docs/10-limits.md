@@ -227,8 +227,8 @@ decision steps. None caps time, and four costs grow inside them:
   under a million of its own, so at most two million in all. A step whose work
   is linear in a leaf it reads is one step whatever the leaf holds. So a
   relation over a large leaf costs time in proportion to it inside the budget:
-  `int` against a union of thousands of literals grows with the square of their
-  number before it answers undecided. What the set representation builds is held
+  `Annotated[int, Ge(0)]` against a union of thousands of literals grows with the
+  square of their number before it answers undecided. What the set representation builds is held
   by size as well -- an automaton to 4,096 states, a pattern's table to the
   bytes that takes, a `MultipleOf`'s table and a product of two automata by the
   entries each holds -- and a length bound is refused before it is built
@@ -257,6 +257,13 @@ raise `MemoryError`:
   pydantic's `validate_json` ends the process or panics on the same documents
   under the same caps. Bound a document's
   size before handing it to valgebra, as a service bounds what it accepts.
+- **Every allocation in Rust that fails ends the process.** The two above are
+  where a size the caller writes reaches one; building a validator, deciding a
+  relation and writing a report allocate in Rust too, and under a memory limit
+  (`RLIMIT_AS`) a failure in any of them aborts rather than raising
+  `MemoryError`. What a walk hands back to Python is allocated by Python and
+  raises `MemoryError` there. Bound the memory a process is given knowing it
+  ends rather than raises.
 - **A report grows with the value, and each failure in it is bounded.**
   `validate` collects every failure, so a refused value of a million elements
   builds a million violations; `fail_fast=True` collects one. A failure's
