@@ -61,8 +61,10 @@ answers `"undecided"`.
   `bool`, fixed sequences, sequences of one exact length, closed records and
   unions of them denotes finitely many values, and where it denotes at most
   sixty-four, each an `int`, `bool`, `str`, `bytes`, `None` or a float, its
-  relation to a schema is the membership of each value: `"not_subset"` on the
-  first value outside, `"subset"` where every value is inside. A schema holding a
+  relation to a schema is the membership of each value: `"not_subset"` on a
+  value outside, `"subset"` where every value is inside, and `"undecided"` where
+  the walk of a value stopped -- at the depth bound, say -- and none is outside,
+  since a stop is no verdict ([soundness](14-soundness.md)). A schema holding a
   predicate, a class or an attribute is not read this way, since its code may
   answer two calls differently, and neither is a constant whose class `==`
   widens past itself. It is the shape a translation from JSON Schema writes for

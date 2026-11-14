@@ -233,21 +233,18 @@ impl Validator {
         let Some(values) = crate::finite::values_of(py, &self.schema, &self.literals)? else {
             return Ok(relation);
         };
-        let walker = Validator::new(
-            other,
-            literals
-                .items()
-                .iter()
-                .map(|item| item.clone_ref(py))
-                .collect(),
-            definitions,
-        );
-        for value in &values {
-            if !walker.is_valid(value)? {
-                return Ok(Relation::Fails);
-            }
-        }
-        Ok(Relation::Holds)
+        // Each value is asked in three answers, as a literal's membership is:
+        // a walk that stopped on one -- past the depth bound, say -- has not
+        // put it outside the supertype, and read as a refusal it would refute
+        // an inclusion that holds.
+        let oracle = PoolRelations::new(py, literals.items(), &definitions);
+        let admitted = oracle.admits_every(&other, &values);
+        oracle.answer(())?;
+        Ok(match admitted {
+            Some(true) => Relation::Holds,
+            Some(false) => Relation::Fails,
+            None => Relation::Unknown,
+        })
     }
 
     /// Assemble a validator, rejecting one whose schema is too deep, holds too

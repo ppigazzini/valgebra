@@ -561,7 +561,10 @@ supertype as a proof would only where no atom of it runs code a second call
 may answer differently, so a predicate, a class or an attribute anywhere in it,
 or a constant `==` widens, leaves the pair to the deciders. The relation of such
 a subject is then the walk's: the two are one procedure there, not two held to
-each other.
+each other. Each value is asked in three answers, as a literal's membership is
+(`PoolRelations::admits_every`): a refusal of one refutes, and a walk that
+stopped on one -- past the depth bound -- decides nothing, so a stop read as a
+refusal would refute an inclusion that holds.
 
 ## Why every rule stays
 

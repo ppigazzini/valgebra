@@ -1093,6 +1093,34 @@ def test_a_subject_of_finitely_many_values_is_related_by_each() -> None:
     assert word.relation_to(checked) == "undecided"
 
 
+def test_a_finite_subject_is_not_refuted_where_the_walk_stopped() -> None:
+    """A value the walk stopped on is not put outside the supertype.
+
+    `1` under twenty one-item tuples is a member of the fixpoint below, whose
+    body admits every such nesting, but each level of it spends a dozen meets of
+    the walk's depth, so the walk passes the depth bound and stops. The bound
+    past 120 bits leaves both deciders declining, so the relation reads the
+    subject's one value, and a stop read as a refusal would answer
+    `not_subset` for an inclusion that holds.
+    """
+    big = Annotated[int, at.Ge(2**130)]
+
+    def body(placeholder: Validator) -> object:
+        inner: object = placeholder
+        for _ in range(12):
+            inner = intersection(union(inner, int), complement(str))
+        return union(Validator(tuple[inner]), int, big)  # ty: ignore[invalid-type-form]
+
+    nested = recursive(body)
+    subject: object = Literal[1]
+    value: object = 1
+    for _ in range(20):
+        subject, value = tuple[subject], (value,)
+    assert not nested.is_valid(value)
+    assert Validator(subject).relation_to(nested) == "undecided"
+    assert not Validator(subject).is_subtype_of(nested)
+
+
 # THEORY: a-cut-reference-proves
 def test_a_recursive_set_is_refuted_on_a_value_two_unfoldings_down() -> None:
     """The JSON values are outside the values whose lists hold at most two items.

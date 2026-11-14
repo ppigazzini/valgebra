@@ -112,6 +112,40 @@ fn a_literal_is_asked_of_a_pattern_the_probe_compiles_itself() {
     });
 }
 
+/// The values of a subject are asked in three answers: a refusal of one
+/// decides, whatever a value before it stopped on, and a stop with no refusal
+/// beside it decides nothing -- the walk did not put that value outside.
+#[test]
+fn a_value_the_walk_stopped_on_is_neither_admitted_nor_refused() {
+    Python::attach(|py| {
+        asking(py, Vec::new(), |oracle| {
+            // A list of a placeholder stops on each item; an int is admitted,
+            // and a str is refused by both branches.
+            let stopping = Schema::Union(
+                vec![
+                    Schema::Int,
+                    Schema::list(valgebra_core::SeqShape::homogeneous(Schema::SelfRef(0))),
+                ]
+                .into(),
+            );
+            let one = 1i64.into_pyobject(py).unwrap().into_any();
+            let two = 2i64.into_pyobject(py).unwrap().into_any();
+            let listed = PyList::new(py, [1i64]).unwrap().into_any();
+            let word = "x".into_pyobject(py).unwrap().into_any();
+            assert_eq!(
+                oracle.admits_every(&stopping, &[one.clone(), two]),
+                Some(true)
+            );
+            assert_eq!(oracle.admits_every(&stopping, &[one, listed.clone()]), None);
+            assert_eq!(
+                oracle.admits_every(&stopping, &[listed.clone(), word.clone()]),
+                Some(false)
+            );
+            assert_eq!(oracle.admits_every(&stopping, &[word, listed]), Some(false));
+        });
+    });
+}
+
 /// Each constant of a table is asked of one pattern the probe compiles once:
 /// the query keeps it for every constant after the first, and drops it with
 /// the oracle.

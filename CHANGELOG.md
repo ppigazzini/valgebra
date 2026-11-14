@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a question about a recursive placeholder is a stop
+- fix: the finite reading answers undecided where the walk stopped
 
 -->
 
@@ -27,6 +28,12 @@ answer of its own, or a repair to a change not yet released.
   `list[Literal[1]]` with `list[t]` was proved empty, while the finished set holds `1` and `[1]`;
   each is `undecided` or not proved. `complement(t).is_valid(1)` is `False` there, since a stop
   refuses a value from a set and from its complement alike.
+
+- **A subject of finitely many values is not refuted on a value the walk stopped on.** The
+  relation read value by value took a walk that stopped at the depth bound as a refusal and
+  answered `not_subset`: `1` under twenty one-item tuples against a fixpoint whose body admits
+  every such nesting, where each level spends a dozen meets of the walk's depth. Each value is
+  asked in three answers, so the pair is `undecided`; a value refused still refutes.
 
 ## [0.0.26] - 2026-11-13
 

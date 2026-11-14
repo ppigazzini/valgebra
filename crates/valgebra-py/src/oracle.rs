@@ -712,6 +712,29 @@ impl PoolRelations<'_, '_> {
         self.is_member_under(schema, value, &ValidatorIndex::default())
     }
 
+    /// Whether `schema` admits every one of `values`, in three answers: `false`
+    /// where its walk refuses one, `true` where it admits each, and `None`
+    /// where it stopped on one and refused none, since a stop decides nothing
+    /// ([`Self::is_member_under`]). A refusal decides the answer whatever a
+    /// value before it stopped on. One index is built for the values, as
+    /// [`Self::strings_admitted`] builds one for its texts.
+    pub(crate) fn admits_every(
+        &self,
+        schema: &Schema,
+        values: &[Bound<'_, PyAny>],
+    ) -> Option<bool> {
+        let index = build_index(self.py, schema, self.definitions, self.literals);
+        let mut every = Some(true);
+        for value in values {
+            match self.is_member_under(schema, value, &index) {
+                Some(true) => {}
+                Some(false) => return Some(false),
+                None => every = None,
+            }
+        }
+        every
+    }
+
     /// [`Self::is_member`] under an `index` built for `schema`, for a probe
     /// that walks several values through it.
     ///
