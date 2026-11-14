@@ -13,14 +13,29 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a question about a recursive placeholder is a stop
-- fix: the finite reading answers undecided where the walk stopped
-- fix: the finite reading bounds the items it builds
-- fix: an unfolding builds one copy of a body a level
-- perf: two handles of one node compare equal at once
-- fix: two validators are equivalent where each is below the other
-
 -->
+
+## [0.0.27] - 2026-11-14
+
+A release of fixes, with no addition and no node. Five readings 0.0.26 answered wrong or paid too
+much for are repaired: a question asked inside a `recursive` builder stops at its placeholder
+rather than refusing the value, a subject of finitely many values is not refuted on a value the
+walk stopped on, a subject of one long value is built in time linear in its items and past 4,096
+not at all, an undecided relation over a recursive subject builds one copy of a body for each
+definition, and two validators each below the other are equivalent. Over the 60,000 pairs each
+generation of a fuzzer draws, the relations give 0.0.26's answers and lose none, with one
+`is_equivalent` more on the second. Against PyPI's 0.0.26 the metamorphic gate moves no
+membership and loses or contradicts no decision, and the companions' suites and studies read no
+difference.
+
+Against 0.0.26 built here from its tag, on CPython 3.15, the instruction gate's 44 workloads
+count from 0.07% fewer instructions to 0.16% more, and the profiled wheel's seven shapes count
+alike. On the profiled wheels of CPython 3.11 through 3.15 every shape counts within 0.7% of
+0.0.26's but one: a relation between two built validators counts 2.6% to 3.1% fewer, the deciders
+and the reading by values sharing one oracle where 0.0.26 built a second for the reading. On the
+free-threaded 3.14 and 3.15 a shape of a few thousand instructions counts 3% to 46% apart from one
+build to another, either way, the count 0.0.26's section names as not repeating; the shapes past
+that count within 3%.
 
 ### Fixed
 
@@ -4954,7 +4969,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.26...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.27...HEAD
+[0.0.27]: https://github.com/ppigazzini/valgebra/compare/v0.0.26...v0.0.27
 [0.0.26]: https://github.com/ppigazzini/valgebra/compare/v0.0.25...v0.0.26
 [0.0.25]: https://github.com/ppigazzini/valgebra/compare/v0.0.24...v0.0.25
 [0.0.24]: https://github.com/ppigazzini/valgebra/compare/v0.0.23...v0.0.24
