@@ -1061,8 +1061,12 @@ goals a query reaches are at most its square. With the trail cutting a pair that
 that is the termination argument the saturating algorithm makes, and the work
 budget bounds cost rather than standing in for it. The closure is held on the
 workload shapes, on the recursive pairs the trail is for, on the rules that
-build, and on drawn queries; the subterm pairs, a tighter count, are held on the
-same shapes as a measurement. Emptiness is held to the same finiteness: a
+build, and on drawn queries; the pairs of the subterms the two sides hold
+together, a tighter count, are held on the same shapes as a measurement. Both
+sides, since the query is the one term the subject less the supertype is, read
+over the atoms both sides hold [FCB08, §6.9], and the rules read it so: a set
+declined against a complement is asked below the subject's complement, a pair
+of two subterms of one side. Emptiness is held to the same finiteness: a
 recursive meet of maps is read under its cycle rather than unfolded again.
 **[OBLIGATION: regularity-bounds-the-goals]**
 

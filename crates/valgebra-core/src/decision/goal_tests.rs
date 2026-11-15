@@ -562,12 +562,25 @@ fn subterms(schema: &Schema, defs: &[Schema]) -> Vec<Schema> {
     out
 }
 
-/// The distinct goals a query asks, against the pairs of subterms the two
-/// sides have.
+/// The distinct goals a query asks, against the pairs of the subterms its two
+/// sides hold together.
+///
+/// The query is one term, the subject less the supertype, whose emptiness
+/// [FCB08, §6.9] decides over "the atoms that occur in" it, both sides' at
+/// once; the rules read it so too, asking a set declined against a complement
+/// below the subject's complement, a subterm of one side below another of the
+/// same side. So a goal pairs any two of the subterms, and a pair of one
+/// subterm of each side counts fewer than a query asks:
+/// `¬set ⊆ ¬None ∪ ¬ℓ` asks 40 goals over 3 x 5 of those.
 fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -> (usize, usize) {
     let (_, counts) = ask(sub, sup, defs);
-    let pairs = subterms(sub, defs).len() * subterms(sup, defs).len();
-    (counts.asked - counts.repeated, pairs)
+    let mut held = subterms(sub, defs);
+    for term in subterms(sup, defs) {
+        if !held.contains(&term) {
+            held.push(term);
+        }
+    }
+    (counts.asked - counts.repeated, held.len() * held.len())
 }
 
 /// Whether `term` is in the closure the goals of a query over `subterms` are
@@ -912,6 +925,13 @@ fn a_half_asked_below_a_complement_asks_inside_the_closure() {
     let (outside, built) = outside_the_closure(&sub, &sup, &[]);
     assert_eq!(outside, [], "asked outside the closure");
     assert!(built >= 1, "built no goal of its own");
+    // Measured at forty, past the fifteen pairs of one subterm of each side
+    // and within the sixty-four of the eight the two sides hold.
+    let (distinct, pairs) = distinct_against_subterm_pairs(&sub, &sup, &[]);
+    assert!(
+        distinct <= pairs,
+        "{distinct} distinct goals over {pairs} pairs"
+    );
 }
 
 // THEORY: regularity-bounds-the-goals
@@ -979,9 +999,10 @@ fn a_mapping_a_rule_rebuilds_is_asked_inside_the_closure() {
 /// The closure bounds them by an argument, and its square is a bound on
 /// nothing a caller waits for: a meet per subset of the subterms. This is the
 /// number the shapes in hand reach, which is far below it. Each shape here
-/// asks fewer distinct goals than its sides have subterm pairs, the product
-/// rule's split included -- its narrowings are few and each is asked once --
-/// and the row is what says so when a rule starts asking more.
+/// asks fewer distinct goals than there are pairs of the subterms its sides
+/// hold together, the product rule's split included -- its narrowings are few
+/// and each is asked once -- and the row is what says so when a rule starts
+/// asking more.
 #[test]
 fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
     assert_eq!(
@@ -1346,8 +1367,8 @@ mod drawn {
 
         // THEORY: regularity-bounds-the-goals
         /// The goals a drawn query asks are drawn from the closure of its
-        /// subterms, and number no more than its subterm pairs, over drawn
-        /// definitions.
+        /// subterms, and number no more than the pairs of the subterms its
+        /// sides hold together, over drawn definitions.
         ///
         /// The chosen pairs above hold both on the shapes the budget is
         /// measured over; this holds them on whatever the recursive fragment
