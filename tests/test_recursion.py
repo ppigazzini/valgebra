@@ -64,6 +64,115 @@ def test_recursive_membership_matches_a_reference_denotation(value: object) -> N
     assert json_value.is_valid(value) == _is_json(value)
 
 
+#: The values `json.loads` returns, its floats bounded below so `nan` is none: a
+#: tree of scalars, which a fast walk reads by each value's exact type.
+_JSON_NUMBERS = recursive(
+    lambda j: union(
+        None, bool, int, str, Annotated[float, at.Ge(-math.inf)], [j], {str: j}
+    )
+)
+#: The same set, with a member no value below reaches, which no reading of a
+#: tree takes: the general walk of it.
+_JSON_WALKED = recursive(
+    lambda j: union(
+        None,
+        bool,
+        int,
+        str,
+        Annotated[float, at.Ge(-math.inf)],
+        [j],
+        {str: j},
+        frozenset[int],
+    )
+)
+
+
+class _Int(int):
+    pass
+
+
+class _Str(str):
+    __slots__ = ()
+
+
+class _Float(float):
+    def __ge__(self, other: object) -> bool:
+        return False
+
+
+class _List(list[object]):
+    pass
+
+
+class _Dict(dict[object, object]):
+    pass
+
+
+_tree_values = st.recursive(
+    st.none()
+    | st.booleans()
+    | st.integers()
+    | st.floats()
+    | st.text(max_size=3)
+    | st.binary(max_size=2)
+    | st.builds(_Int, st.integers())
+    | st.builds(_Str, st.text(max_size=2))
+    | st.builds(_Float, st.floats())
+    | st.sets(st.integers(), max_size=2),
+    lambda child: (
+        st.lists(child, max_size=3)
+        | st.tuples(child)
+        | st.builds(_List, st.lists(child, max_size=2))
+        | st.dictionaries(st.text(max_size=2) | st.integers(), child, max_size=3)
+        | st.builds(_Dict, st.dictionaries(st.text(max_size=2), child, max_size=2))
+    ),
+    max_leaves=12,
+)
+
+
+def _chain(depth: int, leaf: object, wrap: Callable[[object], object]) -> object:
+    """Return `leaf` inside `depth` containers `wrap` builds."""
+    for _ in range(depth):
+        leaf = wrap(leaf)
+    return leaf
+
+
+_CYCLE: list[object] = [1]
+_CYCLE.append(_CYCLE)
+
+
+@given(value=_tree_values)
+def test_a_tree_of_scalars_answers_as_the_walk_of_the_same_set(value: object) -> None:
+    """A tree of scalars read by each value's type answers as the walk of its twin.
+
+    The twin denotes the same set over every value drawn here, and its extra
+    member keeps it from the reading, so the two are the reading and the general
+    walk of one set: `is_valid`, `in` and `validate` give one answer, a
+    subclass, `nan` and a mapping keyed by an `int` included.
+    """
+    answer = _JSON_WALKED.is_valid(value)
+    assert _JSON_NUMBERS.is_valid(value) == answer
+    assert (value in _JSON_NUMBERS) == answer
+    try:
+        _JSON_NUMBERS.validate(value)
+    except ValidationError:
+        assert not answer
+    else:
+        assert answer
+
+
+@pytest.mark.parametrize("depth", range(122, 130))
+@pytest.mark.parametrize("leaf", [1, 0.5, "x", [], {}, (1,), _CYCLE])
+def test_a_tree_of_scalars_stops_where_the_walk_does(depth: int, leaf: object) -> None:
+    """A chain of lists or of dicts around the depth bound, a cycle at its end."""
+    for wrap in (lambda value: [value], lambda value: {"k": value}):
+        value = _chain(depth, leaf, wrap)
+        assert _JSON_NUMBERS.is_valid(value) == _JSON_WALKED.is_valid(value), (
+            depth,
+            leaf,
+        )
+
+
 def test_recursive_json_value_accepts_nested_data() -> None:
     assert json_value.is_valid({"a": [1, "x", {"b": None}], "c": [True, 3.5]})
     assert json_value.is_valid([1, 2, 3])

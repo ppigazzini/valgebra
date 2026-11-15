@@ -18,10 +18,11 @@ use super::record::{
 };
 use super::scalar::{floats_compared, machine_range};
 use super::sequence::{refined_scalar_list, scan_list};
+use super::tree::{TO_A_LEAF, TO_AN_ELEMENT};
 use super::*;
 use crate::check::ctx::{MAX_RECURSION_DEPTH, MAX_WALK_DEPTH};
-use crate::check::index::ValidatorIndex;
 use crate::check::index::float_operand;
+use crate::check::index::{Exact, ValidatorIndex};
 use crate::check::{WalkMode, WalkState, build_index};
 
 /// Decide membership of a Python value against a schema, through the real
@@ -9153,5 +9154,452 @@ fn a_record_whose_clause_reads_values_is_explained_from_its_first_entry() {
             2,
             "the deciding scan and the explaining one"
         );
+    });
+}
+
+/// The trees of scalars the reading is held to, each a definitions table whose
+/// one definition reads as one, over the operands of [`TREE_VALUES`]: the JSON
+/// values; `int | list[t]`; a mapping with no list, its floats in `[0, 1]`;
+/// `bool` beside every float, with no `int` and no mapping; and floats in
+/// `(0, 1)` beside a list and a mapping.
+fn trees() -> Vec<Schema> {
+    let itself = || Schema::Ref(DefIx::new(0));
+    let list = || Schema::list(SeqShape::homogeneous(itself()));
+    let map = || Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: itself(),
+        }]
+        .into(),
+    };
+    let bounded = |constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(Schema::Float),
+        constraints: constraints.into(),
+    };
+    let at = OperandIx::new;
+    vec![
+        Schema::Union(
+            vec![
+                Schema::NoneType,
+                Schema::Bool,
+                Schema::Int,
+                Schema::Str,
+                list(),
+                map(),
+                bounded(vec![Constraint::Ge(at(0))]),
+            ]
+            .into(),
+        ),
+        Schema::Union(vec![Schema::Int, list()].into()),
+        Schema::Union(
+            vec![
+                Schema::Str,
+                Schema::Bytes,
+                map(),
+                bounded(vec![Constraint::Ge(at(1)), Constraint::Le(at(2))]),
+            ]
+            .into(),
+        ),
+        Schema::Union(vec![Schema::NoneType, Schema::Bool, Schema::Float, list()].into()),
+        Schema::Union(
+            vec![
+                list(),
+                map(),
+                bounded(vec![Constraint::Gt(at(1)), Constraint::Lt(at(2))]),
+            ]
+            .into(),
+        ),
+    ]
+}
+
+/// The values the reading of a tree of scalars is held to the walk over: one of
+/// every exact builtin type the reading settles, at the root and in each
+/// container; a subclass of each, which the walk reads; values outside every
+/// tree; containers inside themselves; and chains around the walk's bounds.
+const TREE_VALUES: &std::ffi::CStr = c"import math\n\
+OPERANDS = [-math.inf, 0.0, 1]\n\
+class F(float):\n\
+\x20   def __ge__(self, other):\n\
+\x20       return True\n\
+\x20   __gt__ = __le__ = __lt__ = __ge__\n\
+class Halt(float):\n\
+\x20   def __ge__(self, other):\n\
+\x20       raise KeyboardInterrupt\n\
+class L(list): pass\n\
+class D(dict): pass\n\
+class S(str): pass\n\
+class I(int): pass\n\
+class B(bytes): pass\n\
+def nest(n, leaf, wrap):\n\
+\x20   for _ in range(n):\n\
+\x20       leaf = wrap(leaf)\n\
+\x20   return leaf\n\
+cycle = [1]\n\
+cycle.append(cycle)\n\
+loop = {}\n\
+loop['k'] = loop\n\
+LEAVES = [None, True, False, 0, 7, 2 ** 80, -0.0, 0.5, 1.5, math.inf, -math.inf, math.nan,\n\
+\x20         '', 'x', '\\ud800', b'y', (), set(), object(), F(0.5), Halt(0.5), I(1), S('s'),\n\
+\x20         B(b'b'), L([1]), D(k=1), [], {}]\n\
+VALUES = [*LEAVES, *([leaf] for leaf in LEAVES), *({'k': leaf} for leaf in LEAVES),\n\
+\x20         [1, [0.5, [None, ['x']]]], {'a': [1, {'b': None}], 'c': 0.25}, [1, (2,)],\n\
+\x20         {1: 2}, {S('k'): 1}, {b'k': 1}, [[], {}, [{}]], cycle, loop, [cycle],\n\
+\x20         {'k': loop}, [1, 'x', [cycle]]]\n\
+DEEP = [nest(n, leaf, wrap) for n in (124, 125, 126, 127, 128) for leaf in (1, 0.5, 'x', [], {})\n\
+\x20       for wrap in (lambda v: [v], lambda v: {'k': v})]\n\
+class Grow(float):\n\
+\x20   def __ge__(self, other):\n\
+\x20       self.into[len(self.into)] = 0 if isinstance(self.into, dict) else self.into.append(0)\n\
+\x20       return True\n\
+def moving(wrap):\n\
+\x20   grow = Grow(0.5)\n\
+\x20   grow.into = wrap(grow)\n\
+\x20   return [1, grow.into]\n\
+MOVING = [lambda: moving(lambda v: [v, 1]), lambda: moving(lambda v: {'a': v, 'b': 1})]\n\
+CANARY = [nest(8, object(), wrap) for wrap in (lambda v: [v], lambda v: {'k': v})]\n";
+
+/// What a walk of `schema` at `value` answers and leaves, begun at a depth and
+/// a trail height: the verdict, the stop, the moves, the fatal signal, where
+/// the levels and the trail stand after it, the definitions it entered, and
+/// the code and path of each violation it reported.
+type Walked = (
+    bool,
+    Option<Code>,
+    u32,
+    bool,
+    usize,
+    usize,
+    usize,
+    Vec<(&'static str, Vec<PathSegment>)>,
+);
+
+/// [`Walked`] for one fast walk, over `index`.
+fn walked_from(
+    index: &ValidatorIndex,
+    tree: (&Schema, &[Schema], &[Py<PyAny>]),
+    value: &Bound<'_, PyAny>,
+    start: (usize, usize),
+) -> Walked {
+    walked_in(index, tree, value, start, WalkMode::Fast)
+}
+
+/// [`Walked`] for one walk in `mode`, over `index`.
+fn walked_in(
+    index: &ValidatorIndex,
+    (schema, defs, pool): (&Schema, &[Schema], &[Py<PyAny>]),
+    value: &Bound<'_, PyAny>,
+    (depth, height): (usize, usize),
+    mode: WalkMode,
+) -> Walked {
+    let state = WalkState::new();
+    state.depth.set(depth);
+    for below in 0..height {
+        let _ = state
+            .guard
+            .borrow_mut()
+            .enter((usize::MAX - below, usize::MAX));
+    }
+    let ctx = Ctx {
+        pool,
+        defs,
+        index,
+        state: &state,
+        mode,
+    };
+    let mut out = Vec::new();
+    let admitted = member(
+        schema,
+        &Value::Py(value),
+        &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+    );
+    let height = state.guard.borrow().height();
+    (
+        admitted,
+        state.signals.stopped.get(),
+        state.moves(),
+        state.take_fatal().is_some(),
+        state.depth.get(),
+        height,
+        state.memo.count(),
+        out.into_iter().map(|v| (v.code, v.path)).collect(),
+    )
+}
+
+/// The index of `schema` over `defs` with its tree plans, and without them.
+fn read_and_walked(
+    py: Python<'_>,
+    schema: &Schema,
+    defs: &[Schema],
+    pool: &[Py<PyAny>],
+) -> (ValidatorIndex, ValidatorIndex) {
+    let read = build_index(py, schema, defs, pool);
+    let mut walked = build_index(py, schema, defs, pool);
+    walked.forget_trees();
+    (read, walked)
+}
+
+/// A tree of scalars read by the value's types answers as the general walk
+/// does: the verdict, the stop, the moves and the fatal signal, for every
+/// value, from every start the walk's two bounds allow near either bound.
+#[test]
+fn a_tree_of_scalars_is_read_as_the_walk_reads_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(py, TREE_VALUES, c"tree_values.py", c"tree_values")
+            .expect("the corpus compiles");
+        let listed = |name: &str| -> Vec<Bound<'_, PyAny>> {
+            module
+                .getattr(name)
+                .expect("the corpus")
+                .try_iter()
+                .expect("a list")
+                .map(|item| item.expect("an element"))
+                .collect()
+        };
+        let pool: Vec<Py<PyAny>> = listed("OPERANDS").into_iter().map(Bound::unbind).collect();
+        let root = Schema::Ref(DefIx::new(0));
+        let mut starts = vec![(0, 0)];
+        starts.extend((0..9).map(|below| (MAX_WALK_DEPTH - below, 0)));
+        starts.extend((0..4).map(|below| (0, MAX_RECURSION_DEPTH - below)));
+        for body in trees() {
+            let defs = [body];
+            let tree = (&root, &defs[..], &pool[..]);
+            let (read, walked) = read_and_walked(py, &root, &defs, &pool);
+            assert!(read.tree(DefIx::new(0)).is_some(), "{:?}", defs[0]);
+            // An explaining walk asks a union's branches on the fast path, so a
+            // value refused eight levels down enters its definitions at most
+            // the square of its nine levels times. Branches asked in the
+            // explaining mode would walk each level twice, doubling at every
+            // level: this fails in a few hundred entries where the values below,
+            // cycles and the deep ones, would not finish.
+            for value in &listed("CANARY") {
+                let entered = walked_in(&walked, tree, value, (0, 0), WalkMode::Explain).6;
+                assert!(entered <= 9 * 9, "{:?}: {entered} entered", defs[0]);
+            }
+            // The definitions entered are the reading's own: one, where the
+            // walk enters one at every value, and an explaining walk decides a
+            // union's branches on the fast path. Every other part is the walk's,
+            // and a walk that explains or settles reports what it reports.
+            let agree = |value: &Bound<'_, PyAny>, start: (usize, usize)| {
+                for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle] {
+                    let (mut by_type, mut by_walk) = (
+                        walked_in(&read, tree, value, start, mode),
+                        walked_in(&walked, tree, value, start, mode),
+                    );
+                    (by_type.6, by_walk.6) = (0, 0);
+                    assert_eq!(
+                        by_type, by_walk,
+                        "{:?} at {value:?} from {start:?} in {mode:?}",
+                        defs[0]
+                    );
+                }
+            };
+            for value in &listed("VALUES") {
+                for &start in &starts {
+                    agree(value, start);
+                }
+            }
+            for value in &listed("DEEP") {
+                agree(value, (0, 0));
+            }
+            for make in listed("MOVING") {
+                agree(&make.call0().expect("a value that moves"), (0, 0));
+            }
+            // The reading is what reads a container it settles.
+            if read
+                .tree(DefIx::new(0))
+                .is_some_and(|plan| plan.reaches(Exact::List))
+            {
+                let two = PyList::new(py, [PyList::empty(py), PyList::empty(py)])
+                    .expect("a list")
+                    .into_any();
+                assert_eq!(
+                    (
+                        walked_from(&read, tree, &two, (0, 0)).6,
+                        walked_from(&walked, tree, &two, (0, 0)).6
+                    ),
+                    (1, 3),
+                    "{:?}",
+                    defs[0]
+                );
+            }
+            // And a mapping it settles, which it enters once whether its
+            // entries are read here or the mapping is refused by its type.
+            let two = evaluate(py, "{'a': {}, 'b': {}}");
+            assert_eq!(walked_from(&read, tree, &two, (0, 0)).6, 1, "{:?}", defs[0]);
+        }
+    });
+}
+
+/// A definition is no tree of scalars where a member is any other node, a
+/// container holds another definition, a mapping is keyed by another set, or
+/// no member is a container.
+#[test]
+fn a_tree_of_scalars_is_only_a_union_of_its_members() {
+    Python::attach(|py| {
+        let pool = vec![
+            evaluate(py, "0.5").unbind(),
+            evaluate(py, "10 ** 30").unbind(),
+        ];
+        let itself = || Schema::Ref(DefIx::new(0));
+        let other = || Schema::Ref(DefIx::new(1));
+        let map = |key: Schema, value: Schema| Schema::KeyedMap {
+            fields: Vec::new().into(),
+            defaults: vec![MapClause { key, value }].into(),
+        };
+        let refined = |base: Schema, constraint: Constraint| Schema::Refine {
+            base: Arc::new(base),
+            constraints: vec![constraint].into(),
+        };
+        let at = OperandIx::new;
+        let list = Schema::list(SeqShape::homogeneous(itself()));
+        let led = Schema::list(SeqShape {
+            prefix: vec![Schema::Int].into(),
+            tail: Some(Arc::new(itself())),
+        });
+        let fielded = Schema::KeyedMap {
+            fields: vec![field("a", Schema::Int, true)].into(),
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: itself(),
+            }]
+            .into(),
+        };
+        let none: [Schema; 11] = [
+            list.clone(),
+            Schema::Union(vec![Schema::Int, Schema::Str].into()),
+            Schema::Union(vec![Schema::Int, Schema::list(SeqShape::homogeneous(other()))].into()),
+            Schema::Union(vec![Schema::Int, Schema::tuple(SeqShape::homogeneous(itself()))].into()),
+            Schema::Union(vec![Schema::Int, map(Schema::Int, itself())].into()),
+            Schema::Union(vec![Schema::Int, map(Schema::Str, other())].into()),
+            Schema::Union(vec![list.clone(), refined(Schema::Int, Constraint::Ge(at(0)))].into()),
+            Schema::Union(vec![list.clone(), refined(Schema::Float, Constraint::Ge(at(1)))].into()),
+            Schema::Union(
+                vec![
+                    list.clone(),
+                    refined(Schema::Float, Constraint::MultipleOf(at(0))),
+                ]
+                .into(),
+            ),
+            Schema::Union(vec![Schema::Int, led].into()),
+            Schema::Union(vec![Schema::Int, fielded].into()),
+        ];
+        for body in none {
+            let defs = [body, Schema::Int];
+            let index = build_index(py, &itself(), &defs, &pool);
+            assert!(index.tree(DefIx::new(0)).is_none(), "{:?}", defs[0]);
+            assert!(!index.has_trees(), "{:?}", defs[0]);
+        }
+        let defs = [
+            Schema::Union(vec![list, refined(Schema::Float, Constraint::Ge(at(0)))].into()),
+            Schema::Int,
+        ];
+        let index = build_index(py, &itself(), &defs, &pool);
+        assert!(index.has_trees());
+        assert!(index.tree(DefIx::new(0)).is_some());
+        assert!(index.tree(DefIx::new(1)).is_none());
+    });
+}
+
+/// A tree of scalars is read as far down a chain as the walk's levels and its
+/// trail let the deepest type test stand, and no further: the reading enters
+/// the definition once where it settles the whole chain, and every value it
+/// hands to the walk enters it again. A chain of `n` lists from a start at a
+/// depth and a trail height holds its leaf's reference one level below the
+/// start and [`TO_AN_ELEMENT`] more a list, [`TO_A_LEAF`] levels above its
+/// deepest type test, and its innermost list `n - 1` pairs above the start's on
+/// the trail, below the element's own.
+#[test]
+fn a_tree_of_scalars_is_read_as_far_as_the_bounds_let_it() {
+    Python::attach(|py| {
+        let root = Schema::Ref(DefIx::new(0));
+        let defs = [Schema::Union(
+            vec![
+                Schema::Int,
+                Schema::list(SeqShape::homogeneous(root.clone())),
+            ]
+            .into(),
+        )];
+        let (read, _) = read_and_walked(py, &root, &defs, &[]);
+        let tree = (&root, &defs[..], &[][..]);
+        for (depth, height) in [(0, 0), (2, 0), (302, 0), (0, 90), (40, 60)] {
+            let mut chain = 1_i64.into_pyobject(py).expect("an int").into_any();
+            for nesting in 1..130_usize {
+                chain = PyList::new(py, [chain]).expect("a list").into_any();
+                let leaf = depth + 1 + TO_AN_ELEMENT * nesting;
+                let settled =
+                    leaf + TO_A_LEAF <= MAX_WALK_DEPTH && height + nesting < MAX_RECURSION_DEPTH;
+                assert_eq!(
+                    walked_from(&read, tree, &chain, (depth, height)).6 == 1,
+                    settled,
+                    "a chain of {nesting} from {:?}",
+                    (depth, height)
+                );
+            }
+        }
+    });
+}
+
+/// Where a memo is armed the definition is walked, since a kept walk reads how
+/// deep the walks inside it reached. The second branch keeps the definition at
+/// a list subclass, which the reading leaves to the walk, around a chain the
+/// reading would read; it meets the subclass again deeper, where the walk stops
+/// once the chain is long enough, and a kept walk that noted no reach would
+/// answer there.
+#[test]
+fn an_armed_memo_reads_a_tree_of_scalars_as_the_walk_does() {
+    Python::attach(|py| {
+        let root = Schema::Ref(DefIx::new(0));
+        let defs = [Schema::Union(
+            vec![
+                Schema::Int,
+                Schema::list(SeqShape::homogeneous(root.clone())),
+            ]
+            .into(),
+        )];
+        let union = Schema::Union(
+            vec![
+                Schema::list(SeqShape::homogeneous(root.clone())),
+                Schema::list(SeqShape::homogeneous(Schema::Union(
+                    vec![root, Schema::Bytes].into(),
+                ))),
+            ]
+            .into(),
+        );
+        let (read, walked) = read_and_walked(py, &union, &defs, &[]);
+        let walk = (&union, &defs[..], &[][..]);
+        for (length, wrap) in (40..=126)
+            .step_by(2)
+            .flat_map(|n| [1, 10, 40].map(move |m| (n, m)))
+        {
+            let value = PyModule::from_code(
+                py,
+                &std::ffi::CString::new(format!(
+                    "class L(list): pass\n\
+                     chain = 1\n\
+                     for _ in range({length}):\n\
+                     \x20   chain = [chain]\n\
+                     held = L([chain])\n\
+                     deeper = held\n\
+                     for _ in range({wrap}):\n\
+                     \x20   deeper = [deeper]\n\
+                     VALUE = [b'x', held, deeper]\n"
+                ))
+                .expect("no nul"),
+                c"armed_chain.py",
+                c"armed_chain",
+            )
+            .and_then(|module| module.getattr("VALUE"))
+            .expect("the chain builds");
+            let (by_type, by_walk) = (
+                walked_from(&read, walk, &value, (0, 0)),
+                walked_from(&walked, walk, &value, (0, 0)),
+            );
+            assert_eq!(
+                (by_type.0, by_type.1),
+                (by_walk.0, by_walk.1),
+                "a chain of {length} met again {wrap} deeper"
+            );
+        }
     });
 }

@@ -314,9 +314,10 @@ the caller's to choose.
 
 ## What is precomputed, and what correctness may not depend on
 
-Six per-validator indexes -- `ValidatorIndex` in
-`crates/valgebra-py/src/check/index.rs` -- are built once on first use and keyed
-by the address of a node's own buffer:
+Seven per-validator indexes -- `ValidatorIndex` in
+`crates/valgebra-py/src/check/index.rs` -- are built once on first use, six keyed
+by the address of a node's own buffer and the seventh by a definition's place in
+its table:
 
 - declared-field lookups and interned keys per record;
 - interned attribute names per attribute record;
@@ -328,7 +329,9 @@ by the address of a node's own buffer:
 - compiled patterns per pattern constraint;
 - the memo's plan: which definitions the walk may remember, and the unions,
   meets and clause lists two of whose members reach one in common (`MemoPlan`
-  in `check/memo.rs`).
+  in `check/memo.rs`);
+- which exact types each definition read as a tree of scalars reaches
+  (`TreePlan`, [below](#a-tree-of-scalars-is-read-by-each-values-type)).
 
 A thread that finds another building them waits **detached** from the
 interpreter. The build interns strings, and on a free-threaded interpreter that
@@ -375,7 +378,8 @@ whose answer is its own and whose running is a call.
 arms that read a value as a union, a meet, a complement, a class or a
 reference. What the dispatcher descends into, and what it stops at, have a
 module each, because what each shares with the rest is the dispatcher and
-little else.
+little else; so has a definition read as a tree of scalars, `walk/tree.rs`,
+which the reference's arm asks.
 
 Two files beside them are read by every arm. `crates/valgebra-py/src/input.rs`
 is the `Value` above — the two input paths and the decoders that produce them.
@@ -450,7 +454,7 @@ branch in the union's frame, a mapping's scan keeps one fast frame for every
 entry `covered` asks of its clauses, and a record's deciding pass reads over its
 caller's buffers in a fast frame (`keyed_map_asks_for_its_keys`). Each buffer is a value with a destructor,
 and a pair built and dropped per branch is a tenth of what a recursive schema's
-walk costs (`--binding-recursive`). Where a fast walk has no frame to borrow --
+walk costs (`--binding-memo`). Where a fast walk has no frame to borrow --
 the entry points `is_valid` and `is_valid_json`, a mapping's scan, a parsed object, a
 complement's inner walk -- it takes an `Unwritten` pair (`walk.rs`), whose
 buffers are never dropped: they never own anything, and dropping an empty
@@ -1156,6 +1160,47 @@ report is the size it is. `memo_tests.rs` beside the walk holds the memo to the
 walk without it, answer for answer and violation for violation, in every mode
 inside the bounds, and holds the entries a walk makes to linear in the depth and
 to a constant past the bounds.
+
+## A tree of scalars is read by each value's type
+
+A definition whose body is a union of scalar kinds, refinements of `float` by
+order bounds the index holds as floats, a list of the definition and a mapping
+of `str` keys to it is a tree of scalars (`TreePlan` in `check/index.rs`): the
+values `json.loads` returns, `recursive(lambda j: None | bool | int | str |
+list[j] | dict[str, j] | Annotated[float, Ge(-inf)])`, are one, and
+`recursive(lambda t: int | list[t])` another. Every member asks a value's type
+before anything in it, so the general walk spends a reference, its pair on the
+trail, the union's level and a branch per member around a question the value's
+exact type answers, and a float walks both containers' members before the
+refinement the union sorts last. `tree_member` in `check/walk/tree.rs` asks the
+exact type once: a scalar is the plan's answer for its type, a float its bounds
+compared as two floats, as `floats_compared` compares them, and a list or a dict
+enters its pair on the trail and reads what it holds the same way, against the
+count its scan took.
+
+**Its answer is the walk's, because it settles only what the walk could not
+stop on and runs no Python for.** A value of an exact builtin type is read here
+where the three levels to its deepest type test -- the union, the member, a
+refinement's base -- are free and its pair is below the trail's bound. Any
+other value -- a subclass, a parsed value, a container inside itself, a value
+near either bound -- is handed to the general walk at the level and with the trail
+that walk would hold there, so it stops, records and runs Python as it would
+have, and a container that moves is a move. The reference's arm asks for the
+reading in the plain fast walk alone. A walk that explains or settles a
+complement reads the definition generally, and so does one with a memo armed:
+a kept walk reads how deep the walks inside it reached, which the reading does
+not count, so kept beside it, an answer would claim a room no walk measured,
+and a deeper walk of the same pair would take it where the walk stops. The
+index holds no plan on `PyPy`, where a level the walk opens asks the stack
+probe the reading would pass.
+
+`a_tree_of_scalars_is_read_as_the_walk_reads_it` in `check/walk/interpreter.rs`
+holds the verdict, the stop, the moves, a fatal signal and the report to the
+general walk's in every mode, for five trees, over a value of every exact type
+and a subclass of each, at the root and inside each container, from starts at
+both bounds; `an_armed_memo_reads_a_tree_of_scalars_as_the_walk_does` holds the
+memo's half, and `a_tree_of_scalars_is_read_as_far_as_the_bounds_let_it` how
+far down a chain the reading reads, which no verdict shows.
 
 ## The limit
 

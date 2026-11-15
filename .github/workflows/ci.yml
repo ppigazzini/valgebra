@@ -84,6 +84,7 @@ env:
     crates/valgebra-py/src/check/walk/record.rs
     crates/valgebra-py/src/check/walk/scalar.rs
     crates/valgebra-py/src/check/walk/sequence.rs
+    crates/valgebra-py/src/check/walk/tree.rs
     crates/valgebra-py/src/check/ctx.rs
     crates/valgebra-py/src/check/index.rs
     crates/valgebra-py/src/check/memo.rs

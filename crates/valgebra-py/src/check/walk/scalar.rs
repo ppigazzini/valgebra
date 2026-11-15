@@ -30,7 +30,7 @@ use super::{
     reads_its_length, record_fatal, record_if_fatal, record_stop, stop, stopped,
 };
 use crate::check::ctx::Ctx;
-use crate::check::index::matches_unindexed;
+use crate::check::index::{matches_unindexed, ordered};
 use crate::check::violation::{mismatch, summarize_in, summarize_value};
 use crate::codes::{
     Code, GREATER_THAN, GREATER_THAN_EQUAL, LESS_THAN, LESS_THAN_EQUAL, LITERAL_ERROR, MULTIPLE_OF,
@@ -826,12 +826,7 @@ pub(super) fn floats_compared(
 ) -> Option<bool> {
     let number = value.cast_exact::<PyFloat>().ok()?.value();
     let operand = ctx.index.float_operand(index.get())?;
-    Some(match op {
-        CompareOp::Ge => number >= operand,
-        CompareOp::Gt => number > operand,
-        CompareOp::Le => number <= operand,
-        _ => number < operand,
-    })
+    Some(ordered(number, op, operand))
 }
 
 /// Record that `value` fails the order bound `op` makes with `bound`.

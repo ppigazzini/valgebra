@@ -81,6 +81,7 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "binding-object-walk": ("_lists_with_readers",),
     "binding-relation": ("_relations",),
     "binding-keys": ("_documents",),
+    "binding-recursive": ("_documents",),
     "binding-pattern": ("_lists_with_readers",),
     "binding-deep": ("_containers",),
     "binding-refined": ("_lists_with_readers",),
@@ -126,14 +127,6 @@ UNTRAINED: dict[str, str] = {
         "JSON records under a length bound, whose length is the count of the "
         "keys a parsed object holds: no call here validates a JSON document "
         "against a bounded mapping. " + _JSON_UNTRAINED
-    ),
-    "binding-recursive": (
-        "A value walked against a recursive schema, entering the reference and "
-        "its trail per level. The JSON reference's training reaches the "
-        "reference and the trail the two walks share, which took this shape "
-        "about a fifth faster on CPython 3.14; trained on its own as well, it "
-        "read 0.5% more instructions here and in the list nested twenty-five "
-        "deep."
     ),
     "binding-memo": (
         "A definition two list branches read at each level of a chain, whose "
@@ -355,6 +348,32 @@ def _documents() -> None:
         ],
         4000,
     )
+    # The values `json.loads` returns, a recursive union read by each value's
+    # type: a document of every kind of JSON value accepted, and the same with
+    # a tuple deep in it refused.
+    json_value = recursive(
+        lambda value: union(
+            None,
+            bool,
+            int,
+            str,
+            Annotated[float, _AtLeast(float("-inf"))],
+            list[value],  # ty: ignore[invalid-type-form]
+            dict[str, value],  # ty: ignore[invalid-type-form]
+        )
+    )
+    document = [
+        {
+            "id": i,
+            "name": "Ada",
+            "score": i + 0.5,
+            "tags": ["a", "b"],
+            "ok": True,
+            "up": None,
+        }
+        for i in range(50)
+    ]
+    _run(json_value.is_valid, [document, [*document, {"tags": [(1,)]}]], 400)
 
 
 def _json_documents() -> None:

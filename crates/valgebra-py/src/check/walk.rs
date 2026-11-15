@@ -58,6 +58,7 @@ use crate::oracle::special_lookup;
 mod record;
 mod scalar;
 mod sequence;
+mod tree;
 
 use record::{
     Decided, check_attr_record, check_keyed_map_apart, keyed_map_explain, keyed_map_matches,
@@ -67,6 +68,7 @@ use scalar::{
     scalar_member, scalar_of,
 };
 use sequence::{check_frozenset, check_seq, check_set};
+use tree::tree_member;
 
 pub(crate) use scalar::root_scalar;
 
@@ -591,7 +593,19 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
         // and lay out `member` around the call, which the profiled shape of a
         // list nested twenty-five deep, which enters no definition, reads as
         // 3.6% more.
+        //
+        // A definition read as a tree of scalars is answered by a Python
+        // value's types where a fast walk keeps nothing ([`tree_member`]),
+        // which enters the definition where it answers. Two tests here and the
+        // rest out of line, since a reference in a validator with no such
+        // definition, or one the reading declines, pays what this arm carries.
         Schema::Ref(id) => {
+            if ctx.index.has_trees()
+                && let Value::Py(_) = value
+                && let Some(admitted) = tree_member(*id, schema, value, frame)
+            {
+                return admitted;
+            }
             if ctx.state.memo.enter() && ctx.index.memo.remembers(*id) {
                 return remembered_ref(*id, value, frame);
             }

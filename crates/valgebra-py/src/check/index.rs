@@ -1,6 +1,7 @@
 //! The per-validator precompute: record-field lookups, literal-union decision
 //! tables, and compiled string patterns, built once and reused across calls.
 
+use pyo3::basic::CompareOp;
 use pyo3::prelude::*;
 use pyo3::types::{PyFloat, PyInt, PyString};
 use regex_automata::util::syntax;
@@ -9,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
-use valgebra_core::{Constraint, Schema};
+use valgebra_core::{Constraint, DefIx, Schema, SeqKind};
 
 use super::memo::{self, MemoPlan};
 use crate::input::Value;
@@ -206,6 +207,116 @@ impl TaggedPlan {
 
 /// Each tagged union's members-buffer address mapped to its [`TaggedPlan`].
 pub(crate) type TaggedIndex = FxHashMap<usize, TaggedPlan>;
+
+/// A definition whose body is a union of which every member is a scalar kind, a
+/// refinement of `float` by order bounds the index holds as floats, a list of
+/// the definition, or a mapping of `str` keys to it: a tree of scalars. The
+/// values `json.loads` returns are one, `recursive(lambda j: None | bool | int
+/// | str | list[j] | dict[str, j] | Annotated[float, Ge(-inf)])`, and
+/// `recursive(lambda t: int | list[t])` is another.
+///
+/// Every member reads a value's type before anything in it, and only the two
+/// containers read further, each of them the definition again for every value
+/// it holds. So a value of an exact builtin type is admitted by the members
+/// that type reaches, and a list or a dict by the same question asked of what
+/// it holds (`tree_member` in `check/walk/tree.rs`). This holds which exact
+/// types the members reach, read once a validator.
+#[derive(Default)]
+pub(crate) struct TreePlan {
+    /// The exact types some member reaches, one bit each ([`Exact`]): every
+    /// value of a scalar type, and a list or a dict to be read on.
+    reached: u8,
+    /// Each refinement of `float`, as its order bounds' comparisons and
+    /// operands: an exact float is admitted by one whose every bound holds.
+    bounded: Vec<Box<[(CompareOp, f64)]>>,
+}
+
+/// An exact builtin type a [`TreePlan`] reads a value of, as its bit.
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub(crate) enum Exact {
+    None = 1,
+    Bool = 1 << 1,
+    Int = 1 << 2,
+    Float = 1 << 3,
+    Str = 1 << 4,
+    Bytes = 1 << 5,
+    List = 1 << 6,
+    Dict = 1 << 7,
+}
+
+impl TreePlan {
+    /// The plan for the definition at `def` whose body is `body`, or `None`
+    /// where the body is no union, a member is any other node, or no member is
+    /// a container.
+    fn of(def: usize, body: &Schema, index: &ValidatorIndex) -> Option<TreePlan> {
+        let Schema::Union(members) = body else {
+            return None;
+        };
+        let itself =
+            |schema: Option<&Schema>| matches!(schema, Some(Schema::Ref(id)) if id.get() == def);
+        let mut plan = TreePlan::default();
+        for member in members.iter() {
+            let reached = match member {
+                Schema::NoneType => Exact::None as u8,
+                Schema::Bool => Exact::Bool as u8,
+                Schema::Int => Exact::Int as u8,
+                Schema::Float => Exact::Float as u8,
+                Schema::Str => Exact::Str as u8,
+                Schema::Bytes => Exact::Bytes as u8,
+                Schema::Refine { base, constraints } if matches!(**base, Schema::Float) => {
+                    let bounds = constraints
+                        .iter()
+                        .map(|constraint| {
+                            let (op, operand) = match constraint {
+                                Constraint::Ge(i) => (CompareOp::Ge, i),
+                                Constraint::Gt(i) => (CompareOp::Gt, i),
+                                Constraint::Le(i) => (CompareOp::Le, i),
+                                Constraint::Lt(i) => (CompareOp::Lt, i),
+                                _ => return None,
+                            };
+                            Some((op, index.float_operand(operand.get())?))
+                        })
+                        .collect::<Option<Box<[_]>>>()?;
+                    plan.bounded.push(bounds);
+                    0
+                }
+                Schema::Seq {
+                    container: SeqKind::List,
+                    shape,
+                } if shape.prefix.is_empty() && itself(shape.tail.as_deref()) => Exact::List as u8,
+                Schema::KeyedMap { fields, defaults }
+                    if fields.is_empty()
+                        && matches!(&defaults[..], [clause]
+                            if matches!(clause.key, Schema::Str) && itself(Some(&clause.value))) =>
+                {
+                    Exact::Dict as u8
+                }
+                _ => return None,
+            };
+            plan.reached |= reached;
+        }
+        (plan.reaches(Exact::List) || plan.reaches(Exact::Dict)).then_some(plan)
+    }
+
+    /// Whether some member reaches a value of the exact type `exact`: admits
+    /// every one, for a scalar type, and reads it on, for a container.
+    #[inline]
+    pub(crate) fn reaches(&self, exact: Exact) -> bool {
+        self.reached & exact as u8 != 0
+    }
+
+    /// Whether an exact float holding `number` is admitted.
+    #[inline]
+    pub(crate) fn admits_float(&self, number: f64) -> bool {
+        self.reaches(Exact::Float)
+            || self.bounded.iter().any(|bounds| {
+                bounds
+                    .iter()
+                    .all(|&(op, operand)| ordered(number, op, operand))
+            })
+    }
+}
 
 /// A compiled pattern: the engine `regex` builds a `Regex` on, built as it
 /// builds one ([`compile_pattern`]), so it matches the same language and can
@@ -492,9 +603,38 @@ pub(crate) struct ValidatorIndex {
     /// holds none, and a schema with no order bound has no table, so no answer
     /// depends on it: the rich comparison reads what it does not hold.
     float_operands: Vec<Option<f64>>,
+    /// The plan of each definition read as a tree of scalars ([`TreePlan`]),
+    /// at its place in the definitions table, and none where no definition is
+    /// one, so the reference's arm asks one word of a validator with none. One
+    /// word, which the table's alignment leaves free: a field of two moves every
+    /// frame that holds a validator. Not built on `PyPy`, whose walk asks its
+    /// own stack probe at every level the reading would pass.
+    trees: Option<Box<Trees>>,
 }
 
+/// Each definition's tree plan at its place in the definitions table.
+struct Trees(Vec<Option<TreePlan>>);
+
 impl ValidatorIndex {
+    /// Whether some definition is read as a tree of scalars.
+    #[inline]
+    pub(crate) fn has_trees(&self) -> bool {
+        self.trees.is_some()
+    }
+
+    /// The plan of the definition `def`, where it is read as a tree of scalars.
+    #[inline]
+    pub(crate) fn tree(&self, def: DefIx) -> Option<&TreePlan> {
+        self.trees.as_ref()?.0.get(def.get())?.as_ref()
+    }
+
+    /// Drop every tree plan, so the walk reads each definition generally: what
+    /// the tests hold the reading to.
+    #[cfg(all(test, feature = "interpreter-tests"))]
+    pub(crate) fn forget_trees(&mut self) {
+        self.trees = None;
+    }
+
     /// The float the order bound's operand at `slot` is exactly, where the index
     /// holds one.
     #[inline]
@@ -579,7 +719,26 @@ pub(crate) fn build_index_from(
         collect(py, def, pool, &mut index);
     }
     index.memo = memo::plan(py, schema, defs, pool);
+    if !cfg!(PyPy) {
+        hold_tree_plans(defs, &mut index);
+    }
     index
+}
+
+/// Hold each definition's [`TreePlan`] at its place in `defs`, and nothing
+/// where no definition is a tree of scalars. Out of line: the index is built
+/// where a validator is first used, and inlined there the plans grow the frame
+/// of every caller that builds one.
+#[inline(never)]
+fn hold_tree_plans(defs: &[Schema], index: &mut ValidatorIndex) {
+    let trees: Vec<_> = defs
+        .iter()
+        .enumerate()
+        .map(|(def, body)| TreePlan::of(def, body, index))
+        .collect();
+    if trees.iter().any(Option::is_some) {
+        index.trees = Some(Box::new(Trees(trees)));
+    }
 }
 
 fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut ValidatorIndex) {
@@ -695,6 +854,19 @@ pub(crate) fn float_operand(operand: &Bound<'_, PyAny>) -> Option<f64> {
         reason = "an integer of at most 2^53 is a float exactly"
     )]
     (whole.unsigned_abs() <= 1 << 53).then_some(whole as f64)
+}
+
+/// What the order bound `op` makes of two floats, `number` against `operand`:
+/// the comparison an exact `float` and an operand [`float_operand`] holds make
+/// in Python, `nan` refused by every bound.
+#[inline]
+pub(crate) fn ordered(number: f64, op: CompareOp, operand: f64) -> bool {
+    match op {
+        CompareOp::Ge => number >= operand,
+        CompareOp::Gt => number > operand,
+        CompareOp::Le => number <= operand,
+        _ => number < operand,
+    }
 }
 
 /// Build a [`UnionPlan`] when every union member is a literal, bucketing the

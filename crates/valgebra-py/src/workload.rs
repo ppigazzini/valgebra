@@ -231,8 +231,10 @@ pub enum BindingShape {
     /// One of the three shapes that enter a reference, beside the JSON
     /// recursive document and [`Memo`](BindingShape::Memo). Every other shape
     /// walks a schema with no `Ref` in it, so the trail the walk keeps to refuse
-    /// a cyclic value -- entered and left once per level, per value -- is
-    /// reached by none of them, and a change to how it is held reads as free. The
+    /// a cyclic value -- entered and left once per list -- is reached by none of
+    /// them, and a change to how it is held reads as free. The definition is a
+    /// tree of scalars, so the walk reads it by each value's type
+    /// (`tree_member`), and this is the shape that counts that reading. The
     /// recursive schema is also the one a caller writes for a JSON document or
     /// a syntax tree, which is the shape most likely to carry real depth.
     Recursive,
@@ -1106,11 +1108,11 @@ fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {
 
 /// The recursive schema's own shape: `mu X. int | list[X]` over a nested list.
 ///
-/// Eight levels of nesting, each a one-element list, so the walk enters and
-/// leaves the reference eight times per iteration and the leaf is an integer.
-/// A one-element list at each level rather than a wide one keeps what is
-/// counted the *descent* -- the reference, the trail, and the union choice --
-/// rather than a list loop the homogeneous shapes already measure.
+/// Eight levels of nesting, each a one-element list, so the walk enters the
+/// trail eight times per iteration and the leaf is an integer. A one-element
+/// list at each level rather than a wide one keeps what is counted the
+/// *descent* -- the reference, the trail, and the reading of each value's type
+/// -- rather than a list loop the homogeneous shapes already measure.
 ///
 /// The value is built once, outside the loop, like every shape here.
 fn recursive_walk(py: Python<'_>, iters: usize) -> u64 {

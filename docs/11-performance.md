@@ -767,7 +767,7 @@ program that builds validators per request, and to no validation call.
   fast frame for every entry its clauses are asked of (`covered` in
   `check/walk/record.rs`), rather than a pair built and dropped per branch and
   per key: a recursive schema's descent costs 10% fewer instructions that way
-  (`--binding-recursive`). A record's deciding pass reads over its caller's
+  (`--binding-memo`). A record's deciding pass reads over its caller's
   buffers in a fast frame, and keeps its progress only where the walk explains
   a record it refuses (`check_keyed_map`): a list of two hundred records costs
   4.8% fewer instructions that way, and a record the walk reaches alone 2.9%. The scan reads the frame's context where it lies,
@@ -792,6 +792,23 @@ program that builds validators per request, and to no validation call.
   `check/ctx.rs`), so nothing is hashed. The first level reserves `FIRST_TRAIL`
   pairs in one small request, and a walk that enters no reference allocates
   nothing (`--binding-recursive`).
+- **A tree of scalars is read by each value's type.** A definition whose union
+  holds only scalar kinds, refinements of `float` by order bounds, a list of the
+  definition and a mapping of `str` keys to it -- the values `json.loads`
+  returns, `int | list[t]` -- is asked each value's exact type once
+  (`tree_member` in `check/walk/tree.rs`, over `TreePlan` in `check/index.rs`),
+  where the walk spends a reference, its pair on the trail, the union's level
+  and a branch per member around the same question. On the profiled CPython
+  3.15 wheel the JSON values over two hundred records of every kind of JSON
+  value cost 73% fewer instructions and `int | list[t]` over a tree twelve deep
+  61%, and `--binding-recursive` 46% on the build without a profile. A value of
+  no exact builtin type, one near either bound and one inside itself are handed
+  to the walk where it would have reached them, and a walk that explains,
+  settles a complement or has a memo armed reads the definition generally; a
+  test holds the reading to the walk's verdict, stop, moves and fatal signal.
+  The index holds the plans behind one word, and the reference's arm asks
+  whether it holds any and whether the value is a Python one, so a validator
+  with no such definition pays a load and a comparison a reference.
 
 ### Sequences and sets
 
@@ -1411,6 +1428,15 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
 - **A tagged union's test at the first branch walked**, rather than before the
   scan: a union of scalars reads 0.37% cheaper, and a recursive schema 0.83%
   dearer and a union of literals 0.18% dearer, for the same two tests.
+- **A definition's tree plan asked by its bit in a `u128`**: the shift of two
+  words is thirteen instructions at every reference, which a recursive schema
+  with no tree of scalars pays, and `--binding-memo` read 2.1% dearer on the
+  build without a profile. The arm asks whether the index holds a plan at all.
+- **The tree plans held in two words of the validator's index**: its fields
+  fill 248 bytes under an alignment of 16, so a second word grows it to 272,
+  and every frame holding a validator is laid out anew: `--binding-boundary`
+  read 2.9% dearer on the build without a profile, though it walks no
+  reference. One word fits the alignment's padding.
 
 ## Regression gate
 

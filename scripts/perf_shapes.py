@@ -114,11 +114,36 @@ def _tree(depth: int) -> object:
 
 _RECORDS = [{"id": i, "name": f"n{i}", "tags": ["a", "b"]} for i in range(200)]
 
+#: A document of every kind of JSON value: two hundred records of an integer, a
+#: string, a float, a list, a boolean and `None`.
+_DOCUMENT = [
+    {
+        "id": i,
+        "name": f"n{i}",
+        "score": i + 0.5,
+        "tags": ["a", "b"],
+        "ok": True,
+        "up": None,
+    }
+    for i in range(200)
+]
+
 
 def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
     v = vg.Validator
     deep_schema, deep_value = _deep(25)
     recursive = vg.recursive(lambda node: int | list[node])  # ty: ignore[invalid-type-form]
+    json_value = vg.recursive(
+        lambda value: vg.union(
+            None,
+            bool,
+            int,
+            str,
+            Annotated[float, _AtLeast(float("-inf"))],
+            list[value],  # ty: ignore[invalid-type-form]
+            dict[str, value],  # ty: ignore[invalid-type-form]
+        )
+    )
     return {
         "scalar": lambda: (v(int).is_valid, 5),
         "union": lambda: (v(int | str | None).is_valid, "x"),
@@ -195,6 +220,9 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
             ["deadbeef"] * 200,
         ),
         "recursive": lambda: (recursive.is_valid, _tree(12)),
+        # The values `json.loads` returns, as a recursive union over a document
+        # of every kind of JSON value.
+        "json_value": lambda: (json_value.is_valid, _DOCUMENT),
         "deep": lambda: (v(deep_schema).is_valid, deep_value),
         "validate": lambda: (v(_User).validate, _RECORDS[0]),
         "explain_scalar": lambda: (_refusing(v(int).validate), "x"),
