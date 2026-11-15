@@ -145,6 +145,11 @@ done
    <venv holding the published wheel>/bin/python scripts/metamorphic_gate.py --record
    ```
 
+   The environment lives outside the checkout: the recording names the commit of the
+   build it read, and a `valgebra` found under the checkout, a `perf_inspect.py`
+   environment in `target/` among them, is read as this tree's build and named by
+   `HEAD` rather than by the release's tag.
+
    Every later push is held to the answers that wheel gives, so a reference left on an
    older release holds a push to answers no user has, and a regression against the
    last one passes. The diff is read: every move is a widening or is a change this

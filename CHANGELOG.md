@@ -37,6 +37,18 @@ free-threaded 3.14 and 3.15 a shape of a few thousand instructions counts 3% to 
 build to another, either way, the count 0.0.26's section names as not repeating; the shapes past
 that count within 3%.
 
+Read on the wheels PyPI serves, two environments of each release on each of CPython 3.11
+through 3.15, on an AMD Ryzen 7 PRO 7840U under WSL2, every shape counts within 2% of 0.0.26's
+instructions but one: a relation between two built validators counts 2.6% to 3.2% fewer, the one
+oracle named above, and takes 6% to 10% less time on 3.11, 3.12, 3.13 and 3.15. Fifteen shapes
+moved by 5% or more at the instructions 0.0.26's wheel counts, which is where each build placed
+its loop, and none is charged to a change. Slower: on 3.15 `list[bool]` 31%, `list[float]` 19%,
+`list[str]` 16% and `list[int | str]` 13%; on 3.12 `list[int | None]` 5%. Faster: on 3.15
+`list[None]` 39%, ten thousand integers 26% and the list nested twenty-five deep 9% to 10%; on
+3.13 `list[None]` and `list[bool]` 17% and a record 5% to 6%; on 3.12 `list[None]` 15%,
+`list[int | str]` 9% to 10% and the JSON values' parsed document 8%; on 3.14 `list[int | None]`
+6% to 7%.
+
 ### Fixed
 
 - **A question asked inside a `recursive` builder proves nothing about its placeholder.** The
