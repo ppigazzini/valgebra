@@ -330,8 +330,9 @@ its table:
 - the memo's plan: which definitions the walk may remember, and the unions,
   meets and clause lists two of whose members reach one in common (`MemoPlan`
   in `check/memo.rs`);
-- which exact types each definition read as a tree of scalars reaches
-  (`TreePlan`, [below](#a-tree-of-scalars-is-read-by-each-values-type)).
+- what each leaf a list holds answers for each exact builtin type, and each
+  definition read as a tree of scalars (`LeafPlan` and `TreePlan`,
+  [below](#a-leaf-is-decided-by-a-values-type-and-number)).
 
 A thread that finds another building them waits **detached** from the
 interpreter. The build interns strings, and on a free-threaded interpreter that
@@ -1161,27 +1162,68 @@ walk without it, answer for answer and violation for violation, in every mode
 inside the bounds, and holds the entries a walk makes to linear in the depth and
 to a constant past the bounds.
 
+## A leaf is decided by a value's type and number
+
+A union, a meet or a complement of scalar kinds, refinements of `int` by order
+bounds whose operands are exact `int`s a machine word holds, and refinements of
+`float` by order bounds and steps whose operands a float holds is a leaf
+(`Leaf` and `LeafPlan` in `check/index.rs`): JSON Schema's `integer`, `(int |
+Annotated[float, MultipleOf(1)]) & ~bool`, is one, and its `number` another.
+Every node of one asks a value's type before anything in it, and for a value
+of an exact builtin type none runs Python or reads past the number: a
+complement's inner walk decides, and a refinement's comparison and step are the
+two numbers' own (`floats_compared`, and `%` over two floats, which is the
+remainder `fmod` leaves). So the plan specializes the leaf to each exact type
+once a validator: each kind folds to the top or the bottom, which a meet and a
+union absorb, and what is left is a constant, or the test of the number --
+`integer` is `true` for an `int`, `false` for a `bool` and a step for a
+`float`. The general walk spends a frame on each node around the same tests,
+and for the complement a settling walk of its own.
+
+A list of a leaf is read by each element's exact type and, where the type
+leaves it open, its number (`leaf_list_read` in `walk/sequence.rs`, asked from
+the list arm's reader after the readers of a union of scalars and of a named
+tuple decline, and only where the index holds a reading: a test of the
+index's one word keeps those readers' tail calls for a validator holding
+none, and a union of scalar kinds, which has its reader, holds no plan). An element the plan admits is admitted, as the walk
+admits it and records nothing of it; one it refuses is refused where the walk
+explains nothing; and every other -- a subclass, another type, an `int` past a
+word whose number the leaf reads, a refusal a walk that explains reports -- is
+walked at its position in the walk's own mode. The reader takes a list only
+where the levels to the leaf's deepest type test are free below the list's
+(`LeafPlan::levels`), so the walk could not stop on an element the plan
+decides. `a_list_of_leaves_is_read_as_the_walk_reads_it` in
+`check/walk/interpreter.rs` holds the verdict, the stop, the moves, a fatal
+signal and the report to the general loop's for eight leaves over every exact
+type, subclasses and numbers at the edges of a word, of the floats and of a
+step, and a list that moves, and `a_list_of_leaves_is_read_where_its_levels_are_free`
+where it declines. In `tests/test_universe.py`,
+`test_a_list_of_numbers_answers_as_the_walk_of_the_same_set` holds a list of
+every number set the universe's tests build to the walk of the same set spelled
+with a member that keeps the reading away.
+
 ## A tree of scalars is read by each value's type
 
-A definition whose body is a union of scalar kinds, refinements of `float` by
-order bounds the index holds as floats, a list of the definition and a mapping
-of `str` keys to it is a tree of scalars (`TreePlan` in `check/index.rs`): the
-values `json.loads` returns, `recursive(lambda j: None | bool | int | str |
-list[j] | dict[str, j] | Annotated[float, Ge(-inf)])`, are one, and
-`recursive(lambda t: int | list[t])` another. Every member asks a value's type
-before anything in it, so the general walk spends a reference, its pair on the
-trail, the union's level and a branch per member around a question the value's
-exact type answers, and a float walks both containers' members before the
-refinement the union sorts last. `tree_member` in `check/walk/tree.rs` asks the
-exact type once: a scalar is the plan's answer for its type, a float its bounds
-compared as two floats, as `floats_compared` compares them, and a list or a dict
-enters its pair on the trail and reads what it holds the same way, against the
-count its scan took.
+A definition whose body is a union of leaves refusing every list and dict, a
+list of the definition and a mapping of `str` keys to it is a tree of scalars
+(`TreePlan` in `check/index.rs`): the values `json.loads` returns,
+`recursive(lambda j: None | bool | int | str | list[j] | dict[str, j] |
+Annotated[float, Ge(-inf)])`, are one, the universes page's spelling with its
+numbers a meet another, and `recursive(lambda t: int | list[t])` a third. Every
+member asks a value's type before anything in it, so the general walk spends a
+reference, its pair on the trail, the union's level and a branch per member
+around a question the value's exact type answers, and a float walks both
+containers' members before the refinement the union sorts last. `tree_member` in
+`check/walk/tree.rs` asks the exact type once: a scalar is the leaves' answer
+for its type and number, and a list or a dict enters its pair on the trail and
+reads what it holds the same way, against the count its scan took. A leaf that
+admitted a list or a dict would decide the container without reading it, so a
+tree's leaves refuse both.
 
 **Its answer is the walk's, because it settles only what the walk could not
 stop on and runs no Python for.** A value of an exact builtin type is read here
-where the three levels to its deepest type test -- the union, the member, a
-refinement's base -- are free and its pair is below the trail's bound. Any
+where the levels to its deepest type test -- the union, and its leaves' own --
+are free and its pair is below the trail's bound. Any
 other value -- a subclass, a parsed value, a container inside itself, a value
 near either bound -- is handed to the general walk at the level and with the trail
 that walk would hold there, so it stops, records and runs Python as it would
@@ -1196,7 +1238,7 @@ probe the reading would pass.
 
 `a_tree_of_scalars_is_read_as_the_walk_reads_it` in `check/walk/interpreter.rs`
 holds the verdict, the stop, the moves, a fatal signal and the report to the
-general walk's in every mode, for five trees, over a value of every exact type
+general walk's in every mode, for six trees, over a value of every exact type
 and a subclass of each, at the root and inside each container, from starts at
 both bounds; `an_armed_memo_reads_a_tree_of_scalars_as_the_walk_does` holds the
 memo's half, and `a_tree_of_scalars_is_read_as_far_as_the_bounds_let_it` how

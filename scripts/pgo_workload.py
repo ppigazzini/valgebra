@@ -199,6 +199,15 @@ class _AtLeast:
         self.ge = ge
 
 
+class _Step:
+    """A step, carried as `annotated_types.MultipleOf` carries one."""
+
+    __module__ = "annotated_types"
+
+    def __init__(self, multiple_of: float) -> None:
+        self.multiple_of = multiple_of
+
+
 def _run(check: Check, samples: Sequence[object], rounds: int) -> None:
     for _ in range(rounds):
         for value in samples:
@@ -261,6 +270,11 @@ def _lists_with_readers() -> None:
     # at one count, its path's instructions the same and its layout another.
     measures = Validator(list[Annotated[float, _AtLeast(0.0)]])
     _run(measures.is_valid, [[1.5, 2.5] * 12, [1.5, -1.0]], 500)
+    # A list of JSON Schema's numbers, a meet of a union and a complement each
+    # element's type and number decide: integers and integral floats, and the
+    # same with a `bool`, which the complement refuses. The weight of the floats'.
+    integer = intersection(int | Annotated[float, _Step(1)], complement(bool))
+    _run(Validator([integer]).is_valid, [[1, 2.0] * 12, [1, True]], 500)
 
 
 def _records() -> None:

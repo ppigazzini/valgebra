@@ -12,20 +12,16 @@
 use std::ops::ControlFlow;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
+use pyo3::types::{PyDict, PyList, PyString};
 use valgebra_core::{DefIx, Schema};
 
 use super::record::scan_dict;
+use super::scalar::{exact_of, leaf_admits};
 use super::sequence::scan_list;
 use super::{Frame, Scan, member, record_move};
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
 use crate::check::index::{Exact, TreePlan};
 use crate::input::Value;
-
-/// The levels the general walk opens below a value's reference before its
-/// deepest type test: the union the definition is, its member, and the base of
-/// a refinement of `float`, which a refinement asks a level below itself.
-pub(super) const TO_A_LEAF: usize = 3;
 
 /// The levels from a container's reference to each element's: the union, the
 /// container's member, and the element's reference.
@@ -60,7 +56,7 @@ pub(super) fn tree_member(
     };
     let plan = ctx.index.tree(id)?;
     let height = ctx.state.guard.borrow().height();
-    if ctx.state.memo.is_armed() || !readable(ctx.state.depth.get(), height) {
+    if ctx.state.memo.is_armed() || !readable(plan, ctx.state.depth.get(), height) {
         return None;
     }
     let admitted = read(plan, id, schema, value, frame)?;
@@ -70,15 +66,16 @@ pub(super) fn tree_member(
 
 /// Whether a value whose reference stands `depth` levels down, with `height`
 /// pairs on the trail beside its own, is read here: where the levels to its
-/// deepest type test are free and its pair is below the trail's bound, so the
-/// walk could not stop on it.
-fn readable(depth: usize, height: usize) -> bool {
-    depth + TO_A_LEAF <= MAX_WALK_DEPTH && height < MAX_RECURSION_DEPTH
+/// deepest type test are free -- the union the definition is, and its leaves'
+/// own ([`LeafPlan::levels`](crate::check::index::LeafPlan::levels)) -- and its pair is below the trail's bound, so
+/// the walk could not stop on it.
+fn readable(plan: &TreePlan, depth: usize, height: usize) -> bool {
+    depth + plan.leaf.levels <= MAX_WALK_DEPTH && height < MAX_RECURSION_DEPTH
 }
 
 /// What a value is, read by its exact type, with its reference's level open
 /// and the levels and the trail entry its type tests take free; `None` for a
-/// type no member is settled by.
+/// value the walk must read.
 fn read(
     plan: &TreePlan,
     id: DefIx,
@@ -86,33 +83,14 @@ fn read(
     value: &Bound<'_, PyAny>,
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
-    if value.is_exact_instance_of::<PyString>() {
-        Some(plan.reaches(Exact::Str))
-    } else if value.is_exact_instance_of::<PyInt>() {
-        Some(plan.reaches(Exact::Int))
-    } else if let Ok(number) = value.cast_exact::<PyFloat>() {
-        Some(plan.admits_float(number.value()))
-    } else if let Ok(dict) = value.cast_exact::<PyDict>() {
-        if plan.reaches(Exact::Dict) {
-            entries_read(plan, id, schema, dict, frame)
-        } else {
-            Some(false)
+    match exact_of(value)? {
+        Exact::Dict if plan.reads(Exact::Dict) => {
+            entries_read(plan, id, schema, value.cast_exact::<PyDict>().ok()?, frame)
         }
-    } else if let Ok(list) = value.cast_exact::<PyList>() {
-        if plan.reaches(Exact::List) {
-            elements_read(plan, id, schema, list, frame)
-        } else {
-            Some(false)
+        Exact::List if plan.reads(Exact::List) => {
+            elements_read(plan, id, schema, value.cast_exact::<PyList>().ok()?, frame)
         }
-    } else if value.is_exact_instance_of::<PyBool>() {
-        // `bool` subclasses `int`, so a `bool` is an `int` too.
-        Some(plan.reaches(Exact::Bool) || plan.reaches(Exact::Int))
-    } else if value.is_none() {
-        Some(plan.reaches(Exact::None))
-    } else if value.is_exact_instance_of::<PyBytes>() {
-        Some(plan.reaches(Exact::Bytes))
-    } else {
-        None
+        exact => leaf_admits(&plan.leaf, value, exact),
     }
 }
 
@@ -120,10 +98,10 @@ fn read(
 /// its values is [`readable`] beneath it. `None` where they are not, and where
 /// the container is already on the trail, a value inside itself: the general
 /// walk reads both.
-fn opened(id: DefIx, container: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> Option<usize> {
+fn opened(plan: &TreePlan, id: DefIx, container: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> Option<usize> {
     let depth = ctx.state.depth.get();
     let mut trail = ctx.state.guard.borrow_mut();
-    if !readable(depth + TO_AN_ELEMENT, trail.height() + 1) {
+    if !readable(plan, depth + TO_AN_ELEMENT, trail.height() + 1) {
         return None;
     }
     match trail.enter((container.as_ptr() as usize, id.get())) {
@@ -156,7 +134,7 @@ fn elements_read(
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
     let ctx = frame.ctx;
-    let depth = opened(id, list.as_any(), ctx)?;
+    let depth = opened(plan, id, list.as_any(), ctx)?;
     ctx.state.depth.set(depth + TO_AN_ELEMENT);
     let mut admitted = true;
     let scan = scan_list(list, |_, item| {
@@ -181,7 +159,7 @@ fn entries_read(
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
     let ctx = frame.ctx;
-    let depth = opened(id, dict.as_any(), ctx)?;
+    let depth = opened(plan, id, dict.as_any(), ctx)?;
     ctx.state.depth.set(depth + TO_AN_ELEMENT);
     let mut admitted = true;
     let scan = scan_dict(dict, ctx.state, |key, item| {

@@ -597,10 +597,10 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
         // A definition read as a tree of scalars is answered by a Python
         // value's types where a fast walk keeps nothing ([`tree_member`]),
         // which enters the definition where it answers. Two tests here and the
-        // rest out of line, since a reference in a validator with no such
-        // definition, or one the reading declines, pays what this arm carries.
+        // rest out of line, since a reference in a validator with no reading,
+        // or one the reading declines, pays what this arm carries.
         Schema::Ref(id) => {
-            if ctx.index.has_trees()
+            if ctx.index.has_readings()
                 && let Value::Py(_) = value
                 && let Some(admitted) = tree_member(*id, schema, value, frame)
             {

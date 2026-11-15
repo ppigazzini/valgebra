@@ -792,10 +792,23 @@ program that builds validators per request, and to no validation call.
   `check/ctx.rs`), so nothing is hashed. The first level reserves `FIRST_TRAIL`
   pairs in one small request, and a walk that enters no reference allocates
   nothing (`--binding-recursive`).
+- **A leaf is decided by a value's type and number.** A union, meet or
+  complement of scalar kinds and of refinements of `int` and `float` by bounds
+  and steps -- JSON Schema's `integer` and `number` -- is specialized to each
+  exact builtin type once a validator (`LeafPlan` in `check/index.rs`): a
+  constant, or the test of the number left when each kind folds away. A list of
+  one reads each element's type and, where the type leaves it open, its number
+  (`leaf_list_read` in `check/walk/sequence.rs`), and walks any other element
+  in the walk's own mode. The list arm asks it behind a test of the index's one
+  word, so a validator holding no reading keeps the other readers' tail calls,
+  and a union of scalar kinds, which has a reader of its own, holds no plan. On the profiled CPython 3.15 wheel a thousand
+  integers against `integer` cost 92% fewer instructions, and a thousand floats
+  against `number` 83%; a test holds the reader to the general loop's verdict,
+  stop, moves, fatal signal and report in every mode.
 - **A tree of scalars is read by each value's type.** A definition whose union
-  holds only scalar kinds, refinements of `float` by order bounds, a list of the
-  definition and a mapping of `str` keys to it -- the values `json.loads`
-  returns, `int | list[t]` -- is asked each value's exact type once
+  holds only leaves refusing every list and dict, a list of the definition and a
+  mapping of `str` keys to it -- the values `json.loads` returns, `int |
+  list[t]` -- is asked each value's exact type once
   (`tree_member` in `check/walk/tree.rs`, over `TreePlan` in `check/index.rs`),
   where the walk spends a reference, its pair on the trail, the union's level
   and a branch per member around the same question. On the profiled CPython
@@ -806,9 +819,9 @@ program that builds validators per request, and to no validation call.
   to the walk where it would have reached them, and a walk that explains,
   settles a complement or has a memo armed reads the definition generally; a
   test holds the reading to the walk's verdict, stop, moves and fatal signal.
-  The index holds the plans behind one word, and the reference's arm asks
-  whether it holds any and whether the value is a Python one, so a validator
-  with no such definition pays a load and a comparison a reference.
+  The index holds the plans of leaves and trees behind one word, and the
+  reference's arm asks whether it holds any and whether the value is a Python
+  one, so a validator holding none pays a load and a comparison a reference.
 
 ### Sequences and sets
 
@@ -1432,6 +1445,17 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   words is thirteen instructions at every reference, which a recursive schema
   with no tree of scalars pays, and `--binding-memo` read 2.1% dearer on the
   build without a profile. The arm asks whether the index holds a plan at all.
+- **A leaf evaluated node by node at each element**: `number`, `(int | float >=
+  -inf) & ~bool`, walked as its meet, union and complement over a `float` costs
+  about 240 instructions where its specialization to `float` is one comparison,
+  and the JSON values over two hundred records read 18.5% dearer than with the
+  tree's own bounds. The plan specializes the leaf to each exact type at build.
+- **A reference's arm asking past one word whether a tree is held**: the plans
+  of leaves and trees share one word of the index, and asking for the trees
+  behind it is a load more in an arm inlined into every walk, which the
+  profiled wheel read three instructions a level dearer on a list nested
+  twenty-five deep, a walk that enters no reference. The arm asks the word
+  alone, and a validator holding leaves and no tree pays a call that declines.
 - **The tree plans held in two words of the validator's index**: its fields
   fill 248 bytes under an alignment of 16, so a second word grows it to 272,
   and every frame holding a validator is laid out anew: `--binding-boundary`

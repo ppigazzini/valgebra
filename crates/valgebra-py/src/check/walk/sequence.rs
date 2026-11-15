@@ -24,14 +24,14 @@ use valgebra_core::{
 use super::reads_its_length;
 use super::record::{RecordReading, check_attr_record, check_keyed_map};
 use super::scalar::{
-    Scalar, admitted_quietly, check_refine, constraints_hold, homogeneous_scalar_union,
-    machine_range, machine_word, scalar_union_admits,
+    Scalar, admitted_quietly, check_refine, constraints_hold, exact_of, homogeneous_scalar_union,
+    leaf_admits, machine_range, machine_word, scalar_union_admits,
 };
 use super::{
     Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
     mutated, reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
 };
-use crate::check::ctx::Ctx;
+use crate::check::ctx::{Ctx, MAX_WALK_DEPTH};
 use crate::check::violation::{summarize_value, type_fail};
 use crate::codes::{
     Code, FROZEN_SET_TYPE, LIST_LENGTH, LIST_TYPE, SET_TYPE, TUPLE_LENGTH, TUPLE_TYPE,
@@ -794,6 +794,13 @@ pub(super) fn element_list_matches(
         Schema::KeyedMap { fields, defaults } => {
             record_list_matches(list, prefix, fields, defaults, value, frame)
         }
+        // A union or a meet the reader of its own declines is a leaf where the
+        // index holds one, asked behind a test of the index's word: asked
+        // after every such reader, the leaf took the readers' tail calls for
+        // calls of their own, a dozen instructions a list of `int | None`.
+        Schema::Union(_) | Schema::Intersection(_) if frame.ctx.index.has_readings() => {
+            read_or_leaf(list, prefix, element, value, frame)
+        }
         Schema::Union(members) => {
             scalar_union_list_matches(list, prefix, element, members, value, frame)
         }
@@ -803,6 +810,9 @@ pub(super) fn element_list_matches(
             }
             _ => named_tuple_list_matches(list, prefix, element, members, value, frame),
         },
+        Schema::Complement(_) if frame.ctx.index.has_readings() => {
+            leaf_list_read(list, prefix, element, value, frame)
+        }
         Schema::Instance(index) => {
             instance_list_matches(list, prefix, element, *index, value, frame)
         }
@@ -827,6 +837,100 @@ pub(super) fn element_list_matches(
 /// `__instancecheck__`. The general loop paid a call and a dispatch around the
 /// pointer test, 130 instructions an element. A list is read in place unless a
 /// snapshot whose every element is exactly the class settles it.
+/// [`element_list_matches`] for a union or a meet, where the index holds a
+/// reading: the reader of a union of scalars or of a named tuple, and the
+/// element read as a leaf where that one declines.
+#[inline(never)]
+fn read_or_leaf(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let read = match element {
+        Schema::Union(members) => {
+            scalar_union_list_matches(list, prefix, element, members, value, frame)
+        }
+        Schema::Intersection(members) => match &members[..] {
+            [Schema::Instance(index), Schema::AttrRecord { fields }] => {
+                return class_record_list_matches(
+                    list, prefix, element, *index, fields, value, frame,
+                );
+            }
+            _ => named_tuple_list_matches(list, prefix, element, members, value, frame),
+        },
+        _ => None,
+    };
+    read.or_else(|| leaf_list_read(list, prefix, element, value, frame))
+}
+
+/// A list whose element is a union, a meet or a complement of leaves
+/// ([`LeafPlan`](crate::check::index::LeafPlan)), each element asked by its
+/// exact type and its number, or `None` where the index holds no plan for the
+/// element, or the levels to its deepest type test are not free.
+///
+/// The general loop walks each element through the meet, the union and the
+/// complement the leaf is made of, a frame each and a settling walk for the
+/// complement, around tests the element's type answers. Here an element the
+/// plan admits is admitted, as the walk admits it and records nothing of it,
+/// one it refuses is refused where the walk explains nothing, and every other
+/// -- a subclass, another type, an `int` past a word the plan reads, a refusal
+/// a walk that explains reports -- is walked at its position, in the walk's
+/// own mode. A test runs no Python, so the elements before a walked one are
+/// read as the walk reads them.
+///
+/// Asked where the index holds a reading, behind a test of its word: a list of
+/// a union that is no leaf -- `int | list[T] | list[T | str]` reads one at
+/// every level -- reached a call at each walk that found no plan, which the
+/// memo's shape of the instruction gate read 2.4% dearer.
+#[inline(never)]
+pub(super) fn leaf_list_read(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    let plan = ctx.index.leaf(element)?;
+    // An element's walk opens its level below the list's, and the plan's
+    // levels below that: free, the walk can stop on no element the plan
+    // decides.
+    if !prefix.is_empty() || ctx.state.depth.get() + plan.levels > MAX_WALK_DEPTH {
+        return None;
+    }
+    let explains = ctx.mode.explains();
+    let mut ok = true;
+    // The element's walk is spelled here rather than through `seq_element`,
+    // whose one call site keeps it inlined into the general loop: a second
+    // here laid out every walk of a nested list three instructions a level
+    // dearer on the profiled wheel.
+    let scan = scan_list(list, |at, item| {
+        ok &= match exact_of(item).and_then(|exact| leaf_admits(plan, item, exact)) {
+            Some(true) => true,
+            Some(false) if !explains => false,
+            _ if explains => {
+                frame.path.push(PathSegment::Index(at));
+                let admitted = member(element, &Value::Py(item), frame);
+                frame.path.pop();
+                admitted
+            }
+            _ => member(element, &Value::Py(item), frame),
+        };
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
+}
+
 pub(super) fn instance_list_matches(
     list: &Bound<'_, PyList>,
     prefix: &[Schema],

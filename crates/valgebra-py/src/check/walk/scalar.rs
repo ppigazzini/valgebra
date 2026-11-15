@@ -30,7 +30,7 @@ use super::{
     reads_its_length, record_fatal, record_if_fatal, record_stop, stop, stopped,
 };
 use crate::check::ctx::Ctx;
-use crate::check::index::{matches_unindexed, ordered};
+use crate::check::index::{Exact, LeafPlan, Number, matches_unindexed, ordered};
 use crate::check::violation::{mismatch, summarize_in, summarize_value};
 use crate::codes::{
     Code, GREATER_THAN, GREATER_THAN_EQUAL, LESS_THAN, LESS_THAN_EQUAL, LITERAL_ERROR, MULTIPLE_OF,
@@ -125,6 +125,48 @@ pub(super) fn scalar_member(
 ) -> Option<bool> {
     let kind = scalar_of(schema)?;
     room.then(|| !ctx.state.signals.fatal_seen.get() && scalar_admits(kind, value))
+}
+
+/// The exact builtin type of `value`, where it is one a reading of leaves and
+/// trees of scalars settles: a subclass, and any other type, is the walk's.
+#[inline]
+pub(super) fn exact_of(value: &Bound<'_, PyAny>) -> Option<Exact> {
+    Some(if value.is_exact_instance_of::<PyString>() {
+        Exact::Str
+    } else if value.is_exact_instance_of::<PyInt>() {
+        Exact::Int
+    } else if value.is_exact_instance_of::<PyFloat>() {
+        Exact::Float
+    } else if value.is_exact_instance_of::<PyDict>() {
+        Exact::Dict
+    } else if value.is_exact_instance_of::<PyList>() {
+        Exact::List
+    } else if value.is_exact_instance_of::<PyBool>() {
+        Exact::Bool
+    } else if value.is_none() {
+        Exact::None
+    } else if value.is_exact_instance_of::<PyBytes>() {
+        Exact::Bytes
+    } else {
+        return None;
+    })
+}
+
+/// What `plan` answers for `value`, whose exact type is `exact`, or `None`
+/// where the walk must read it: an `int` past a machine word whose number the
+/// leaf reads, which the comparison reads as the walk does.
+#[inline]
+pub(super) fn leaf_admits(plan: &LeafPlan, value: &Bound<'_, PyAny>, exact: Exact) -> Option<bool> {
+    if let Some(decided) = plan.decided(exact) {
+        return Some(decided);
+    }
+    let number = match exact {
+        Exact::Int => Number::Int(value.extract::<i64>().map_err(set_aside).ok()?),
+        Exact::Bool => Number::Int(i64::from(value.is_truthy().map_err(set_aside).ok()?)),
+        Exact::Float => Number::Float(value.cast_exact::<PyFloat>().ok()?.value()),
+        _ => Number::None,
+    };
+    Some(plan.holds(exact, number))
 }
 
 /// What [`member`] answers at the root of a walk for a schema that is one scalar

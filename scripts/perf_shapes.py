@@ -91,6 +91,15 @@ class _AtLeast:
         self.ge = ge
 
 
+class _Step:
+    """A step, carried as `annotated_types.MultipleOf` carries one."""
+
+    __module__ = "annotated_types"
+
+    def __init__(self, multiple_of: float) -> None:
+        self.multiple_of = multiple_of
+
+
 def _refusing(validate: Callable[..., object]) -> Callable[..., None]:
     def call(value: object) -> None:
         with contextlib.suppress(vg.ValidationError):
@@ -133,6 +142,9 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
     v = vg.Validator
     deep_schema, deep_value = _deep(25)
     recursive = vg.recursive(lambda node: int | list[node])  # ty: ignore[invalid-type-form]
+    not_bool = vg.complement(bool)
+    integer = vg.intersection(int | Annotated[float, _Step(1)], not_bool)
+    number = vg.intersection(int | Annotated[float, _AtLeast(float("-inf"))], not_bool)
     json_value = vg.recursive(
         lambda value: vg.union(
             None,
@@ -218,6 +230,13 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
         "pattern": lambda: (
             v(list[Annotated[str, vg.Regex(r"[0-9a-f]{8}")]]).is_valid,
             ["deadbeef"] * 200,
+        ),
+        # JSON Schema's `integer` and `number`, each a meet of a union and a
+        # complement, over a list of its numbers.
+        "list_integer": lambda: (v([integer]).is_valid, list(range(1000))),
+        "list_number": lambda: (
+            v([number]).is_valid,
+            [i + 0.5 for i in range(1000)],
         ),
         "recursive": lambda: (recursive.is_valid, _tree(12)),
         # The values `json.loads` returns, as a recursive union over a document

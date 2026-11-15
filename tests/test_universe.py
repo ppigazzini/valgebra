@@ -234,6 +234,43 @@ def test_a_leaf_of_one_spelling_tells_the_spellings_apart() -> None:
     assert both.relation_to(Literal[1]) == "not_subset"
 
 
+class _Int(int):
+    pass
+
+
+class _Float(float):
+    def __ge__(self, other: object) -> bool:
+        return True
+
+
+#: Values a list of numbers holds: the edges of a machine word and of the floats,
+#: a `bool`, a subclass of each number, and values of no number.
+_numbers = st.one_of(
+    st.integers(),
+    st.sampled_from([2**63 - 1, 2**63, -(2**63), -(2**63) - 1, 2**200, True, False]),
+    st.floats(),
+    st.builds(_Int, st.integers(-5, 5)),
+    st.builds(_Float, st.floats(-5, 5)),
+    st.sampled_from([None, "3", b"3", (3,), [3]]),
+)
+
+
+@given(_number_sets, st.lists(_numbers, max_size=6))
+def test_a_list_of_numbers_answers_as_the_walk_of_the_same_set(
+    written: Validator[Any], values: list[object]
+) -> None:
+    """A list of a number set answers as a list of its twin, read by the walk.
+
+    A set built from the numbers' kinds, bounds and steps decides a value of an
+    exact builtin type by its type and its number, and a list of one is read
+    that way. The twin holds the same values and a member none of these is,
+    which keeps it from that reading.
+    """
+    twin = Validator([union(written, frozenset[int])]).is_valid(values)
+    assert Validator([written]).is_valid(values) == twin
+    assert (values in Validator([written])) == twin
+
+
 def test_a_boolean_is_no_spelling_of_a_number() -> None:
     for written in (NUMBER, INTEGER, _bounded(at.Ge(0))):
         assert not written.is_valid(True)

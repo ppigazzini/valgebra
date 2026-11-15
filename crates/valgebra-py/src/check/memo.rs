@@ -266,7 +266,7 @@ fn overlap(mut reaches: impl Iterator<Item = u128>) -> bool {
 
 /// Call `visit` on each schema directly below `schema`, references not
 /// followed.
-fn for_each_child(schema: &Schema, visit: &mut impl FnMut(&Schema)) {
+pub(crate) fn for_each_child(schema: &Schema, visit: &mut impl FnMut(&Schema)) {
     match schema {
         Schema::Seq { shape, .. } => {
             shape.prefix.iter().for_each(&mut *visit);
