@@ -80,6 +80,7 @@ TRAINED: dict[str, tuple[str, ...]] = {
     "binding-object": ("_lists_with_readers", "_relations"),
     "binding-object-walk": ("_lists_with_readers",),
     "binding-relation": ("_relations",),
+    "binding-compose": ("_relations",),
     "binding-keys": ("_documents",),
     "binding-recursive": ("_documents",),
     "binding-pattern": ("_lists_with_readers",),

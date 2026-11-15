@@ -1405,7 +1405,12 @@ fn compose(py: Python<'_>, inner: &Validator, lits: &mut Pool, defs: &mut Vec<Sc
             .map(|o| lits.intern(o.bind(py)))
             .collect(),
     };
-    match place_definitions(&inner.definitions, &lit_map, defs) {
+    // An operand whose constants keep their slots, and whose definitions keep
+    // their places, is the handle it holds, where a remap would walk each of
+    // its nodes to find that none moves.
+    let kept = lit_map.iter().enumerate().all(|(at, &to)| at == to);
+    match place_definitions(&inner.definitions, &lit_map, kept, defs) {
+        Placed::Kept => inner.schema.clone(),
         Placed::Shifted(offset) => inner.schema.reindexed(&lit_map, DefShift::new(offset)),
         Placed::Renamed(table) => inner
             .schema
@@ -1423,6 +1428,9 @@ fn compose(py: Python<'_>, inner: &Validator, lits: &mut Pool, defs: &mut Vec<Sc
 /// what a placement that paired some definitions and appended others needs,
 /// and it costs a second pass over the tree.
 enum Placed {
+    /// Every definition at its own index, and every constant at its own slot:
+    /// nothing moves, so the merged schema is the handle it was.
+    Kept,
     /// Every definition `offset` past its own index.
     Shifted(usize),
     /// Each definition at the index the table gives it.
@@ -1623,9 +1631,25 @@ pub(crate) fn combine(
 /// definitions by, with constants read by slot; what it does not pair is
 /// appended. Both searches are quadratic in the definition count, which
 /// `MAX_DEFINITIONS` holds at 128, and paid once per merged validator.
-fn place_definitions(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>) -> Placed {
+fn place_definitions(
+    inner: &[Schema],
+    lit_map: &[usize],
+    kept: bool,
+    defs: &mut Vec<Schema>,
+) -> Placed {
+    // Where `kept`, every constant keeps its slot, so a definition placed at
+    // its own index is the handle it was: a table that holds nothing yet takes
+    // the block as it stands, and one holding it at its start already holds it.
     if inner.is_empty() {
-        return Placed::Shifted(defs.len());
+        return if kept {
+            Placed::Kept
+        } else {
+            Placed::Shifted(defs.len())
+        };
+    }
+    if kept && defs.is_empty() {
+        defs.extend_from_slice(inner);
+        return Placed::Kept;
     }
     let at_offset = |start: usize| -> Vec<Schema> {
         inner
@@ -1637,7 +1661,11 @@ fn place_definitions(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>
         if let Some(held) = defs.get(start..start + inner.len())
             && held == at_offset(start).as_slice()
         {
-            return Placed::Shifted(start);
+            return if kept && start == 0 {
+                Placed::Kept
+            } else {
+                Placed::Shifted(start)
+            };
         }
     }
     if !defs.is_empty() {

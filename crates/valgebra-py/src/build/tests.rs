@@ -86,12 +86,54 @@ fn intern_deduplicates_by_identity() {
 
 /// Where [`place_definitions`] put each definition, read as a table.
 fn place(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>) -> Vec<Option<DefIx>> {
-    match place_definitions(inner, lit_map, defs) {
+    let kept = lit_map.iter().enumerate().all(|(at, &to)| at == to);
+    match place_definitions(inner, lit_map, kept, defs) {
+        Placed::Kept => (0..inner.len()).map(|at| Some(DefIx::new(at))).collect(),
         Placed::Shifted(offset) => (offset..offset + inner.len())
             .map(|at| Some(DefIx::new(at)))
             .collect(),
         Placed::Renamed(table) => table,
     }
+}
+
+/// A composed operand is the handle it holds only where none of its indices
+/// moves, and is remapped wherever one does: into a pool and a table that hold
+/// nothing it is kept; behind another constant its constant moves, into an
+/// empty table and into one that already holds its definition at its start,
+/// and the schema and the definition follow it.
+#[test]
+fn a_composed_operand_is_kept_only_where_no_index_moves() {
+    Python::attach(|py| {
+        let first = PyString::new(py, "a").into_any();
+        let other = PyString::new(py, "b").into_any();
+        let itself = || Schema::Ref(DefIx::new(0));
+        let named = || Schema::Literal(ConstIx::new(0));
+        let inner = Validator::checked(
+            Schema::union([named(), itself()]),
+            vec![first.clone().unbind()],
+            vec![Schema::union([
+                named(),
+                Schema::list(SeqShape::homogeneous(itself())),
+            ])],
+        )
+        .expect("one definition is within every limit");
+        let at_one = |schema: &Schema| schema.reindexed(&[1], DefShift::new(0));
+        let body = inner.definitions.first().expect("a definition");
+
+        let (mut pool, mut defs) = (Pool::default(), Vec::new());
+        let kept = compose(py, &inner, &mut pool, &mut defs);
+        assert_eq!((&kept, &defs), (&inner.schema, &inner.definitions));
+
+        let (mut pool, mut defs) = (Pool::default(), Vec::new());
+        pool.intern(&other);
+        let moved = compose(py, &inner, &mut pool, &mut defs);
+        assert_eq!((moved, defs), (at_one(&inner.schema), vec![at_one(body)]));
+
+        let (mut pool, mut defs) = (Pool::default(), vec![at_one(body)]);
+        pool.intern(&other);
+        let moved = compose(py, &inner, &mut pool, &mut defs);
+        assert_eq!((moved, defs), (at_one(&inner.schema), vec![at_one(body)]));
+    });
 }
 
 /// A definition is placed once: one the list already holds, up to a renaming

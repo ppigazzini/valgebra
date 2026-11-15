@@ -1039,6 +1039,7 @@ jobs:
               --binding-mapping --binding-mapping-lists \
               --binding-narrowed-key \
               --binding-record-list --binding-nullable --binding-set \
+              --binding-compose \
               --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}

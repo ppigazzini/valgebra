@@ -43,7 +43,7 @@ Three workloads, and the shapes each is read in:
   of tagged records (`--decision-unions`), which read what a join holds.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  thirty-three shapes: the membership walk (`--binding`), the call boundary
+  thirty-four shapes: the membership walk (`--binding`), the call boundary
   alone (`--binding-boundary`), the walk over a wide record
   (`--binding-record`), the same walk over a value whose keys are interned
   (`--binding-keys`), the same fields declared by an open record
@@ -65,7 +65,9 @@ Three workloads, and the shapes each is read in:
   through a key-type clause (`--binding-json-open`), the same records under a
   length bound (`--binding-json-bounded`), a recursive schema over a
   nested document (`--binding-json-deep`), building a validator from its
-  Python spelling (`--binding-build`), compiling one written as a `TypedDict`
+  Python spelling (`--binding-build`), composing a record nested sixteen deep,
+  each level met with the JSON values (`--binding-compose`), compiling one
+  written as a `TypedDict`
   of refined integers (`--binding-annotated`), compiling a fifty-field
   dataclass (`--binding-object`), walking an instance of it
   (`--binding-object-walk`), compiling a fifty-member protocol
@@ -502,6 +504,7 @@ MODES = {
     "binding-record-list": ("binding_workload", "binding list of records walk"),
     "binding-nullable": ("binding_workload", "binding nullable element walk"),
     "binding-set": ("binding_workload", "binding set walk"),
+    "binding-compose": ("binding_workload", "binding nested composition"),
 }
 
 #: The reading a core shape passes its example, for the six that share one.
@@ -559,6 +562,7 @@ BINDING_ITERATIONS = {
     "binding-record-list": (20_000, 5_000),
     "binding-nullable": (150_000, 50_000),
     "binding-set": (150_000, 50_000),
+    "binding-compose": (400, 100),
 }
 
 #: Where every binding shape's work is written: the example the gate builds
@@ -599,6 +603,7 @@ BINDING_SHAPES = {
     "binding-record-list": "record-list",
     "binding-nullable": "nullable",
     "binding-set": "set",
+    "binding-compose": "compose",
 }
 
 

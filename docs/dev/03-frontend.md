@@ -248,7 +248,10 @@ symmetry:
 7. **An already-compiled validator**, whose pool is interned into this one and
    whose definitions are placed in this one's table: a definition the table
    already holds, up to a renaming of the definitions, is that definition
-   (`place_definitions` in `build.rs`), and the rest are appended. Both after
+   (`place_definitions` in `build.rs`), and the rest are appended. An operand
+   whose constants keep their slots and whose definitions keep their places --
+   the first composed into a pool and a table that hold nothing -- is the
+   handle it holds (`Placed::Kept`), with no walk of its nodes. Both after
    the type branch, because a record's fields are types and a type
    is answered there for a flag test.
 8. **An alias of a builtin container, and a union written with `|`** — read off

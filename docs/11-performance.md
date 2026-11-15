@@ -1312,6 +1312,15 @@ nothing behind them; `--binding-relation` relates two dataclasses through
 - **A transform hands back what it was given when nothing changed**, so opening
   a schema that holds no record, or shifting the half of a composition whose
   indices do not move, returns the caller's own handle.
+- **An operand whose indices do not move is not walked.** Composed into a pool
+  and a table that hold nothing yet, or into a table holding its definitions at
+  its start with its constants at their slots, an operand is the handle it holds
+  (`Placed::Kept` in `crates/valgebra-py/src/build.rs`), where the remap would
+  walk every node to find that none moves. A record nested sixty deep, each level
+  met with the JSON values, composes in about half the time, a level's cost
+  growing with the levels below it by the validator's own measure alone, and
+  `--binding-compose`, sixteen such levels, counts 21% fewer instructions than
+  with the walk.
 - **A composition moves the incoming half in one pass.** Its definitions are
   found as a block where the table already holds them, or appended whole, and
   either way one shift moves every reference to them in the pass that moves

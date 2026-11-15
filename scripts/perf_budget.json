@@ -126,5 +126,8 @@
   "binding_refined_float_workload_irefs": 121214975,
   "_binding_memo_comment": "A chain twenty-four lists deep around a `None`, against `mu T. int | list[T] | list[T | str]`, walked per iteration: both list branches read each inner list as `T`, and the walk's memo answers the second reading.",
   "binding_memo_workload_checksum": 2000344,
-  "binding_memo_workload_irefs": 254096510
+  "binding_memo_workload_irefs": 254096510,
+  "_binding_compose_comment": "A record nested sixteen deep, each level a record of the validator below met with the JSON values, as a JSON Schema frontend composes one: two compositions a level. The first operand of each lands in a pool and a table that hold nothing yet, so it keeps every index and enters as the handle it is; the second moves. The one shape that composes validators, so a composition that walked an operand whose indices stay where they are, or copied one, reads here: with that walk the shape counts 27% more.",
+  "binding_compose_workload_checksum": 32000203,
+  "binding_compose_workload_irefs": 161237784
 }

@@ -324,9 +324,10 @@ gate only catches what it exercises, and the wheel a release ships:
   `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
   `--binding-json-open`, `--binding-json-bounded`, `--binding-json-deep`,
   `--binding-pattern`,
-  `--binding-build`, `--binding-annotated`, `--binding-object`,
-  `--binding-object-walk`, `--binding-protocol`, `--binding-relation`,
-  `--binding-explain`, `--binding-explain-accept`, `--binding-explain-list`) —
+  `--binding-build`, `--binding-compose`, `--binding-annotated`,
+  `--binding-object`, `--binding-object-walk`, `--binding-protocol`,
+  `--binding-relation`, `--binding-explain`, `--binding-explain-accept`,
+  `--binding-explain-list`) —
   membership over a live Python value, the call boundary alone, a wide record
   closed, the same record walked over a value whose keys are interned, the
   record open the way a `TypedDict` is, a list of records, a `dict[str, int]`
@@ -337,7 +338,8 @@ gate only catches what it exercises, and the wheel a release ships:
   rejected halfway, as a union of two record kinds, read through a key-type
   clause, the same under a length bound, and against a recursive schema --
   matching a string against a compiled
-  pattern, building a validator from its Python spelling, compiling one written
+  pattern, building a validator from its Python spelling, composing a record
+  nested sixteen deep with the JSON values met at each level, compiling one written
   as a `TypedDict` of refined integers, compiling a fifty-field dataclass and
   walking an instance of it, compiling a fifty-member protocol, relating two
   dataclasses, explaining a failure in a
