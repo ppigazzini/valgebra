@@ -18,7 +18,7 @@ use valgebra_core::{DefIx, Schema};
 use super::record::scan_dict;
 use super::scalar::{exact_of, leaf_admits};
 use super::sequence::scan_list;
-use super::{Frame, Scan, member, record_move};
+use super::{Frame, Scan, member, mutated, record_move};
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
 use crate::check::index::{Exact, TreePlan};
 use crate::input::Value;
@@ -192,4 +192,120 @@ fn held(
     let admitted = member(schema, &Value::Py(item), frame);
     depth.set(at);
     admitted
+}
+
+/// A list whose element is a reference to a definition the index reads as a
+/// tree of scalars -- `list[J]`, which a JSON Schema translation meets every
+/// array with -- each element read as [`tree_member`] reads it at the element's
+/// reference, or `None` where that reading would decline at every element: a
+/// walk in another mode, a memo armed, a prefix, or a reference's level or its
+/// pair past a bound.
+///
+/// The general loop pays each element's level, its reference's arm and the
+/// reading's own entry around a question the element's type answers. Here the
+/// bounds are asked once, as each element's reference would ask them, and an
+/// element the reading declines is walked whole from the list's level, where
+/// the loop walks it, so it opens the same level and asks the same reading.
+#[inline(never)]
+pub(super) fn tree_list_read(
+    id: DefIx,
+    element: &Schema,
+    prefix: &[Schema],
+    list: &Bound<'_, PyList>,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if !prefix.is_empty() || ctx.mode != WalkMode::Fast || ctx.state.memo.is_armed() {
+        return None;
+    }
+    let plan = ctx.index.tree(id)?;
+    let depth = ctx.state.depth.get();
+    if !readable(plan, depth + 1, ctx.state.guard.borrow().height()) {
+        return None;
+    }
+    let mut admitted = true;
+    let scan = scan_list(list, |_, item| {
+        admitted = element_read(plan, id, element, item, depth, frame);
+        if admitted {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => admitted,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
+}
+
+/// A mapping of `str` keys to a reference to a definition the index reads as
+/// a tree of scalars -- `dict[str, J]`, which a JSON Schema translation meets
+/// every object with -- each entry read as the general scan reads it, its key
+/// an instance of `str` and its value read as [`tree_list_read`] reads a
+/// list's element, or `None` where that reading would decline at every value.
+///
+/// The scan asks each value through its clause, the reference's arm and the
+/// reading's own entry; here the bounds are asked once, as each value's
+/// reference would ask them, and a value the reading declines is walked whole
+/// from the mapping's level, as the scan walks it.
+#[inline(never)]
+pub(super) fn tree_dict_read(
+    id: DefIx,
+    value_schema: &Schema,
+    dict: &Bound<'_, PyDict>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if ctx.mode != WalkMode::Fast || ctx.state.memo.is_armed() {
+        return None;
+    }
+    let plan = ctx.index.tree(id)?;
+    let depth = ctx.state.depth.get();
+    if !readable(plan, depth + 1, ctx.state.guard.borrow().height()) {
+        return None;
+    }
+    let mut admitted = true;
+    let scan = scan_dict(dict, ctx.state, |key, item| {
+        admitted = key.is_instance_of::<PyString>()
+            && element_read(plan, id, value_schema, item, depth, frame);
+        if admitted {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => admitted,
+        Scan::Stopped => false,
+        Scan::Unreadable => {
+            record_move(ctx);
+            false
+        }
+    })
+}
+
+/// Whether an element of a list of the definition `id` is a member: read at
+/// its reference's level, one below the list's `depth`, and entering the
+/// definition as [`tree_member`] does where it answers, or walked whole where
+/// the reading declines. A memo armed for one element's walk is put back when
+/// that walk returns, so the list's own reading of it holds for every element.
+fn element_read(
+    plan: &TreePlan,
+    id: DefIx,
+    element: &Schema,
+    item: &Bound<'_, PyAny>,
+    depth: usize,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    ctx.state.depth.set(depth + 1);
+    let read = read(plan, id, element, item, frame);
+    ctx.state.depth.set(depth);
+    if let Some(admitted) = read {
+        ctx.state.memo.enter();
+        return admitted;
+    }
+    member(element, &Value::Py(item), frame)
 }

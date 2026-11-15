@@ -21,6 +21,7 @@ use rustc_hash::FxHashMap;
 use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema, Violation, quoted};
 
 use super::scalar::{Scalar, admitted_quietly, scalar_admits, scalar_member, scalar_of};
+use super::tree::tree_dict_read;
 #[cfg(PyPy)]
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
@@ -909,10 +910,23 @@ fn keyed_map_matches_py(
         return false;
     };
     let mut decided = decided;
-    if fields.is_empty()
-        && let Some(answered) = scalar_map_matches(defaults, dict, ctx, decided.as_deref_mut())
-    {
-        return answered;
+    if fields.is_empty() {
+        if let Some(answered) = scalar_map_matches(defaults, dict, ctx, decided.as_deref_mut()) {
+            return answered;
+        }
+        // A mapping of a tree's reference -- `dict[str, J]`. What a union's
+        // deciding pass keeps is kept in a walk that explains, which the
+        // reading declines to the scan below.
+        if let [
+            MapClause {
+                key: Schema::Str,
+                value: value @ Schema::Ref(id),
+            },
+        ] = defaults
+            && let Some(answered) = tree_dict_read(*id, value, dict, frame)
+        {
+            return answered;
+        }
     }
     if let Some(plan) = plan {
         if let Some(answered) = keyed_map_asks_for_its_keys(

@@ -28,6 +28,7 @@ use super::scalar::{
     homogeneous_scalar_union, json_leaf_admits, leaf_admits, length_range, machine_range,
     machine_word, scalar_union_admits,
 };
+use super::tree::tree_list_read;
 use super::{
     Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
     mutated, reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
@@ -68,11 +69,10 @@ pub(super) fn check_seq(
             if let Some((kind, schema)) = homogeneous_scalar(prefix, tail, ctx) {
                 return scalar_list_matches(list, kind, schema, value, frame);
             }
-            // Every tag from a keyed map to a refinement, a complement and an
-            // attribute record among them, though the reader declines both:
-            // asked as that run of tags, the test costs a list nested
-            // twenty-five deep 0.03% more instructions, and asked as only the
-            // tags the reader takes, 1.25%.
+            // Every tag from a keyed map to a reference, an attribute record
+            // among them, though the reader declines it: asked as that run of
+            // tags, the test costs a list nested twenty-five deep 0.03% more
+            // instructions, and asked as only the tags the reader takes, 1.25%.
             if let Some(
                 element @ (Schema::KeyedMap { .. }
                 | Schema::Union(_)
@@ -81,6 +81,7 @@ pub(super) fn check_seq(
                 | Schema::Instance(_)
                 | Schema::AttrRecord { .. }
                 | Schema::Refine { .. }
+                | Schema::Ref(_)
                 | Schema::Seq {
                     container: SeqKind::Tuple,
                     ..
@@ -846,6 +847,13 @@ pub(super) fn element_list_matches(
         },
         Schema::Complement(_) if frame.ctx.index.has_readings() => {
             leaf_list_read(list, prefix, element, value, frame)
+        }
+        // A list of a tree's reference -- `list[J]` -- where the index holds
+        // a reading. Asked without the test of its word, a list of a reference
+        // in a validator holding none paid the reader's call, which the memo's
+        // shape of the instruction gate read 3.5% dearer.
+        Schema::Ref(id) if frame.ctx.index.has_readings() => {
+            tree_list_read(*id, element, prefix, list, value, frame)
         }
         Schema::Instance(index) => {
             instance_list_matches(list, prefix, element, *index, value, frame)

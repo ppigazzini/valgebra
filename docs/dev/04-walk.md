@@ -1266,6 +1266,25 @@ both bounds; `an_armed_memo_reads_a_tree_of_scalars_as_the_walk_does` holds the
 memo's half, and `a_tree_of_scalars_is_read_as_far_as_the_bounds_let_it` how
 far down a chain the reading reads, which no verdict shows.
 
+**A list or a mapping of the definition is read the same way.** A JSON Schema
+translation meets every array with `list[J]` and every object with `dict[str,
+J]`, `J` the tree, and there each value reached the reading through its own
+reference's arm and the reading's entry. `tree_list_read` and `tree_dict_read`
+ask the bounds once, as each value's reference would ask them -- its level one
+below the container's and its pair below the trail's bound -- and read each
+value as `tree_member` does at that level, a mapping's key an instance of `str`
+as the scan asks it; a value the reading declines is walked whole from the
+container's level, where the loop and the scan walk it. They read the fast walk
+with no memo armed, as `tree_member` does, and a memo armed for one value's
+walk is put back when it returns, so a list's reading holds for every value. A
+union's deciding pass keeps what a mapping's scan admitted, and it runs in a
+walk that explains, which the mapping's reader declines.
+`a_list_of_a_tree_is_read_as_the_walk_reads_it` and
+`a_mapping_of_a_tree_is_read_as_the_walk_reads_it` hold both to the general
+loop's and scan's answers in every mode from starts at both bounds, and
+`a_list_of_a_tree_is_read_where_each_element_would_be` and
+`a_mapping_of_a_tree_is_read_where_each_value_would_be` where each reads.
+
 ## The limit
 
 **JSON has no tuple.** `json.loads` produces a list, so the JSON path has no

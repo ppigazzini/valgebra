@@ -285,10 +285,17 @@ ADMITTED_CYCLES: dict[frozenset[str], str] = {
         "the walk calls the violation builders, which call back the walk's "
         "record_if_fatal, a function each way"
     ),
-    frozenset(PY + name for name in ("check/walk/record.rs", "check/walk/scalar.rs")): (
+    frozenset(
+        PY + "check/walk/" + name
+        for name in ("record.rs", "scalar.rs", "sequence.rs", "tree.rs")
+    ): (
         "a record's walk reads a field through scalar_member and "
         "admitted_quietly, and a parsed container's length bound counts its "
-        "keys through the record walk's distinct_keys, a function each way"
+        "keys through the record walk's distinct_keys; a list's and a mapping's "
+        "walks ask a tree's readers, tree_list_read and tree_dict_read, which "
+        "read the container through the scans those walks read it by, scan_list "
+        "and scan_dict, and each value through the scalar walk's exact_of and "
+        "leaf_admits: functions each way"
     ),
     frozenset(PY + name for name in ("build/classes.rs", "build/generics.rs")): (
         "what a class declares asks the typing introspection's "

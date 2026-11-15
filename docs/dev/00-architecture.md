@@ -113,9 +113,12 @@ one. The validator also renders its schema through
 whether a class declares fields, so the three are one cycle.
 `crates/valgebra-py/src/check/walk.rs` calls the violation builders in
 `check/violation.rs`, which call back into the walk's `record_if_fatal`. Two
-pairs sit inside one zone and cross only functions: the record and scalar
-walks in `check/walk/`, and what a class declares and the typing introspection
-in `build/`. In the core, `ir.rs` folds the complement law through `oracle.rs`,
+groups sit inside one zone and cross only functions. In `check/walk/`, the
+record and scalar walks call each other, and a list's and a mapping's walks
+ask the readers of a tree of scalars in `tree.rs`, which read the container
+through those walks' own scans and each value through the scalar walk's leaf
+test, so the four are one cycle. In `build/`, what a class declares and the
+typing introspection. In the core, `ir.rs` folds the complement law through `oracle.rs`,
 which reads the `Schema` it is asked about and the `Constants` a lowering is
 given, so the term, the oracle and the descriptor's lowering are one cycle,
 with the components a lowering builds and the budget they spend, which reads
