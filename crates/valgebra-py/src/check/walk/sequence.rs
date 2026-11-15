@@ -172,13 +172,13 @@ impl SeqArity {
 /// array differ in how their elements are *reached*, and agree on what each
 /// element must be.
 ///
-/// An array whose element is a scalar, a union or a record is read out of line
-/// ([`json_array_read`]), behind a test of the element's tag, as a list's
-/// readings are behind [`check_seq`]'s: this function is inlined into
-/// [`member`], so a reading added here lays out the walk anew, and an array
-/// nested in an array, which no reader takes, would pay a call at every level
-/// were the whole of it out of line -- a document nested twenty-five deep 5.5%
-/// more instructions.
+/// An array whose element is a scalar, a union, a meet, a complement or a record
+/// is read out of line ([`json_array_read`]), behind a test of the element's
+/// tag, as a list's readings are behind [`check_seq`]'s: this function is
+/// inlined into [`member`], so a reading added here lays out the walk anew, and
+/// an array nested in an array, which no reader takes, would pay a call at
+/// every level were the whole of it out of line -- a document nested
+/// twenty-five deep 5.5% more instructions.
 fn json_array_matches(
     prefix: &[Schema],
     tail: Option<&Schema>,
@@ -217,13 +217,13 @@ fn json_array_matches(
 }
 
 /// Membership for a parsed array whose every element is `element`, a scalar
-/// kind, a union of them or a record, read by the reader for its kind, and
-/// `None` where that reader declines.
+/// kind, a union of them, a leaf or a record, read by the reader for its kind,
+/// and `None` where that reader declines.
 ///
-/// One scalar kind at every position is its test an element, read here; a
-/// union of them is [`union_array_matches`], through [`leaf_array_read`], and a
-/// record [`record_array_matches`], each reached by a jump, so this reading
-/// saves no register and builds no stack frame. With the union read here and the record
+/// One scalar kind at every position is its test an element, read here; a leaf
+/// is [`leaf_array_read`], which hands a union of scalar kinds to
+/// [`union_array_matches`], and a record [`record_array_matches`], each reached
+/// by a jump, so this reading saves no register and builds no stack frame. With the union read here and the record
 /// called, it saves six registers for every array it reads, and a document of
 /// two hundred records reads 0.6% more instructions on the profiled 3.14
 /// wheel.
