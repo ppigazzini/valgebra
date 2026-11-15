@@ -17,7 +17,7 @@ use super::record::{
     scan_dict,
 };
 use super::scalar::{floats_compared, machine_range};
-use super::sequence::{leaf_list_read, refined_scalar_list, scan_list};
+use super::sequence::{leaf_array_read, leaf_list_read, refined_scalar_list, scan_list};
 use super::tree::TO_AN_ELEMENT;
 use super::*;
 use crate::check::ctx::{MAX_RECURSION_DEPTH, MAX_WALK_DEPTH};
@@ -9161,8 +9161,9 @@ fn a_record_whose_clause_reads_values_is_explained_from_its_first_entry() {
 /// one definition reads as one, over the operands of [`TREE_VALUES`]: the JSON
 /// values; `int | list[t]`; a mapping with no list, its floats in `[0, 1]`;
 /// `bool` beside every float, with no `int` and no mapping; floats in `(0, 1)`
-/// beside a list and a mapping; and the JSON values whose numbers are a meet,
-/// `(int | float) & ~bool`, as the universes page spells them.
+/// beside a list and a mapping; the JSON values whose numbers are a meet,
+/// `(int | float) & ~bool`, as the universes page spells them; and an `int`
+/// from 1 beside a list and a mapping.
 fn trees() -> Vec<Schema> {
     let itself = || Schema::Ref(DefIx::new(0));
     let list = || Schema::list(SeqShape::homogeneous(itself()));
@@ -9225,6 +9226,17 @@ fn trees() -> Vec<Schema> {
                 Schema::Str,
                 list(),
                 map(),
+            ]
+            .into(),
+        ),
+        Schema::Union(
+            vec![
+                list(),
+                map(),
+                Schema::Refine {
+                    base: Arc::new(Schema::Int),
+                    constraints: vec![Constraint::Ge(at(2))].into(),
+                },
             ]
             .into(),
         ),
@@ -9928,7 +9940,282 @@ fn a_list_of_leaves_is_read_where_its_levels_are_free() {
                     depth + levels <= MAX_WALK_DEPTH,
                     "{leaf:?} from {depth}"
                 );
+                let items = [JsonValue::Int(1), JsonValue::Int(2)];
+                let parsed = leaf_array_read(
+                    leaf,
+                    py,
+                    &items,
+                    &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
+                );
+                assert_eq!(
+                    parsed.is_some(),
+                    depth + levels <= MAX_WALK_DEPTH,
+                    "{leaf:?} parsed from {depth}"
+                );
             }
         }
+    });
+}
+
+/// Where the index holds a reading, a parsed array of a leaf -- a union, a
+/// meet or a complement -- is answered by the leaf's reader, asked as the
+/// array arm asks it.
+#[test]
+fn a_parsed_array_hands_a_leaf_to_its_reader_where_the_index_reads() {
+    use super::sequence::json_array_read;
+    Python::attach(|py| {
+        let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+        let union = Schema::Union(vec![Schema::NoneType, not(Schema::Str)].into());
+        let meet = Schema::Intersection(vec![not(Schema::Bool), not(Schema::Str)].into());
+        let complement = not(Schema::Union(vec![Schema::Int, Schema::Str].into()));
+        for (element, items, want) in [
+            (union, [JsonValue::Null, JsonValue::Int(1)], true),
+            (meet, [JsonValue::Int(1), JsonValue::Bool(true)], false),
+            (complement, [JsonValue::Null, JsonValue::Float(0.5)], true),
+        ] {
+            let list = Schema::list(SeqShape::homogeneous(element));
+            let index = build_index(py, &list, &[], &[]);
+            let Schema::Seq { shape, .. } = &list else {
+                unreachable!("a list")
+            };
+            let element = shape.tail.as_deref().expect("a tail");
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &[],
+                defs: &[],
+                index: &index,
+                state: &state,
+                mode: WalkMode::Fast,
+            };
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx);
+            assert_eq!(
+                json_array_read(element, py, &items, &mut frame),
+                Some(want),
+                "{element:?}"
+            );
+        }
+    });
+}
+
+/// [`Walked`] for one walk of a parsed document in `mode`, over `index`.
+fn parsed_in(
+    index: &ValidatorIndex,
+    (schema, defs, pool): (&Schema, &[Schema], &[Py<PyAny>]),
+    py: Python<'_>,
+    document: &JsonValue<'_>,
+    mode: WalkMode,
+) -> Walked {
+    let state = WalkState::new();
+    let ctx = Ctx {
+        pool,
+        defs,
+        index,
+        state: &state,
+        mode,
+    };
+    let mut out = Vec::new();
+    let admitted = member(
+        schema,
+        &Value::Json(py, document),
+        &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+    );
+    let height = state.guard.borrow().height();
+    (
+        admitted,
+        state.signals.stopped.get(),
+        state.moves(),
+        state.take_fatal().is_some(),
+        state.depth.get(),
+        height,
+        state.memo.count(),
+        out.into_iter().map(|v| (v.code, v.path)).collect(),
+    )
+}
+
+/// The documents the parsed reading of leaves is held to the walk over, each
+/// an item of an array: every JSON value, at the root and in each container, a
+/// key written twice, an integer past a machine word, a number past the floats,
+/// and chains of arrays and of objects around the walk's bounds.
+fn documents() -> Vec<String> {
+    let leaves = [
+        "null",
+        "true",
+        "false",
+        "0",
+        "7",
+        "-5",
+        "1",
+        "2",
+        "9223372036854775807",
+        "9223372036854775808",
+        "-9223372036854775809",
+        "100000000000000000000000",
+        "0.0",
+        "-0.0",
+        "0.5",
+        "1.5",
+        "2.0",
+        "1e400",
+        "-1e400",
+        "1e300",
+        "\"\"",
+        "\"x\"",
+        "[]",
+        "{}",
+    ];
+    let mut documents: Vec<String> = leaves.iter().map(|leaf| (*leaf).to_owned()).collect();
+    for leaf in leaves {
+        documents.push(format!("[{leaf}]"));
+        documents.push(format!("{{\"k\": {leaf}}}"));
+        documents.push(format!("{{\"k\": {leaf}, \"k\": 1}}"));
+        documents.push(format!("{{\"k\": 1, \"k\": {leaf}}}"));
+        documents.push(format!("[1, {{\"a\": [{leaf}, 0.5]}}, \"x\"]"));
+    }
+    let wide: Vec<String> = (0..12).map(|at| format!("\"k{}\": {at}", at % 9)).collect();
+    documents.push(format!("{{{}}}", wide.join(", ")));
+    documents.push(format!("{{{}, \"k3\": \"x\"}}", wide.join(", ")));
+    for depth in 124..=128 {
+        for leaf in ["1", "0.5", "\"x\"", "[]", "{}"] {
+            documents.push(format!("{}{leaf}{}", "[".repeat(depth), "]".repeat(depth)));
+            documents.push(format!(
+                "{}{leaf}{}",
+                "{\"k\": ".repeat(depth),
+                "}".repeat(depth)
+            ));
+        }
+    }
+    documents
+}
+
+/// A parsed array of leaves is read by each item's tag and number as the
+/// general loop reads it, in the fast and the settling walk.
+#[test]
+fn a_parsed_array_of_leaves_is_read_as_the_walk_reads_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(py, LEAF_VALUES, c"leaf_values.py", c"leaf_values")
+            .expect("the corpus compiles");
+        let pool: Vec<Py<PyAny>> = module
+            .getattr("OPERANDS")
+            .expect("the operands")
+            .try_iter()
+            .expect("a list")
+            .map(|operand| operand.expect("an operand").unbind())
+            .collect();
+        let items = documents();
+        for leaf in leaves() {
+            let list = Schema::list(SeqShape::homogeneous(leaf));
+            let walk = (&list, &[][..], &pool[..]);
+            let (read, walked) = read_and_walked(py, &list, &[], &pool);
+            let all = format!("[{}]", items.join(", "));
+            for text in items.iter().map(|item| format!("[{item}]")).chain([all]) {
+                let document = JsonValue::parse(text.as_bytes(), false).expect("a document");
+                for mode in [WalkMode::Fast, WalkMode::Settle] {
+                    assert_eq!(
+                        parsed_in(&read, walk, py, &document, mode),
+                        parsed_in(&walked, walk, py, &document, mode),
+                        "{list:?} at {text} in {mode:?}"
+                    );
+                }
+            }
+        }
+    });
+}
+
+/// A value's exact type is read off its type alone, a subclass being none, and
+/// a leaf's plan decides each type the leaf does not read the number of and
+/// leaves the number's test for the rest: JSON Schema's `integer` admits every
+/// `int`, no `bool`, and a `float` with no fraction, read alike off a value and
+/// off a parsed one, and an integer past a word is the walk's where a bound
+/// reads it.
+#[test]
+fn a_leaf_is_decided_by_its_type_and_its_number() {
+    use super::scalar::{exact_of, json_leaf_admits, leaf_admits};
+    Python::attach(|py| {
+        let module = PyModule::from_code(py, LEAF_VALUES, c"leaf_values.py", c"leaf_values")
+            .expect("the corpus compiles");
+        let pool: Vec<Py<PyAny>> = module
+            .getattr("OPERANDS")
+            .expect("the operands")
+            .try_iter()
+            .expect("a list")
+            .map(|operand| operand.expect("an operand").unbind())
+            .collect();
+        let exact = |source: &str| exact_of(&evaluate(py, source));
+        for (source, want) in [
+            ("None", Some(Exact::None)),
+            ("True", Some(Exact::Bool)),
+            ("1", Some(Exact::Int)),
+            ("1.5", Some(Exact::Float)),
+            ("'x'", Some(Exact::Str)),
+            ("b'x'", Some(Exact::Bytes)),
+            ("[1]", Some(Exact::List)),
+            ("{1: 2}", Some(Exact::Dict)),
+            ("(1,)", None),
+            ("type('I', (int,), {})(1)", None),
+        ] {
+            assert_eq!(exact(source), want, "{source}");
+        }
+        let leaves = leaves();
+        let plan_of = |leaf: &Schema| {
+            let list = Schema::list(SeqShape::homogeneous(leaf.clone()));
+            let index = build_index(py, &list, &[], &pool);
+            let Schema::Seq { shape, .. } = &list else {
+                unreachable!("a list")
+            };
+            let element = shape.tail.as_deref().expect("a tail");
+            let decided =
+                Exact::ALL.map(|exact| index.leaf(element).expect("a leaf").decided(exact));
+            let read = |source: &str| {
+                let value = evaluate(py, source);
+                let plan = index.leaf(element).expect("a leaf");
+                leaf_admits(plan, &value, exact_of(&value).expect("an exact type"))
+            };
+            let parsed = |text: &str| {
+                let document = JsonValue::parse(text.as_bytes(), false).expect("a document");
+                json_leaf_admits(index.leaf(element).expect("a leaf"), &document)
+            };
+            (
+                decided,
+                ["1", "True", "2.0", "2.5", "None", "2 ** 70"].map(read),
+                ["1", "true", "2.0", "2.5", "null", "1180591620717411303424"].map(parsed),
+            )
+        };
+        let (decided, read, parsed) = plan_of(&leaves[0]);
+        assert_eq!(
+            decided,
+            [
+                Some(false),
+                Some(false),
+                Some(true),
+                None,
+                Some(false),
+                Some(false),
+                Some(false),
+                Some(false)
+            ]
+        );
+        let integer = [
+            Some(true),
+            Some(false),
+            Some(true),
+            Some(false),
+            Some(false),
+            Some(true),
+        ];
+        assert_eq!((read, parsed), (integer, integer));
+        // An `int` from 1 or `None` reads an `int`'s number, and a `bool`'s, and
+        // leaves an integer past a word to the walk.
+        let (decided, read, parsed) = plan_of(&leaves[5]);
+        assert_eq!(decided[2], None);
+        let from_one = [
+            Some(true),
+            Some(true),
+            Some(false),
+            Some(false),
+            Some(true),
+            None,
+        ];
+        assert_eq!((read, parsed), (from_one, from_one));
     });
 }

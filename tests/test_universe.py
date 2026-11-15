@@ -271,6 +271,43 @@ def test_a_list_of_numbers_answers_as_the_walk_of_the_same_set(
     assert (values in Validator([written])) == twin
 
 
+@given(
+    _number_sets,
+    st.lists(
+        st.integers()
+        | st.floats(allow_nan=False, allow_infinity=False)
+        | st.booleans(),
+        max_size=6,
+    ),
+)
+def test_a_document_of_numbers_reads_as_the_list_it_parses_to(
+    written: Validator[Any], values: list[object]
+) -> None:
+    # A parsed array is read by each item's tag and number, as a list of the
+    # values `json.loads` builds is read by their types and numbers.
+    text = json.dumps(values)
+    listed = Validator([written])
+    assert listed.is_valid_json(text) == listed.is_valid(json.loads(text))
+
+
+#: A list of integers from 1 or `None`, so a `bool`, read as its number, and an
+#: integer past a machine word, which a tag leaves to the walk, are read on
+#: either side of the bound.
+_FROM_ONE = Validator([union(Annotated[int, at.Ge(1)], None)])
+
+
+def test_a_document_reads_as_its_parse_where_a_tag_is_not_the_answer() -> None:
+    for text in (
+        "[true, false, null, 1, 0]",
+        "[1e400, -1e400, 1.5, 2.0]",
+        "[100000000000000000000000]",
+        "[-9223372036854775809]",
+        "[9223372036854775807, -9223372036854775808]",
+    ):
+        for listed in (_FROM_ONE, Validator([INTEGER]), Validator([NUMBER])):
+            assert listed.is_valid_json(text) == listed.is_valid(json.loads(text)), text
+
+
 def test_a_boolean_is_no_spelling_of_a_number() -> None:
     for written in (NUMBER, INTEGER, _bounded(at.Ge(0))):
         assert not written.is_valid(True)

@@ -430,6 +430,11 @@ def _json_documents() -> None:
     forest = json.dumps([grown(12) for _ in range(20)])
     _run(Validator(tree).is_valid_json, [forest], 400)
 
+    # An array of JSON Schema's integers, each item read by its tag and number.
+    integer = intersection(int | Annotated[float, _Step(1)], complement(bool))
+    numbers = json.dumps([1, 2.0] * 12)
+    _run(Validator([integer]).is_valid_json, [numbers, json.dumps([1, True])], 500)
+
 
 def _sets() -> None:
     # A set read through its own iterator, which no list or tuple reading

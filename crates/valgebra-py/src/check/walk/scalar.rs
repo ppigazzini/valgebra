@@ -169,6 +169,28 @@ pub(super) fn leaf_admits(plan: &LeafPlan, value: &Bound<'_, PyAny>, exact: Exac
     Some(plan.holds(exact, number))
 }
 
+/// What `plan` answers for a parsed value, read by its tag, or `None` where the
+/// walk must read it: an integer past a machine word whose number the leaf
+/// reads. A tag is a value's exact type, as `json.loads` builds it, and a
+/// number's value is in hand.
+#[inline]
+pub(super) fn json_leaf_admits(plan: &LeafPlan, value: &JsonValue<'_>) -> Option<bool> {
+    let (exact, number) = match value {
+        JsonValue::Null => (Exact::None, Number::None),
+        JsonValue::Bool(truth) => (Exact::Bool, Number::Int(i64::from(*truth))),
+        JsonValue::Int(number) => (Exact::Int, Number::Int(*number)),
+        JsonValue::BigInt(_) => return plan.decided(Exact::Int),
+        JsonValue::Float(number) => (Exact::Float, Number::Float(*number)),
+        JsonValue::Str(_) => (Exact::Str, Number::None),
+        JsonValue::Array(_) => (Exact::List, Number::None),
+        JsonValue::Object(_) => (Exact::Dict, Number::None),
+    };
+    Some(
+        plan.decided(exact)
+            .unwrap_or_else(|| plan.holds(exact, number)),
+    )
+}
+
 /// What [`member`] answers at the root of a walk for a schema that is one scalar
 /// kind, or `None` for any other schema.
 ///

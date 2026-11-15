@@ -227,7 +227,7 @@ pub(crate) enum Exact {
 
 impl Exact {
     /// Every exact type, in the order of their bits.
-    const ALL: [Exact; 8] = [
+    pub(crate) const ALL: [Exact; 8] = [
         Exact::None,
         Exact::Bool,
         Exact::Int,

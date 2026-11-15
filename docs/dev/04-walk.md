@@ -701,7 +701,8 @@ most of what they cost, and each asks the test directly:
   costs 2.2% fewer instructions on the profiled 3.12, 3.14 and 3.14t wheels and
   a refused array of a thousand integers 2% fewer. The union's and the record's
   readings are functions of their own that `json_array_read` reaches by a jump
-  (`union_array_matches`), so the reader of a scalar array saves no register
+  (`union_array_matches`, through `leaf_array_read`, which reads a union no
+  plan holds by it), so the reader of a scalar array saves no register
   and builds no stack frame, which costs a document of two hundred records
   0.6% where it does. No entry explains a document, so the readers record
   nothing, and an explaining walk, which only the walk's own tests run over a
@@ -1201,6 +1202,20 @@ where it declines. In `tests/test_universe.py`,
 `test_a_list_of_numbers_answers_as_the_walk_of_the_same_set` holds a list of
 every number set the universe's tests build to the walk of the same set spelled
 with a member that keeps the reading away.
+
+A parsed array of a leaf is read the same way (`leaf_array_read`, behind the
+parsed array's test of its element's tag, a meet and a complement among the
+tags): an item's tag is its exact type, as `json.loads` builds it, and its
+number is in hand, so an integer past a machine word whose number the leaf
+reads is the one item the walk takes. `a_parsed_array_of_leaves_is_read_as_the_walk_reads_it`
+holds it to the general loop, and
+`test_a_document_of_numbers_reads_as_the_list_it_parses_to` to the list the
+document parses to. A parsed value is not read as a tree of scalars, though its
+tags would serve: the reference's arm asks its value whether it is a Python one
+before it asks the reading, and without that test the profiled wheel laid
+`member` out anew, a list nested twenty-five deep, which enters no reference,
+reading 12% more cycles on CPython 3.15, its frontend stalls three times as
+many.
 
 ## A tree of scalars is read by each value's type
 

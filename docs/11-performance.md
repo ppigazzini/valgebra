@@ -801,7 +801,10 @@ program that builds validators per request, and to no validation call.
   (`leaf_list_read` in `check/walk/sequence.rs`), and walks any other element
   in the walk's own mode. The list arm asks it behind a test of the index's one
   word, so a validator holding no reading keeps the other readers' tail calls,
-  and a union of scalar kinds, which has a reader of its own, holds no plan. On the profiled CPython 3.15 wheel a thousand
+  and a union of scalar kinds, which has a reader of its own, holds no plan. A
+  parsed array of one is read by each item's tag and number
+  (`leaf_array_read`): a document of a thousand integers against `integer`
+  costs 67% fewer instructions to check, the parse included. On the profiled CPython 3.15 wheel a thousand
   integers against `integer` cost 92% fewer instructions, and a thousand floats
   against `number` 83%; a test holds the reader to the general loop's verdict,
   stop, moves, fatal signal and report in every mode.
@@ -1450,6 +1453,14 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   about 240 instructions where its specialization to `float` is one comparison,
   and the JSON values over two hundred records read 18.5% dearer than with the
   tree's own bounds. The plan specializes the leaf to each exact type at build.
+- **A parsed value read as a tree of scalars**: each value's tag is its exact
+  type, and the JSON values over a document of two hundred records cost 35%
+  fewer instructions to check, the parse included. Taking it means the
+  reference's arm stops asking whether its value is a Python one, and the
+  profiled CPython 3.15 wheel then laid `member` out so that a list nested
+  twenty-five deep, which enters no reference, read 1.8% more instructions and
+  12% more cycles, thirty rounds of thirty, its frontend stalls three times as
+  many.
 - **A reference's arm asking past one word whether a tree is held**: the plans
   of leaves and trees share one word of the index, and asking for the trees
   behind it is a load more in an arm inlined into every walk, which the

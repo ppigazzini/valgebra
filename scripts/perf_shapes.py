@@ -238,10 +238,16 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
             v([number]).is_valid,
             [i + 0.5 for i in range(1000)],
         ),
+        "json_integer": lambda: (
+            v([integer]).is_valid_json,
+            json.dumps(list(range(1000))),
+        ),
         "recursive": lambda: (recursive.is_valid, _tree(12)),
         # The values `json.loads` returns, as a recursive union over a document
         # of every kind of JSON value.
         "json_value": lambda: (json_value.is_valid, _DOCUMENT),
+        # The same, read off the document's text.
+        "json_value_text": lambda: (json_value.is_valid_json, json.dumps(_DOCUMENT)),
         "deep": lambda: (v(deep_schema).is_valid, deep_value),
         "validate": lambda: (v(_User).validate, _RECORDS[0]),
         "explain_scalar": lambda: (_refusing(v(int).validate), "x"),

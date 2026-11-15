@@ -25,7 +25,7 @@ use super::reads_its_length;
 use super::record::{RecordReading, check_attr_record, check_keyed_map};
 use super::scalar::{
     Scalar, admitted_quietly, check_refine, constraints_hold, exact_of, homogeneous_scalar_union,
-    leaf_admits, machine_range, machine_word, scalar_union_admits,
+    json_leaf_admits, leaf_admits, machine_range, machine_word, scalar_union_admits,
 };
 use super::{
     Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
@@ -197,7 +197,9 @@ fn json_array_matches(
             | Schema::Str
             | Schema::Bytes
             | Schema::KeyedMap { .. }
-            | Schema::Union(_)),
+            | Schema::Union(_)
+            | Schema::Intersection(_)
+            | Schema::Complement(_)),
         ) = tail
         && let Some(answered) = json_array_read(element, py, items, frame)
     {
@@ -218,9 +220,9 @@ fn json_array_matches(
 /// `None` where that reader declines.
 ///
 /// One scalar kind at every position is its test an element, read here; a
-/// union of them is [`union_array_matches`] and a record
-/// [`record_array_matches`], each reached by a jump, so this reading saves no
-/// register and builds no stack frame. With the union read here and the record
+/// union of them is [`union_array_matches`], through [`leaf_array_read`], and a
+/// record [`record_array_matches`], each reached by a jump, so this reading
+/// saves no register and builds no stack frame. With the union read here and the record
 /// called, it saves six registers for every array it reads, and a document of
 /// two hundred records reads 0.6% more instructions on the profiled 3.14
 /// wheel.
@@ -250,10 +252,41 @@ pub(super) fn json_array_read(
         );
     }
     match element {
-        Schema::Union(_) => union_array_matches(element, py, items, frame),
+        // A leaf, or a union of scalar kinds, which holds no plan and which
+        // the leaf's reader hands to its own.
+        Schema::Union(_) | Schema::Intersection(_) | Schema::Complement(_) => {
+            leaf_array_read(element, py, items, frame)
+        }
         Schema::KeyedMap { .. } => record_array_matches(element, py, items, frame),
         _ => None,
     }
+}
+
+/// A parsed array whose element is a leaf
+/// ([`LeafPlan`](crate::check::index::LeafPlan)), each item read by its tag
+/// and its number as [`leaf_list_read`] reads a list's elements by their types,
+/// or the reader of a union of scalars where the index holds no plan for the
+/// element. A walk that explains declines before this ([`json_array_read`]),
+/// and an item no tag settles -- an integer past a word the leaf reads -- is
+/// walked.
+#[inline(never)]
+pub(super) fn leaf_array_read(
+    element: &Schema,
+    py: Python<'_>,
+    items: &[JsonValue<'_>],
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    let Some(plan) = ctx.index.leaf(element) else {
+        return union_array_matches(element, py, items, frame);
+    };
+    if ctx.state.depth.get() + plan.levels > MAX_WALK_DEPTH {
+        return None;
+    }
+    Some(items.iter().all(|item| {
+        json_leaf_admits(plan, item)
+            .unwrap_or_else(|| member(element, &Value::Json(py, item), frame))
+    }))
 }
 
 /// Membership for a parsed array whose every element is a union of scalar
