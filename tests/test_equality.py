@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING, Annotated, Literal
 
 import annotated_types as at
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -212,6 +214,81 @@ def test_one_set_written_two_ways_is_one_schema(
     # repeat compares terms: this is the consequence that made the equality
     # worth fixing rather than the equality itself.
     assert union(first, second) == first, name
+
+
+# Every row of `SAME` as a validator built each way, and the rows of `DIFFERENT`
+# with each spelling its own row, so a draw meets each set more than once.
+_SPELLED = [(name, Validator(left), Validator(right)) for name, left, right in SAME] + [
+    (f"{name}, {side}", Validator(spelling), Validator(spelling))
+    for name, *spellings in DIFFERENT
+    for side, spelling in zip(("left", "right"), spellings, strict=True)
+]
+
+
+@given(
+    st.sampled_from(_SPELLED),
+    st.sampled_from(_SPELLED),
+    st.tuples(st.booleans(), st.booleans()),
+)
+def test_equal_validators_answer_alike(
+    one: tuple[str, Validator[object], Validator[object]],
+    other: tuple[str, Validator[object], Validator[object]],
+    sides: tuple[bool, bool],
+) -> None:
+    """Two equal validators are one set to every decision asked of them.
+
+    `==` reads a schema up to the order of its pool and of its definitions, and
+    a decision is about the set, so a table of answers may be keyed by it. A
+    meet's emptiness and every relation between a pair are one answer however
+    each side was spelled wherever the query decides within its bounds, as each
+    of these does: this asks it of every two spellings of the equality rows,
+    each side built either way. Where a bound is reached, the next test reads
+    what the law keeps.
+    """
+    a, a2 = one[1], one[2]
+    b, b2 = other[1], other[2]
+    assert a == a2
+    assert b == b2
+    left = (a, b) if sides[0] else (a2, b2)
+    right = (a2, b) if sides[1] else (a, b2)
+    names = (one[0], other[0])
+    assert intersection(*left).is_empty() == intersection(*right).is_empty(), names
+    assert left[0].relation_to(left[1]) == right[0].relation_to(right[1]), names
+    assert left[0].is_equivalent(left[1]) == right[0].is_equivalent(right[1]), names
+
+
+def _numbered(second: object) -> list[object]:
+    """Four hundred pairs, a number each and a `second`."""
+    return [
+        tuple[Literal[number], second]  # ty: ignore[invalid-type-form]
+        for number in range(400)
+    ]
+
+
+def test_equal_validators_never_answer_contrary() -> None:
+    """Where a query runs out of steps, two equal validators may prove apart.
+
+    A union holds its members in the order their terms sort in, and a reference
+    sorts by its definition's index, which is construction order: the union of
+    two recursive validators asks the one composed first, first. A union subject
+    stops asking its members once one declines with the budget spent, so here,
+    with the member that spends it first, the answer is the decline, and with
+    the member a value refutes first, it is the refutation. Each is an answer
+    about the one set the two validators denote, so neither contradicts the
+    other: the one that proves is right, and the one that declines says only
+    that it did not prove.
+    """
+    heavy = recursive(lambda s: union(*_numbered(int), [s]))
+    light = recursive(lambda s: union([s], bytes))
+    target = union(*_numbered(int | str), [object])
+    assert heavy.relation_to(target) == "undecided", (
+        "the case needs a member that spends the budget"
+    )
+    heavy_first, light_first = union(heavy, light), union(light, heavy)
+    assert heavy_first == light_first
+    answers = {heavy_first.relation_to(target), light_first.relation_to(target)}
+    assert answers <= {"not_subset", "undecided"}, answers
+    assert "not_subset" in answers, answers
 
 
 @pytest.mark.parametrize(

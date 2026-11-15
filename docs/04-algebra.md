@@ -295,6 +295,13 @@ assert intersection(int, str).is_equivalent(nothing)
 assert intersection(int, str) != Validator(nothing)
 ```
 
+**What a decision proves of a validator holds of every validator equal to it.**
+Two equal validators denote one set, so a decision answers one question about
+both, and a table of answers may be keyed by `==`. A query is bounded, though,
+and it spends its steps in the order the schema holds its members, which can be
+the order they were built in: past the bound, one of two equal validators can
+answer `"undecided"` where the other decides, and never the contrary answer.
+
 ## Subtyping, equivalence, and emptiness
 
 A compiled validator can be compared with another schema as *sets*. `is_subtype_of`

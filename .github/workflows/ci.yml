@@ -1795,6 +1795,7 @@ jobs:
           tests/test_constraints.py
           tests/test_narrowed_keys.py
           tests/test_universe.py
+          tests/test_equality.py
       - name: Keep the example database
         if: always()
         uses: actions/cache/save@v6.1.0

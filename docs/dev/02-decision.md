@@ -1810,6 +1810,29 @@ members after it change nothing, and each would scan the supertype's branches
 -- a union of four thousand records against another compares sixteen million
 pairs for the answer the first decline gave.
 
+**Two equal validators answer alike within the bounds, and never contrary past
+them.** `==` reads a schema up to the order of its pool and of its definitions,
+and a union and a meet hold their members in the order their terms sort in,
+which reads a constant's slot and a definition's index: construction order. A
+query spends its steps in the order the term holds its members, so two equal
+validators can reach the bound at different members. A union of two recursive
+validators against a supertype -- one member that spends the budget declining,
+one a value refutes -- answers `undecided` composed the first way and
+`not_subset` the other. Each answer is about the one set both denote and every
+rule is sound, so two decided answers agree and a table of answers keyed by
+`==` holds no wrong one; where neither query reaches a bound the answers are
+one. `test_equal_validators_answer_alike` in `tests/test_equality.py` holds the
+second over every two spellings of its equality rows, and
+`test_equal_validators_never_answer_contrary` the first over that union.
+**Refused: one answer past the bound however the validator was spelled.** It
+needs a member order that reads no construction order, or a union subject that
+asks its members past a decline with the budget spent. A slot cannot be sorted
+away -- two constants need not compare -- and a definition's index only by a
+canonical labeling of the table, a cost every composition pays for an answer
+only a query past its bound reads; and a member asked past a spent budget is
+answered by the two memberships alone, so the refutation the other spelling
+finds is a step that budget has not got.
+
 **A meet is placed by its members before a union's branches, and the order is
 measured.** `meet_below` asks each member below the supertype, then the meet below
 each branch of a union supertype. Asked the other way, `A <= (A & ~B) | (A & B)`
