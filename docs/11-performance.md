@@ -884,7 +884,11 @@ program that builds validators per request, and to no validation call.
   (`machine_range_list`): a thousand integers under one bound read 74% fewer
   instructions there, and 77% on the build without a profile (`--binding-refined`).
   A value past the word is read by the comparisons, once its read has raised, and
-  that ends the range for the list. A list of records reads each element by its record's check,
+  that ends the range for the list. Length bounds on a `str` are one range of code
+  points read once for the list, and an exact `str`'s length is compared with it
+  (`length_range_list`): a thousand strings under a minimum and a maximum length
+  read 77% fewer instructions on the profiled CPython 3.15 wheel. Any other element
+  is its own check. A list of records reads each element by its record's check,
   inlined into the reader, with that level held the same way
   (`record_list_matches`): two hundred three-field `TypedDict`s cost 7.5% fewer
   instructions on 3.12 and 3.14. What its node says of every element, its plan and
@@ -1408,7 +1412,8 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   parameter of the bound check, reset where the walk runs code, or keyed by
   the value's address, it costs `--binding-refined` 2.0 to 4.3% more; read in
   one pass over the run of length bounds, it costs that shape nothing and the
-  list of strings 12% more.
+  list of strings 12% more. A list folds its bounds into one range instead, read
+  once for the list ([Sequences and sets](#sequences-and-sets)).
 - **A two-word walk context**: one reference to everything a walk reads,
   beside its mode, travels in two registers and is never copied, but a read
   through a frame takes one load more: `--binding-boundary` reads 8.7%

@@ -199,6 +199,16 @@ class _AtLeast:
         self.ge = ge
 
 
+class _Length:
+    """Length bounds, carried as `annotated_types.Len` carries them."""
+
+    __module__ = "annotated_types"
+
+    def __init__(self, min_length: int, max_length: int) -> None:
+        self.min_length = min_length
+        self.max_length = max_length
+
+
 class _Step:
     """A step, carried as `annotated_types.MultipleOf` carries one."""
 
@@ -262,6 +272,9 @@ def _lists_with_readers() -> None:
     _explain(bounded.validate, [list(range(24)), [0, -1]], 500)
     worded = Validator(list[Annotated[str, Regex("[a-z]+")]])
     _run(worded.is_valid, [["ab", "cd"] * 12, ["ab", "1"]], 8000)
+    # A list of strings under length bounds alone, read against one range.
+    sized = Validator(list[Annotated[str, _Length(1, 8)]])
+    _run(sized.is_valid, [["ab", "cd"] * 12, ["ab", ""]], 500)
     # A list of floats takes a loop of its own beside the integers' range, and
     # its bound is the two floats compared. Untrained, the loop and the
     # comparison are calls: a thousand floats read 53.6% fewer instructions than

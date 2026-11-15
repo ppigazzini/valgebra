@@ -24,8 +24,9 @@ use valgebra_core::{
 use super::reads_its_length;
 use super::record::{RecordReading, check_attr_record, check_keyed_map};
 use super::scalar::{
-    Scalar, admitted_quietly, check_refine, constraints_hold, exact_of, homogeneous_scalar_union,
-    json_leaf_admits, leaf_admits, machine_range, machine_word, scalar_union_admits,
+    Scalar, admitted_quietly, check_refine, constraints_hold, exact_of, exact_text_length,
+    homogeneous_scalar_union, json_leaf_admits, leaf_admits, length_range, machine_range,
+    machine_word, scalar_union_admits,
 };
 use super::{
     Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
@@ -1088,7 +1089,7 @@ pub(super) fn refined_scalar_list(
             None => refined_list_loop(list, |v| v.is_int(), base, constraints, value, frame),
         },
         Schema::Float => refined_list_loop(list, |v| v.is_float(), base, constraints, value, frame),
-        Schema::Str => refined_list_loop(list, |v| v.is_str(), base, constraints, value, frame),
+        Schema::Str => refined_str_list(list, base, constraints, value, frame),
         _ => return None,
     })
 }
@@ -1120,6 +1121,62 @@ fn refined_list_loop(
             constraints_hold(constraints, item, frame)
         } else {
             check_refine(base, constraints, &element, frame)
+        };
+        if ok {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    }
+}
+
+/// [`refined_scalar_list`] over strings: one range where every constraint is a
+/// length bound, and each element's constraints elsewhere. A call of its own,
+/// so the readers of the other kinds keep their layout: inlined beside them,
+/// the range took the floats' loop to 2.4% more instructions on the build
+/// without a profile (`--binding-refined-float`).
+fn refined_str_list(
+    list: &Bound<'_, PyList>,
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    match length_range(constraints) {
+        Some(range) => length_range_list(list, range, base, constraints, value, frame),
+        #[expect(
+            clippy::redundant_closure_for_method_calls,
+            reason = "the method's path takes one lifetime, where the loop asks a test for every one"
+        )]
+        None => refined_list_loop(list, |v| v.is_str(), base, constraints, value, frame),
+    }
+}
+
+/// [`refined_list_loop`] over strings under length bounds alone.
+///
+/// An exact `str` is in the set exactly when its length lies in the range, read
+/// once for the list, where the general check reads the length once a bound
+/// through the walk's reading of a container's length. Any other element is
+/// [`check_refine`]'s.
+#[inline(never)]
+fn length_range_list(
+    list: &Bound<'_, PyList>,
+    (least, most): (usize, usize),
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        ok &= match exact_text_length(item) {
+            Some(length) => least <= length && length <= most,
+            None => check_refine(base, constraints, &Value::Py(item), frame),
         };
         if ok {
             ControlFlow::Continue(())

@@ -557,6 +557,34 @@ pub(super) fn machine_range(
     Some((least, most))
 }
 
+/// The lengths every one of `constraints` admits, as an inclusive range, where
+/// each is a length bound, and `None` elsewhere: a bound the range does not say.
+///
+/// The length of an exact `str` is its count of code points, which `len` reads
+/// off the string and runs no Python for, so for a string of that type the
+/// range answers what the bounds answer. Read once for a list
+/// ([`length_range_list`](super::sequence)), as [`machine_range`] is.
+pub(super) fn length_range(constraints: &[Constraint]) -> Option<(usize, usize)> {
+    let (mut least, mut most) = (0, usize::MAX);
+    for constraint in constraints {
+        match constraint {
+            Constraint::MinLen(n) => least = least.max(*n),
+            Constraint::MaxLen(n) => most = most.min(*n),
+            _ => return None,
+        }
+    }
+    Some((least, most))
+}
+
+/// The length of `value`, where it is an exact `str`.
+#[inline]
+pub(super) fn exact_text_length(value: &Bound<'_, PyAny>) -> Option<usize> {
+    if !value.is_exact_instance_of::<PyString>() {
+        return None;
+    }
+    value.len().map_err(set_aside).ok()
+}
+
 /// `value` as a machine word, where it is an exact `int` that fits one.
 ///
 /// `Ok(None)` for a value that is no exact `int`, and `Err` for one past the

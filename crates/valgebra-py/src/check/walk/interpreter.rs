@@ -10122,6 +10122,102 @@ fn a_parsed_array_of_leaves_is_read_as_the_walk_reads_it() {
     });
 }
 
+/// A list of strings under length bounds alone reads each exact `str`'s length
+/// against the bounds' range, and answers as the walk of a tuple of the same
+/// elements does, element by element: every pair of bounds around the lengths
+/// of the corpus, a lone surrogate and a character past the basic plane, which
+/// count one each, a subclass whose `__len__` lies, which the walk counts by
+/// its storage, and values of other types.
+#[test]
+fn a_list_of_bounded_strings_reads_as_the_bounds_read_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Lying(str):\n\
+              \x20   def __len__(self):\n\
+              \x20       return 99\n\
+              VALUES = ['', 'a', 'ab', 'abc', 'abcd', '\\ud800', '\\U0001F600', 'e\\u0301',\n\
+              \x20         Lying('ab'), Lying(''), b'ab', 2, None, ['ab']]\n",
+            c"bounded_strings.py",
+            c"bounded_strings",
+        )
+        .expect("the corpus compiles");
+        let values: Vec<Bound<'_, PyAny>> = module
+            .getattr("VALUES")
+            .expect("the corpus")
+            .try_iter()
+            .expect("a list")
+            .map(|item| item.expect("an element"))
+            .collect();
+        let mut read = vec![vec![Constraint::Regex(".*".into())]];
+        for least in 0..4 {
+            read.push(vec![Constraint::MinLen(least)]);
+            read.push(vec![Constraint::MaxLen(least)]);
+            for most in 0..4 {
+                read.push(vec![Constraint::MinLen(least), Constraint::MaxLen(most)]);
+            }
+        }
+        for constraints in read {
+            let element = Schema::Refine {
+                base: Arc::new(Schema::Str),
+                constraints: constraints.into(),
+            };
+            let list = Schema::list(SeqShape::homogeneous(element.clone()));
+            let tuple = Schema::tuple(SeqShape::homogeneous(element));
+            for value in &values {
+                let listed = PyList::new(py, [value]).expect("a list").into_any();
+                let tupled = PyTuple::new(py, [value]).expect("a tuple").into_any();
+                assert_eq!(
+                    decide(py, &list, &listed, &[], &[]),
+                    decide(py, &tuple, &tupled, &[], &[]),
+                    "{list:?} and {tuple:?} part over {value:?}"
+                );
+            }
+            let mixed = PyList::new(py, &values).expect("a list").into_any();
+            let tupled = PyTuple::new(py, &values).expect("a tuple").into_any();
+            assert_eq!(
+                decide(py, &list, &mixed, &[], &[]),
+                decide(py, &tuple, &tupled, &[], &[]),
+                "{list:?} and {tuple:?} part over the corpus"
+            );
+        }
+    });
+}
+
+/// The range takes length bounds alone, and a string's length is read off an
+/// exact `str` alone, a code point a unit.
+#[test]
+fn a_length_range_is_the_bounds_a_string_holds() {
+    use super::scalar::{exact_text_length, length_range};
+    Python::attach(|py| {
+        assert_eq!(length_range(&[]), Some((0, usize::MAX)));
+        assert_eq!(
+            length_range(&[
+                Constraint::MinLen(2),
+                Constraint::MaxLen(5),
+                Constraint::MinLen(3)
+            ]),
+            Some((3, 5))
+        );
+        assert_eq!(
+            length_range(&[Constraint::MaxLen(5), Constraint::MaxLen(4)]),
+            Some((0, 4))
+        );
+        assert_eq!(length_range(&[Constraint::Regex(".*".into())]), None);
+        assert_eq!(
+            length_range(&[Constraint::MinLen(1), Constraint::Ge(OperandIx::new(0))]),
+            None
+        );
+        let length = |source: &str| exact_text_length(&evaluate(py, source));
+        assert_eq!(length("'abc'"), Some(3));
+        assert_eq!(length("'\\ud800'"), Some(1));
+        assert_eq!(length("'\\U0001F600'"), Some(1));
+        assert_eq!(length("type('S', (str,), {})('ab')"), None);
+        assert_eq!(length("b'ab'"), None);
+        assert_eq!(length("2"), None);
+    });
+}
+
 /// A value's exact type is read off its type alone, a subclass being none, and
 /// a leaf's plan decides each type the leaf does not read the number of and
 /// leaves the number's test for the rest: JSON Schema's `integer` admits every

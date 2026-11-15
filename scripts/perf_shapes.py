@@ -91,6 +91,16 @@ class _AtLeast:
         self.ge = ge
 
 
+class _Length:
+    """Length bounds, carried as `annotated_types.Len` carries them."""
+
+    __module__ = "annotated_types"
+
+    def __init__(self, min_length: int, max_length: int) -> None:
+        self.min_length = min_length
+        self.max_length = max_length
+
+
 class _Step:
     """A step, carried as `annotated_types.MultipleOf` carries one."""
 
@@ -216,6 +226,10 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
         "refined_float": lambda: (
             v(list[Annotated[float, _AtLeast(0.0)]]).is_valid,
             [float(i) for i in range(1000)],
+        ),
+        "refined_str": lambda: (
+            v(list[Annotated[str, _Length(1, 64)]]).is_valid,
+            [f"s{i}" for i in range(1000)],
         ),
         "refined_fields": lambda: (
             v(

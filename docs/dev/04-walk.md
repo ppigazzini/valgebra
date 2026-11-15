@@ -882,7 +882,14 @@ with no list to hold the operands across, the range would be a read per operand
 and a raise per value past the word, which `Comparing an order bound` under
 [Measured and not taken](../11-performance.md#measured-and-not-taken) counts.
 `a_list_of_bounded_integers_reads_as_the_comparisons_read_it` holds the range to
-the comparisons at every edge of the word. A list of records is read so too
+the comparisons at every edge of the word. Where every constraint of a `str` is a
+length bound, the bounds are one inclusive range of lengths read once for the
+list (`length_range`), and an exact `str`'s length, its count of code points,
+is compared with it (`length_range_list`): a lone surrogate and a character
+past the basic plane count one each, as `len` counts them, and a subclass, whose
+length the walk reads by its storage, is the element's own check.
+`a_list_of_bounded_strings_reads_as_the_bounds_read_it` holds the range to the
+bounds. A list of records is read so too
 (`record_list_matches`):
 each element is its record's check, inlined into the reader, with the level
 held across the list, and the fatal-signal flag read at every element, as
