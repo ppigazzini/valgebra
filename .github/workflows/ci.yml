@@ -2370,9 +2370,9 @@ jobs:
     runs-on: ubuntu-26.04
     # Round-robin shards, merged and ratcheted by the job after them, as the
     # core and pytest sweeps are. The slower of the runner classes builds and
-    # tests a mutant at half the speed of the other, and a third of the
-    # binding's mutants is about 65 minutes there, past the ceiling. The
-    # matrix's cut is about 25 minutes a shard there, beside one baseline
+    # tests a mutant at half the speed of the other, and an eighth of the
+    # binding's mutants is 34 to 59 minutes there, at the ceiling. The
+    # matrix's cut, a sixteenth, is half that a shard, beside one baseline
     # build apiece, which leaves the ceiling twice a shard's reading with room
     # for the binding to grow.
     timeout-minutes: 60
@@ -2404,7 +2404,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -2466,7 +2466,7 @@ jobs:
           set +e
           cargo mutants --package valgebra-py "${files[@]}" \
             --features interpreter-tests -j 4 --timeout-multiplier 20 \
-            --shard "${{ matrix.shard }}/8" --sharding round-robin \
+            --shard "${{ matrix.shard }}/16" --sharding round-robin \
             --output walk-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused \
             --skip the_two_readings_agree_at_the_walks_depth_bound
@@ -2508,7 +2508,7 @@ jobs:
       - name: Merge the shards into one sweep
         env:
           # The sweep's shard matrix, held to it by tests/test_required_jobs.py.
-          SHARDS: "8"
+          SHARDS: "16"
         run: |
           # A whole sweep, or none -- the argument the core sweep's merge
           # carries: the ratchet's expiry direction reads a mutant's absence as
