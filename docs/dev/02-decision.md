@@ -1653,7 +1653,10 @@ some members of a union it was handed, at any depth: a nested union is read as
 its members or kept whole, so `X ∪ (Y ∪ ¬c)` is respelled `X ∪ Y`, which names
 members of two subterms, and a finite tree holds finitely many members. A pair
 every decider declined against a complement `¬c` is asked as the meet of the
-subject and `c` below the bottom, and as `c` below the subject's complement. A
+subject and `c` below the bottom, and as `c` below the subject's complement,
+which for a split's half, a meet of signed subterms, is the complement of such
+a meet: `¬set ⊆ ¬None ∪ ¬ℓ`, for a literal `ℓ`, asks `None ⊆ ¬(ℓ ∧ ¬set)`
+(`a_half_asked_below_a_complement_asks_inside_the_closure`). A
 sequence or a mapping below a union asks its one item against the union of
 what the branches hold at one position, which are children of the branches. A
 meet of sequences is asked as the one sequence of its items' meets under the
@@ -1666,7 +1669,7 @@ the sequence reading a sequence none is; that such new types are finitely many
 is the argument of [LN26, §5.1], which pushes a meet below a product -- and a
 query asks at most `|C|²` distinct goals.
 
-A reading that builds a goal in a seventh way lands with its place named in the
+A reading that builds a goal in an eighth way lands with its place named in the
 paragraph above, admitted by `in_closure` in `decision/goal_tests.rs`, which
 the closure laws read every goal against, and with a fixed pair that reaches
 it. Without them the drawn law finds the place on a shape nobody chose, at a
