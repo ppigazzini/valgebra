@@ -9410,8 +9410,8 @@ fn a_tree_of_scalars_is_read_as_the_walk_reads_it() {
             // walk enters one at every value, and an explaining walk decides a
             // union's branches on the fast path. Every other part is the walk's,
             // and a walk that explains or settles reports what it reports.
-            let agree = |value: &Bound<'_, PyAny>, start: (usize, usize)| {
-                for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle] {
+            let agree_in = |value: &Bound<'_, PyAny>, start: (usize, usize), modes: &[WalkMode]| {
+                for &mode in modes {
                     let (mut by_type, mut by_walk) = (
                         walked_in(&read, tree, value, start, mode),
                         walked_in(&walked, tree, value, start, mode),
@@ -9424,16 +9424,21 @@ fn a_tree_of_scalars_is_read_as_the_walk_reads_it() {
                     );
                 }
             };
+            let every = [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle];
             for value in &listed("VALUES") {
                 for &start in &starts {
-                    agree(value, start);
+                    agree_in(value, start, &every);
                 }
             }
+            // The deep values in the two modes that reach the reading: one that
+            // explains reads it only in a union's trials, on the fast path the
+            // first mode walks from the root, and reports a refused mapping at
+            // every level above it, a cost the square of the depth.
             for value in &listed("DEEP") {
-                agree(value, (0, 0));
+                agree_in(value, (0, 0), &[WalkMode::Fast, WalkMode::Settle]);
             }
             for make in listed("MOVING") {
-                agree(&make.call0().expect("a value that moves"), (0, 0));
+                agree_in(&make.call0().expect("a value that moves"), (0, 0), &every);
             }
             // The reading is what reads a container it settles.
             if read
