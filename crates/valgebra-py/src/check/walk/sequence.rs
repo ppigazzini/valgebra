@@ -900,11 +900,72 @@ fn read_or_leaf(
                     list, prefix, element, *index, fields, value, frame,
                 );
             }
-            _ => named_tuple_list_matches(list, prefix, element, members, value, frame),
+            _ => match text_lengths(members) {
+                Some(range) => text_meet_list(list, prefix, element, range, value, frame),
+                None => named_tuple_list_matches(list, prefix, element, members, value, frame),
+            },
         },
         _ => None,
     };
     read.or_else(|| leaf_list_read(list, prefix, element, value, frame))
+}
+
+/// The one range of lengths a meet of `str` and refinements of `str` by length
+/// bounds alone admits -- the spelling a JSON Schema translation gives
+/// `minLength` beside `maxLength` -- or `None` where a member is any other node.
+fn text_lengths(members: &[Schema]) -> Option<(usize, usize)> {
+    members
+        .iter()
+        .try_fold((0, usize::MAX), |(least, most), member| match member {
+            Schema::Str => Some((least, most)),
+            Schema::Refine { base, constraints } if matches!(**base, Schema::Str) => {
+                let (low, high) = length_range(constraints)?;
+                Some((least.max(low), most.min(high)))
+            }
+            _ => None,
+        })
+}
+
+/// A list of a meet of `str` and its length refinements ([`text_lengths`]),
+/// each exact `str` read against the one range, or `None` where the walk
+/// explains, behind a prefix, or where the three levels below the list's to
+/// the base's type test -- the meet's, the refinement's and the base's -- are
+/// not free.
+///
+/// The general loop walks each element through the meet and each refinement,
+/// reading the string's length once a bound. Here an exact `str` is its length
+/// against the range, which runs no Python and records nothing, and any other
+/// element is walked whole from the list's level, where the loop walks it.
+#[inline(never)]
+fn text_meet_list(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    (least, most): (usize, usize),
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if !prefix.is_empty() || ctx.mode.explains() || ctx.state.depth.get() + 3 > MAX_WALK_DEPTH {
+        return None;
+    }
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        ok &= match exact_text_length(item) {
+            Some(length) => least <= length && length <= most,
+            None => member(element, &Value::Py(item), frame),
+        };
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
 }
 
 /// A list whose element is a union, a meet or a complement of leaves

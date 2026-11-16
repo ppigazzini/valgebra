@@ -909,7 +909,10 @@ program that builds validators per request, and to no validation call.
   points read once for the list, and an exact `str`'s length is compared with it
   (`length_range_list`): a thousand strings under a minimum and a maximum length
   read 77% fewer instructions on the profiled CPython 3.15 wheel. Any other element
-  is its own check. A list of records reads each element by its record's check,
+  is its own check. A meet of `str` and its length refinements is the same one
+  range (`text_meet_list`): valgebra-jsonschema's array of a thousand strings
+  under `minLength` and `maxLength` checks in 6.9 us where the walk through the
+  meet took 32. A list of records reads each element by its record's check,
   inlined into the reader, with that level held the same way
   (`record_list_matches`): two hundred three-field `TypedDict`s cost 7.5% fewer
   instructions on 3.12 and 3.14. What its node says of every element, its plan and

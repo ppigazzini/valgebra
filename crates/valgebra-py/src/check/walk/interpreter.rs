@@ -10502,6 +10502,154 @@ fn a_mapping_of_leaves_is_read_where_its_levels_are_free() {
     });
 }
 
+/// The text values the meet of `str` and its length refinements is read over:
+/// strings of every length around the bounds, two lone surrogates, a `str`
+/// subclass and values of other types.
+const TEXT_VALUES: &std::ffi::CStr = c"class S(str): pass\n\
+VALUES = ['', 'x', 'ab', 'abc', '\\ud800\\ud800', S('ab'), S(''), 1, None, b'ab', 2.5, ['ab']]\n";
+
+/// A meet of `str` and its length refinements, as a translation writes
+/// `minLength` beside `maxLength`, over a list of strings.
+fn text_meet() -> Schema {
+    let lengths = |constraint: Constraint| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![constraint].into(),
+    };
+    Schema::Intersection(
+        vec![
+            Schema::Str,
+            lengths(Constraint::MaxLen(2)),
+            lengths(Constraint::MinLen(1)),
+        ]
+        .into(),
+    )
+}
+
+/// A list of a meet of `str` and its length refinements read by each exact
+/// `str`'s length answers as the general loop does: the verdict, the stop, the
+/// moves, the fatal signal and the report, for a list of each value and of all
+/// of them, from starts near the depth bound, in every mode.
+#[test]
+fn a_list_of_a_meet_of_lengths_is_read_as_the_walk_reads_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(py, TEXT_VALUES, c"text_values.py", c"text_values")
+            .expect("the corpus compiles");
+        let values: Vec<Bound<'_, PyAny>> = module
+            .getattr("VALUES")
+            .expect("the corpus")
+            .try_iter()
+            .expect("a list")
+            .map(|item| item.expect("an element"))
+            .collect();
+        // Beside a list of a leaf, so the index holds a reading.
+        let root = Schema::tuple(SeqShape::fixed([
+            Schema::list(SeqShape::homogeneous(text_meet())),
+            Schema::list(SeqShape::homogeneous(Schema::Complement(Arc::new(
+                Schema::Bytes,
+            )))),
+        ]));
+        let (read, walked) = read_and_walked(py, &root, &[], &[]);
+        assert!(read.has_readings());
+        let empty = PyList::empty(py);
+        let mut tuples: Vec<Bound<'_, PyAny>> = values
+            .iter()
+            .map(|value| {
+                let list = PyList::new(py, [value]).expect("a list");
+                PyTuple::new(py, [list.as_any(), empty.as_any()])
+                    .expect("a tuple")
+                    .into_any()
+            })
+            .collect();
+        let every = PyList::new(py, &values).expect("a list");
+        tuples.push(
+            PyTuple::new(py, [every.as_any(), empty.as_any()])
+                .expect("a tuple")
+                .into_any(),
+        );
+        let mut starts = vec![0];
+        starts.extend((0..8).map(|below| MAX_WALK_DEPTH - below));
+        for value in &tuples {
+            for &depth in &starts {
+                for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle] {
+                    let tree = (&root, &[][..], &[][..]);
+                    assert_eq!(
+                        walked_in(&read, tree, value, (depth, 0), mode),
+                        walked_in(&walked, tree, value, (depth, 0), mode),
+                        "{value:?} from {depth} in {mode:?}"
+                    );
+                }
+            }
+        }
+    });
+}
+
+/// The reader of a list of a meet of lengths reads where the three levels to
+/// its base's type test are free below the list's, in a walk that explains
+/// nothing and with no prefix, and declines elsewhere.
+#[test]
+fn a_list_of_a_meet_of_lengths_is_read_where_its_levels_are_free() {
+    use super::sequence::element_list_matches;
+    Python::attach(|py| {
+        let element = text_meet();
+        let root = Schema::tuple(SeqShape::fixed([
+            Schema::list(SeqShape::homogeneous(element.clone())),
+            Schema::list(SeqShape::homogeneous(Schema::Complement(Arc::new(
+                Schema::Bytes,
+            )))),
+        ]));
+        let index = build_index(py, &root, &[], &[]);
+        let value = evaluate(py, "['ab', 'x', 'abc']");
+        let list = value.cast::<PyList>().expect("a list");
+        let read_at = |depth: usize, mode: WalkMode, prefix: &[Schema]| {
+            let state = WalkState::new();
+            state.depth.set(depth);
+            let ctx = Ctx {
+                pool: &[],
+                defs: &[],
+                index: &index,
+                state: &state,
+                mode,
+            };
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx);
+            element_list_matches(list, prefix, &element, &Value::Py(&value), &mut frame)
+        };
+        assert_eq!(read_at(0, WalkMode::Fast, &[]), Some(false));
+        assert_eq!(read_at(0, WalkMode::Settle, &[]), Some(false));
+        assert_eq!(read_at(0, WalkMode::Explain, &[]), None);
+        assert_eq!(read_at(0, WalkMode::Fast, &[Schema::Str]), None);
+        assert_eq!(
+            read_at(MAX_WALK_DEPTH - 3, WalkMode::Fast, &[]),
+            Some(false)
+        );
+        assert_eq!(read_at(MAX_WALK_DEPTH - 2, WalkMode::Fast, &[]), None);
+        // A length refinement of another base is no string's: the meet with
+        // a refinement of `bytes` holds no `str`, and is left to the walk.
+        let bytes = Schema::Intersection(
+            vec![
+                Schema::Str,
+                Schema::Refine {
+                    base: Arc::new(Schema::Bytes),
+                    constraints: vec![Constraint::MinLen(1)].into(),
+                },
+            ]
+            .into(),
+        );
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let (mut path, mut out) = (Vec::new(), Vec::new());
+        let mut frame = Frame::new(&mut path, &mut out, ctx);
+        let read = element_list_matches(list, &[], &bytes, &Value::Py(&value), &mut frame);
+        assert_eq!(read, None);
+    });
+}
+
 /// [`Walked`] for one walk of a parsed document in `mode`, over `index`.
 fn parsed_in(
     index: &ValidatorIndex,
