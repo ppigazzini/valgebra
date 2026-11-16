@@ -15,6 +15,67 @@ answer of its own, or a repair to a change not yet released.
 
 -->
 
+## [0.0.28] - 2026-11-16
+
+A release of speed, with no addition, no fix and no node. The walk reads the shapes a JSON Schema
+translation writes by each value's type -- the JSON values, alone, as a list's element, as a
+mapping's value and beside a keyword's guard; the numbers JSON Schema calls `integer` and `number`;
+a string under length bounds; and a record whose undeclared keys hold the JSON values, read by its
+keys -- where it walked each node of them, and composing two validators builds no copy of an operand
+whose indices do not move. Every answer is the one 0.0.27 gave: against PyPI's 0.0.27 the
+metamorphic gate moves no membership and loses or contradicts no decision. The one count a caller
+can see move is a predicate's: `validate` explaining a refused record whose catch-all clause reads
+values runs a predicate on a field before the refusal once, where it ran twice. The algebra page
+states what `==` promises a decision: what one proves of a validator holds of every validator equal
+to it, and two equal validators never answer contrary, though past a query's bound one may decline
+where the other decides.
+
+### Changed
+
+- **A tree of scalars is read by each value's type.** A recursive definition whose union holds only
+  scalar leaves refusing every list and dict, a list of the definition and a mapping of `str` keys
+  to it -- the values `json.loads` returns, `int | list[t]` -- asks each value's exact type once,
+  where the walk spent a reference, its pair on the trail, the union's level and a branch per member
+  around the same question. Outside the definition, `list[J]` and `dict[str, J]` -- `J` the
+  definition, which a JSON Schema translation meets every array and object with -- read each value
+  the same way, the bounds asked once for the container. Where a meet remembers what it walked, as
+  one of `list[J]` and a list of records reaching `J` does, the scalars are read by type and the
+  containers walked and kept. A value of no exact builtin type, one near either bound and one inside
+  itself are walked as before, and a walk that explains reads the definition the general way.
+
+- **A leaf is decided by a value's type and its number.** A union, meet or complement of scalar
+  kinds and of refinements of `int` and `float` by bounds and steps -- JSON Schema's `integer`,
+  `(int | Annotated[float, MultipleOf(1)]) & ~bool`, and `number` -- is specialized to each exact
+  builtin type when the validator is built, so a list of one, a mapping of `str` keys to one and a
+  JSON array of one read each element's type and, where the type leaves it open, its number. A
+  `float` under order bounds alone is two comparisons against the interval they admit. An `int`
+  past a machine word the leaf reads, and a subclass, are walked.
+
+- **A leaf may hold the JSON values.** A union, meet or complement of leaves beside a reference to
+  a tree of scalars, such as `(~int | Annotated[int, Ge(0)]) & J` with `J` the JSON values -- the
+  guard a JSON Schema translation writes for a keyword with no `type` beside it, and for every
+  `not`, `if` and `then` -- answers a scalar by the tree's leaves, and a list or a dict is walked
+  as before.
+
+- **A list of strings under length bounds is read against one range.** `list[Annotated[str,
+  MinLen(m), MaxLen(n)]]` folds its bounds into one range of code points, read once for the list,
+  and compares each exact `str`'s length with it. A meet of `str` and its length refinements,
+  `str & Annotated[str, MaxLen(n)] & Annotated[str, MinLen(m)]` as a JSON Schema translation
+  writes `minLength` beside `maxLength`, is the same range, whatever else the validator holds.
+
+- **A record whose catch-all clause reads values is read by its keys.** A record that admits an
+  undeclared key by its value, `{id: int, str: J}` -- what a translation writes where
+  `additionalProperties` is absent -- probes its declared fields as a `TypedDict` does, and
+  scans the keys it does not declare alone. When `validate` explains a refused value it resumes
+  where the first pass stopped, so a predicate on a field before the refusal runs once where it
+  ran twice (`docs/05-refinements.md`).
+
+- **Composing a validator copies no operand whose indices do not move.** The first operand of a
+  combination, and one whose definitions the table holds at its start, enters as the handle it
+  holds: a record nested sixty deep, each level met with the JSON values, composes in about half
+  the time, and a relation between two built validators, which composes the two, counts 17% to
+  18% fewer instructions.
+
 ## [0.0.27] - 2026-11-14
 
 A release of fixes, with no addition and no node. Five readings 0.0.26 answered wrong or paid too
@@ -4981,7 +5042,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.27...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.28...HEAD
+[0.0.28]: https://github.com/ppigazzini/valgebra/compare/v0.0.27...v0.0.28
 [0.0.27]: https://github.com/ppigazzini/valgebra/compare/v0.0.26...v0.0.27
 [0.0.26]: https://github.com/ppigazzini/valgebra/compare/v0.0.25...v0.0.26
 [0.0.25]: https://github.com/ppigazzini/valgebra/compare/v0.0.24...v0.0.25
