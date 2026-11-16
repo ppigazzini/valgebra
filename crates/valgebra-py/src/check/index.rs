@@ -256,6 +256,12 @@ impl Exact {
 /// complement's inner walk decides, a refinement's comparison and step are the
 /// two numbers' own. So where the levels to its deepest type test are free, a
 /// leaf answers as the walk does.
+///
+/// A reference to a tree of scalars ([`TreePlan`]) is a leaf too: a value of a
+/// scalar type is its leaves' answer, and a list or a dict, which the tree reads
+/// on, is the walk's to read ([`Leaf::Walk`]). The JSON values met with a
+/// keyword's guard, `(~NUMBER | Annotated[int, Ge(0)] | ...) & J`, are one.
+#[derive(Clone)]
 pub(crate) enum Leaf {
     /// A scalar kind, by the exact type it admits every value of; `int`
     /// admits a `bool` too, which subclasses it.
@@ -271,6 +277,22 @@ pub(crate) enum Leaf {
     All(Box<[Leaf]>),
     /// A union: the bottom, `nothing`, where it has no member.
     Any(Box<[Leaf]>),
+    /// A reference to a tree of scalars: its leaves over a scalar, and the walk
+    /// over a container it reads on.
+    Tree(Box<TreeAtom>),
+    /// What a tree answers over a container it reads on: the walk's answer,
+    /// which no leaf settles. A plan reads it for a list or a dict alone, and no
+    /// number is read for either.
+    Walk,
+}
+
+/// A reference to a tree of scalars, as a leaf reads it.
+#[derive(Clone)]
+pub(crate) struct TreeAtom {
+    /// The tree's members that are leaves, as their union.
+    scalars: Leaf,
+    /// The containers the tree reads on, their [`Exact`] bits.
+    containers: u8,
 }
 
 /// One constraint of a refinement of `float`, its operand read as a float.
@@ -302,9 +324,15 @@ pub(crate) enum Number {
 }
 
 impl Leaf {
-    /// The leaf `schema` is, its operands read out of `pool`, or `None` where
-    /// some node of it is no leaf.
-    fn of(schema: &Schema, pool: &[Py<PyAny>], py: Python<'_>) -> Option<Leaf> {
+    /// The leaf `schema` is, its operands read out of `pool` and its references
+    /// to a tree of scalars out of `trees`, or `None` where some node of it is
+    /// no leaf.
+    fn of(
+        schema: &Schema,
+        pool: &[Py<PyAny>],
+        py: Python<'_>,
+        trees: &[Option<TreePlan>],
+    ) -> Option<Leaf> {
         let operand = |index: OperandIx| Some(pool.get(index.get())?.bind(py));
         Some(match schema {
             Schema::Anything(_) => Leaf::All(Box::default()),
@@ -354,16 +382,31 @@ impl Leaf {
                 ),
                 _ => return None,
             },
-            Schema::Union(members) => Leaf::Any(Leaf::each(members, pool, py)?),
-            Schema::Intersection(members) => Leaf::All(Leaf::each(members, pool, py)?),
-            Schema::Complement(inner) => Leaf::Not(Box::new(Leaf::of(inner, pool, py)?)),
+            Schema::Union(members) => Leaf::Any(Leaf::each(members, pool, py, trees)?),
+            Schema::Intersection(members) => Leaf::All(Leaf::each(members, pool, py, trees)?),
+            Schema::Complement(inner) => Leaf::Not(Box::new(Leaf::of(inner, pool, py, trees)?)),
+            Schema::Ref(id) => {
+                let tree = trees.get(id.get())?.as_ref()?;
+                Leaf::Tree(Box::new(TreeAtom {
+                    scalars: tree.scalars.clone(),
+                    containers: tree.containers,
+                }))
+            }
             _ => return None,
         })
     }
 
     /// Each of `members` as a leaf, or `None` where one is none.
-    fn each(members: &[Schema], pool: &[Py<PyAny>], py: Python<'_>) -> Option<Box<[Leaf]>> {
-        members.iter().map(|m| Leaf::of(m, pool, py)).collect()
+    fn each(
+        members: &[Schema],
+        pool: &[Py<PyAny>],
+        py: Python<'_>,
+        trees: &[Option<TreePlan>],
+    ) -> Option<Box<[Leaf]>> {
+        members
+            .iter()
+            .map(|m| Leaf::of(m, pool, py, trees))
+            .collect()
     }
 
     /// The levels the walk opens from this node's own to its deepest type
@@ -377,6 +420,20 @@ impl Leaf {
             Leaf::All(parts) | Leaf::Any(parts) => {
                 1 + parts.iter().map(Leaf::levels).max().unwrap_or_default()
             }
+            // The reference's own level, and the tree's union below it.
+            Leaf::Tree(atom) => 1 + atom.scalars.levels(),
+            Leaf::Walk => 0,
+        }
+    }
+
+    /// Whether a reference to a tree is part of this leaf: a walk of it enters a
+    /// definition, which the trail bounds and an armed memo keeps.
+    fn reaches_a_tree(&self) -> bool {
+        match self {
+            Leaf::Tree(_) => true,
+            Leaf::Not(inner) => inner.reaches_a_tree(),
+            Leaf::All(parts) | Leaf::Any(parts) => parts.iter().any(Leaf::reaches_a_tree),
+            Leaf::Kind(_) | Leaf::Ints(..) | Leaf::Floats(_) | Leaf::Walk => false,
         }
     }
 
@@ -403,6 +460,9 @@ impl Leaf {
             },
             Leaf::All(parts) => Leaf::joined(parts, exact, false),
             Leaf::Any(parts) => Leaf::joined(parts, exact, true),
+            Leaf::Tree(atom) if atom.containers & exact as u8 != 0 => Leaf::Walk,
+            Leaf::Tree(atom) => atom.scalars.specialized(exact),
+            Leaf::Walk => Leaf::Walk,
         }
     }
 
@@ -451,6 +511,9 @@ impl Leaf {
             Leaf::Not(inner) => !inner.holds(exact, number),
             Leaf::All(parts) => parts.iter().all(|part| part.holds(exact, number)),
             Leaf::Any(parts) => parts.iter().any(|part| part.holds(exact, number)),
+            // Specialized away for every scalar type, and a container's number
+            // is never read ([`Leaf::Walk`]).
+            Leaf::Tree(_) | Leaf::Walk => false,
         }
     }
 }
@@ -476,6 +539,10 @@ pub(crate) struct LeafPlan {
     /// The leaf over `float`s as the interval it admits, where it is order
     /// bounds alone ([`Interval::of`]).
     floats: Option<Interval>,
+    /// Whether the leaf holds a reference to a tree of scalars, whose walk
+    /// pushes a pair on the trail and is kept where a memo is armed: a reader
+    /// reads it where neither can bear on the answer.
+    pub(crate) trees: bool,
 }
 
 impl LeafPlan {
@@ -487,12 +554,20 @@ impl LeafPlan {
             decided: specialized.each_ref().map(Leaf::constant),
             specialized,
             levels: leaf.levels(),
+            trees: leaf.reaches_a_tree(),
         }
     }
 
     /// The plan of `schema`, where it is a leaf.
-    fn of(schema: &Schema, pool: &[Py<PyAny>], py: Python<'_>) -> Option<LeafPlan> {
-        Leaf::of(schema, pool, py).as_ref().map(LeafPlan::new)
+    fn of(
+        schema: &Schema,
+        pool: &[Py<PyAny>],
+        py: Python<'_>,
+        trees: &[Option<TreePlan>],
+    ) -> Option<LeafPlan> {
+        Leaf::of(schema, pool, py, trees)
+            .as_ref()
+            .map(LeafPlan::new)
     }
 
     /// What the leaf answers for every value of the exact type `exact`, or
@@ -638,6 +713,8 @@ impl Interval {
 pub(crate) struct TreePlan {
     /// The members that are leaves, as their union.
     pub(crate) leaf: LeafPlan,
+    /// That union as a leaf, which a leaf referring to the tree reads.
+    scalars: Leaf,
     /// The containers among the members, their [`Exact`] bits.
     containers: u8,
 }
@@ -668,14 +745,21 @@ impl TreePlan {
                 {
                     containers |= Exact::Dict as u8;
                 }
-                _ => leaves.push(Leaf::of(member, pool, py)?),
+                // A tree's member refers to no other tree: one that did would
+                // read a container on, which the tree reads itself.
+                _ => leaves.push(Leaf::of(member, pool, py, &[])?),
             }
         }
-        let leaf = LeafPlan::new(&Leaf::Any(leaves.into()));
+        let scalars = Leaf::Any(leaves.into());
+        let leaf = LeafPlan::new(&scalars);
         let containers_alone = [Exact::List, Exact::Dict]
             .into_iter()
             .all(|container| leaf.decided(container) == Some(false));
-        (containers != 0 && containers_alone).then_some(TreePlan { leaf, containers })
+        (containers != 0 && containers_alone).then_some(TreePlan {
+            leaf,
+            scalars,
+            containers,
+        })
     }
 
     /// Whether a member reads a value of the container type `container` on.
@@ -1127,14 +1211,14 @@ fn readings(
     py: Python<'_>,
 ) -> Option<Box<Readings>> {
     let mut readings = Readings::default();
-    for node in std::iter::once(schema).chain(defs) {
-        hold_leaves(node, pool, py, &mut readings.leaves);
-    }
     let trees: Vec<_> = defs
         .iter()
         .enumerate()
         .map(|(def, body)| TreePlan::of(def, body, pool, py))
         .collect();
+    for node in std::iter::once(schema).chain(defs) {
+        hold_leaves(node, pool, py, &trees, &mut readings.leaves);
+    }
     if trees.iter().any(Option::is_some) {
         readings.trees = trees;
     }
@@ -1149,6 +1233,7 @@ fn hold_leaves(
     schema: &Schema,
     pool: &[Py<PyAny>],
     py: Python<'_>,
+    trees: &[Option<TreePlan>],
     leaves: &mut FxHashMap<usize, LeafPlan>,
 ) {
     // A list's element, or the value a mapping of `str` keys holds.
@@ -1171,11 +1256,13 @@ fn hold_leaves(
     if let Some(element @ (Schema::Union(_) | Schema::Intersection(_) | Schema::Complement(_))) =
         held
         && !matches!(element, Schema::Union(members) if members.iter().all(|m| matches!(m, Schema::NoneType | Schema::Bool | Schema::Int | Schema::Float | Schema::Str | Schema::Bytes)))
-        && let Some(plan) = LeafPlan::of(element, pool, py)
+        && let Some(plan) = LeafPlan::of(element, pool, py, trees)
     {
         leaves.insert(std::ptr::from_ref(element) as usize, plan);
     }
-    for_each_child(schema, &mut |child| hold_leaves(child, pool, py, leaves));
+    for_each_child(schema, &mut |child| {
+        hold_leaves(child, pool, py, trees, leaves);
+    });
 }
 
 fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut ValidatorIndex) {

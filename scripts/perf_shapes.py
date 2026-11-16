@@ -155,6 +155,9 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
     not_bool = vg.complement(bool)
     integer = vg.intersection(int | Annotated[float, _Step(1)], not_bool)
     number = vg.intersection(int | Annotated[float, _AtLeast(float("-inf"))], not_bool)
+    at_least = vg.intersection(
+        Annotated[int, _AtLeast(0)] | Annotated[float, _AtLeast(0.0)], not_bool
+    )
     json_value = vg.recursive(
         lambda value: vg.union(
             None,
@@ -255,6 +258,12 @@ def _shapes() -> dict[str, Callable[[], tuple[Callable[..., object], object]]]:
         "json_integer": lambda: (
             v([integer]).is_valid_json,
             json.dumps(list(range(1000))),
+        ),
+        # A keyword's guard met with the JSON values, as a JSON Schema
+        # translation writes `minimum: 0` with no `type`: a leaf holding a tree.
+        "list_guarded": lambda: (
+            v([vg.intersection(vg.complement(number) | at_least, json_value)]).is_valid,
+            [*range(999), [1]],
         ),
         "recursive": lambda: (recursive.is_valid, _tree(12)),
         # The values `json.loads` returns, as a recursive union over a document

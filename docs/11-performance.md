@@ -815,7 +815,16 @@ program that builds validators per request, and to no validation call.
   tree answers an exact `float` by the interval at once.
   A mapping of `str` keys to a leaf is read the same way (`leaf_dict_read`):
   valgebra-jsonschema's `str -> integer` map of a thousand entries checks in
-  12.5 us where the scan took 31.
+  12.5 us where the scan took 31. A leaf may hold a reference to a tree of
+  scalars (`Leaf::Tree`), the JSON values a translation meets a keyword's guard
+  with: a scalar is the tree's leaves' answer, a list or a dict the tree reads
+  on is walked, and the reader takes it where the trail is below its bound and
+  no memo is armed (`leaf_reads_here` in `check/walk/scalar.rs`). On the profiled
+  CPython 3.15 wheel, a thousand integers against `if: integer, then: minimum
+  0` check in 7.3 us where the walk took 60.7 (1,410,105 to 165,119
+  instructions a call), against `minimum: 0` with no `type` in 7.4 where it took
+  42.8, and against `not: string` in 2.35 where it took 19.9 (`list_guarded`
+  89% fewer instructions).
 - **A tree of scalars is read by each value's type.** A definition whose union
   holds only leaves refusing every list and dict, a list of the definition and a
   mapping of `str` keys to it -- the values `json.loads` returns, `int |
@@ -1552,6 +1561,18 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   default clause's, and the arm moved them all though no gate shape reaches
   it: a record walked by interned keys read 2.8% dearer, a mapping of lists
   11.5%, and the other record shapes 1.2% to 1.9%.
+- **Reading a record's leaf field at the meet's arm of the walk**: the same field
+  read by its plan where `member` dispatches a meet, behind the index's one word,
+  as the reference's arm asks it. valgebra-jsonschema's `$ref` tree of 511 nodes
+  counts 18% fewer instructions and its record array 18%, but the arm lays out
+  `member`, which every shape crosses: on the profiled CPython 3.15 wheel the list
+  nested twenty-five deep read 6.73% more instructions, a record 1.53%, a
+  dataclass 1.67%, a literal 1.62%.
+- **Training the loop over a leaf holding a tree**: a line in
+  `scripts/pgo_workload.py` reading a list of `(~NUMBER | Ge(0)) & J` takes the
+  `if/then` array from 165,119 instructions a call to 110,191, but the list nested
+  twenty-five deep reads 2.36% more, at a hundred rounds as at five hundred:
+  past the profiled gate's ceiling. The loop runs untrained.
 
 ## Regression gate
 

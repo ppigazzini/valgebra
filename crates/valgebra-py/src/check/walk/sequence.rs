@@ -25,8 +25,8 @@ use super::reads_its_length;
 use super::record::{RecordReading, check_attr_record, check_keyed_map};
 use super::scalar::{
     Scalar, admitted_quietly, check_refine, constraints_hold, exact_of, exact_text_length,
-    homogeneous_scalar_union, json_leaf_admits, leaf_admits, length_range, machine_range,
-    machine_word, scalar_union_admits,
+    homogeneous_scalar_union, json_leaf_admits, leaf_admits, leaf_reads_here, length_range,
+    machine_range, machine_word, scalar_union_admits, tree_json_leaf_admits, tree_leaf_admits,
 };
 use super::tree::tree_list_read;
 use super::{
@@ -34,6 +34,7 @@ use super::{
     mutated, reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
 };
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH};
+use crate::check::index::{Exact, LeafPlan};
 use crate::check::violation::{summarize_value, type_fail};
 use crate::codes::{
     Code, FROZEN_SET_TYPE, LIST_LENGTH, LIST_TYPE, SET_TYPE, TUPLE_LENGTH, TUPLE_TYPE,
@@ -265,7 +266,7 @@ pub(super) fn json_array_read(
 }
 
 /// A parsed array whose element is a leaf
-/// ([`LeafPlan`](crate::check::index::LeafPlan)), each item read by its tag
+/// ([`LeafPlan`]), each item read by its tag
 /// and its number as [`leaf_list_read`] reads a list's elements by their types,
 /// or the reader of a union of scalars where the index holds no plan for the
 /// element. A walk that explains declines before this ([`json_array_read`]),
@@ -285,8 +286,31 @@ pub(super) fn leaf_array_read(
     if ctx.state.depth.get() + plan.levels > MAX_WALK_DEPTH {
         return None;
     }
+    if plan.trees {
+        return tree_leaf_array_read(element, py, items, plan, frame);
+    }
     Some(items.iter().all(|item| {
         json_leaf_admits(plan, item)
+            .unwrap_or_else(|| member(element, &Value::Json(py, item), frame))
+    }))
+}
+
+/// [`leaf_array_read`] for a plan holding a reference to a tree, read where
+/// the trail and the memo let it be ([`leaf_reads_here`]), in a loop of its own
+/// as [`tree_leaf_list_read`] is.
+#[inline(never)]
+fn tree_leaf_array_read(
+    element: &Schema,
+    py: Python<'_>,
+    items: &[JsonValue<'_>],
+    plan: &LeafPlan,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    if !leaf_reads_here(plan, frame.ctx) {
+        return None;
+    }
+    Some(items.iter().all(|item| {
+        tree_json_leaf_admits(plan, item)
             .unwrap_or_else(|| member(element, &Value::Json(py, item), frame))
     }))
 }
@@ -984,7 +1008,7 @@ fn text_meet_list(
 }
 
 /// A list whose element is a union, a meet or a complement of leaves
-/// ([`LeafPlan`](crate::check::index::LeafPlan)), each element asked by its
+/// ([`LeafPlan`]), each element asked by its
 /// exact type and its number, or `None` where the index holds no plan for the
 /// element, or the levels to its deepest type test are not free.
 ///
@@ -1018,6 +1042,61 @@ pub(super) fn leaf_list_read(
     if !prefix.is_empty() || ctx.state.depth.get() + plan.levels > MAX_WALK_DEPTH {
         return None;
     }
+    if plan.trees {
+        return tree_leaf_list_read(list, element, plan, value, frame);
+    }
+    Some(leaves_listed(
+        list,
+        element,
+        plan,
+        value,
+        frame,
+        leaf_admits,
+    ))
+}
+
+/// [`leaf_list_read`] for a plan holding a reference to a tree, read where
+/// the trail and the memo let it be ([`leaf_reads_here`]). A loop of its own:
+/// the test of a list or a dict the tree reads on, inlined into the loop over
+/// a plan of scalars, laid that loop out 4% dearer in cycles on the profiled
+/// `CPython` 3.15 wheel at the same instructions.
+#[inline(never)]
+fn tree_leaf_list_read(
+    list: &Bound<'_, PyList>,
+    element: &Schema,
+    plan: &LeafPlan,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    if !leaf_reads_here(plan, frame.ctx) {
+        return None;
+    }
+    Some(leaves_listed(
+        list,
+        element,
+        plan,
+        value,
+        frame,
+        tree_leaf_admits,
+    ))
+}
+
+/// The loop of [`leaf_list_read`] over `list`, each element asked of `admits`.
+#[expect(
+    clippy::inline_always,
+    reason = "measured: each reader of a list of leaves lays out its own loop, \
+              and the one over a plan of scalars is the instruction gate's"
+)]
+#[inline(always)]
+fn leaves_listed(
+    list: &Bound<'_, PyList>,
+    element: &Schema,
+    plan: &LeafPlan,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+    admits: impl Fn(&LeafPlan, &Bound<'_, PyAny>, Exact) -> Option<bool>,
+) -> bool {
+    let ctx = frame.ctx;
     let explains = ctx.mode.explains();
     let mut ok = true;
     // The element's walk is spelled here rather than through `seq_element`,
@@ -1025,7 +1104,7 @@ pub(super) fn leaf_list_read(
     // here laid out every walk of a nested list three instructions a level
     // dearer on the profiled wheel.
     let scan = scan_list(list, |at, item| {
-        ok &= match exact_of(item).and_then(|exact| leaf_admits(plan, item, exact)) {
+        ok &= match exact_of(item).and_then(|exact| admits(plan, item, exact)) {
             Some(true) => true,
             Some(false) if !explains => false,
             _ if explains => {
@@ -1042,11 +1121,11 @@ pub(super) fn leaf_list_read(
             ControlFlow::Continue(())
         }
     });
-    Some(match scan {
+    match scan {
         Scan::Complete => ok,
         Scan::Stopped => false,
         Scan::Unreadable => mutated(value, frame),
-    })
+    }
 }
 
 pub(super) fn instance_list_matches(

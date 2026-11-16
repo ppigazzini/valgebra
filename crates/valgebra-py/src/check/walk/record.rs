@@ -21,7 +21,8 @@ use rustc_hash::FxHashMap;
 use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema, Violation, quoted};
 
 use super::scalar::{
-    Scalar, admitted_quietly, exact_of, leaf_admits, scalar_admits, scalar_member, scalar_of,
+    Scalar, admitted_quietly, exact_of, leaf_reads_here, scalar_admits, scalar_member, scalar_of,
+    tree_leaf_admits,
 };
 use super::tree::tree_dict_read;
 #[cfg(PyPy)]
@@ -1106,13 +1107,16 @@ pub(super) fn leaf_dict_read(
         return None;
     };
     let plan = ctx.index.leaf(schema)?;
-    if ctx.mode.explains() || ctx.state.depth.get() + plan.levels > MAX_WALK_DEPTH {
+    if ctx.mode.explains()
+        || ctx.state.depth.get() + plan.levels > MAX_WALK_DEPTH
+        || !leaf_reads_here(plan, ctx)
+    {
         return None;
     }
     let scan = scan_dict(dict, ctx.state, |key, item| {
         let admitted = key.is_instance_of::<PyString>()
             && exact_of(item)
-                .and_then(|exact| leaf_admits(plan, item, exact))
+                .and_then(|exact| tree_leaf_admits(plan, item, exact))
                 .unwrap_or_else(|| member(schema, &Value::Py(item), frame));
         if admitted {
             ControlFlow::Continue(())

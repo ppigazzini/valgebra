@@ -29,7 +29,7 @@ use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
     reads_its_length, record_fatal, record_if_fatal, record_stop, stop, stopped,
 };
-use crate::check::ctx::Ctx;
+use crate::check::ctx::{Ctx, MAX_RECURSION_DEPTH};
 use crate::check::index::{Exact, LeafPlan, Number, matches_unindexed, ordered};
 use crate::check::violation::{mismatch, summarize_in, summarize_value};
 use crate::codes::{
@@ -152,9 +152,23 @@ pub(super) fn exact_of(value: &Bound<'_, PyAny>) -> Option<Exact> {
     })
 }
 
+/// Whether `plan` is read where the walk stands as the walk reads it: a leaf
+/// holding a reference to a tree of scalars only where no memo is armed, which
+/// keeps the tree's walk and the reach it notes, and where the trail is below
+/// its bound, which the tree's walk would stop on. A leaf of scalars alone
+/// enters no definition, and the walk's own count of those it enters is left
+/// where it stands: it decides only which later member is walked armed, which
+/// keeps answers and decides none.
+#[inline]
+pub(super) fn leaf_reads_here(plan: &LeafPlan, ctx: Ctx<'_>) -> bool {
+    !plan.trees
+        || (!ctx.state.memo.is_armed() && ctx.state.guard.borrow().height() < MAX_RECURSION_DEPTH)
+}
+
 /// What `plan` answers for `value`, whose exact type is `exact`, or `None`
 /// where the walk must read it: an `int` past a machine word whose number the
-/// leaf reads, which the comparison reads as the walk does.
+/// leaf reads, which the comparison reads as the walk does. A plan holding a
+/// tree is read by [`tree_leaf_admits`].
 #[inline]
 pub(super) fn leaf_admits(plan: &LeafPlan, value: &Bound<'_, PyAny>, exact: Exact) -> Option<bool> {
     if let Some(decided) = plan.decided(exact) {
@@ -175,10 +189,27 @@ pub(super) fn leaf_admits(plan: &LeafPlan, value: &Bound<'_, PyAny>, exact: Exac
     Some(plan.holds(exact, number))
 }
 
+/// [`leaf_admits`] for a plan that may hold a reference to a tree: a list or
+/// a dict the tree reads on, which no leaf settles, is the walk's
+/// ([`Leaf::Walk`](crate::check::index::Leaf)). Over a plan of scalars alone
+/// it answers as [`leaf_admits`] does, which decides every list and dict.
+#[inline]
+pub(super) fn tree_leaf_admits(
+    plan: &LeafPlan,
+    value: &Bound<'_, PyAny>,
+    exact: Exact,
+) -> Option<bool> {
+    match exact {
+        Exact::List | Exact::Dict => plan.decided(exact),
+        _ => leaf_admits(plan, value, exact),
+    }
+}
+
 /// What `plan` answers for a parsed value, read by its tag, or `None` where the
 /// walk must read it: an integer past a machine word whose number the leaf
 /// reads. A tag is a value's exact type, as `json.loads` builds it, and a
-/// number's value is in hand.
+/// number's value is in hand. A plan holding a tree is read by
+/// [`tree_json_leaf_admits`].
 #[inline]
 pub(super) fn json_leaf_admits(plan: &LeafPlan, value: &JsonValue<'_>) -> Option<bool> {
     let (exact, number) = match value {
@@ -198,6 +229,18 @@ pub(super) fn json_leaf_admits(plan: &LeafPlan, value: &JsonValue<'_>) -> Option
         plan.decided(exact)
             .unwrap_or_else(|| plan.holds(exact, number)),
     )
+}
+
+/// [`json_leaf_admits`] for a plan that may hold a reference to a tree: an
+/// array or an object the tree reads on is the walk's, as
+/// [`tree_leaf_admits`] reads a list or a dict.
+#[inline]
+pub(super) fn tree_json_leaf_admits(plan: &LeafPlan, value: &JsonValue<'_>) -> Option<bool> {
+    match value {
+        JsonValue::Array(_) => plan.decided(Exact::List),
+        JsonValue::Object(_) => plan.decided(Exact::Dict),
+        _ => json_leaf_admits(plan, value),
+    }
 }
 
 /// What [`member`] answers at the root of a walk for a schema that is one scalar

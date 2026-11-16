@@ -271,6 +271,30 @@ def test_a_list_of_numbers_answers_as_the_walk_of_the_same_set(
     assert (values in Validator([written])) == twin
 
 
+class _Unheld:
+    """A class no drawn value is an instance of, and no leaf reads."""
+
+
+@given(_number_sets, st.lists(_numbers | documents | strangers, max_size=6))
+def test_a_list_of_numbers_met_with_the_universe_answers_as_the_walk(
+    written: Validator[Any], values: list[object]
+) -> None:
+    """A list of a number set met with the JSON values answers as its twin's walk.
+
+    The JSON values are a tree of scalars: a scalar is decided by its type and
+    its number, the set's and the tree's together, and a list or a dict the tree
+    reads on is walked. The twin holds the same values and a class none of these
+    is an instance of, which keeps it from that reading; a member such as
+    `frozenset[int]` would hold the empty frozenset a stranger is.
+    """
+    met = intersection(written, JSON_VALUE)
+    twin = Validator([union(met, _Unheld)]).is_valid(values)
+    assert Validator([met]).is_valid(values) == twin
+    assert Validator([union(complement(met), _Unheld)]).is_valid(values) == (
+        Validator([complement(met)]).is_valid(values)
+    )
+
+
 @given(
     _number_sets,
     st.lists(

@@ -1248,6 +1248,36 @@ key and keeps what a union's deciding pass asks.
 `a_mapping_of_leaves_is_read_as_the_walk_reads_it` holds it to the scan in every
 mode, and `a_mapping_of_leaves_is_read_where_its_levels_are_free` where it reads.
 
+A leaf may hold a reference to a tree of scalars (`Leaf::Tree`): a JSON Schema
+translation meets a keyword's guard with the JSON values, `(~NUMBER |
+Annotated[int, Ge(0)] | Annotated[float, Ge(0)]) & J`, and so every `not`, `if`
+and `then` it writes. Over a scalar the reference is the tree's leaves' answer,
+specialized with the rest of the leaf, and over a list or a dict the tree reads
+on it is the walk's (`Leaf::Walk`): an element the rest of the leaf does not
+settle without it is walked at its position, and no number is read for it. The
+reference's own level counts in the plan's levels. A reader takes such a plan
+only where the trail is below its bound and no memo is armed
+(`leaf_reads_here` in `walk/scalar.rs`): the tree's walk pushes a pair on the
+trail, which stops it at the bound, and an armed walk keeps the tree's answer
+and the reach it notes. The list's and the parsed array's readers hand such a
+plan to a loop of their own (`tree_leaf_list_read`, `tree_leaf_array_read`,
+asking `tree_leaf_admits` and `tree_json_leaf_admits`): the test of a container
+the tree reads on, inlined into the loop over a plan of scalars alone, laid that
+loop out 4% dearer in cycles at the same instructions, a list of a thousand
+integers against `integer` and of a thousand floats against `number` alike, in
+two builds of one tree; the mapping's reader asks `tree_leaf_admits` of every
+plan, and reads level. The reading enters no definition, where the walk
+enters the tree at each element whose walk reaches the reference; that count
+decides only which later member a walk keeps, which answers alike either way.
+`a_list_of_leaves_holding_a_tree_is_read_as_the_walk_reads_it` holds five such
+leaves to the general loop over the tree corpus -- every exact type, subclasses,
+containers, cycles, chains to 128 deep, values that move, and parsed arrays --
+from starts at both bounds in every mode, and
+`a_leaf_holding_a_tree_is_read_where_its_walk_could_not_stop` holds where each of
+the three readers declines. In `tests/test_universe.py`,
+`test_a_list_of_numbers_met_with_the_universe_answers_as_the_walk` holds a list of
+every number set met with the JSON values, and its complement, to the walk.
+
 ## A tree of scalars is read by each value's type
 
 A definition whose body is a union of leaves refusing every list and dict, a
