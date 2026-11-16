@@ -1537,6 +1537,14 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   it took 38.5, and its `$ref` tree eight deep 220 where it took 196. A kept
   walk reads the tree's scalars by type instead
   ([a kept walk](#walking-a-python-value)).
+- **Reading a record's leaf field by its type in the record's field test**: a
+  field JSON Schema's `integer` translates to, a meet, is walked where
+  `scalar_member` answers a bare kind. Read there by its leaf, valgebra-jsonschema's
+  record array counts 4% fewer instructions on the profiled CPython 3.15 wheel,
+  but the field test is inlined into every record's field loop and every
+  default clause's, and the arm moved them all though no gate shape reaches
+  it: a record walked by interned keys read 2.8% dearer, a mapping of lists
+  11.5%, and the other record shapes 1.2% to 1.9%.
 
 ## Regression gate
 
