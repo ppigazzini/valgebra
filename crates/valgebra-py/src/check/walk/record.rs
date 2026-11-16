@@ -701,26 +701,22 @@ impl Undeclared {
 /// subclass with an `__eq__` of its own is found exactly where indexing the
 /// dict would find it.
 ///
-/// `None` means "ask the scan instead": a clause reads an undeclared key
-/// together with its value; the plan has no interned key for a field; or a
-/// probe raised something other than a fatal signal, which is not an answer. A
-/// value that changes size under the probes is not one of those: it is answered
-/// here, as the scan answers it, because there is no reading of it left to fall
-/// back to.
+/// `None` means "ask the scan instead": the value holds an undeclared key and a
+/// clause reads it together with its value; the plan has no interned key for a
+/// field; or a probe raised something other than a fatal signal, which is not
+/// an answer. A value that changes size under the probes is not one of those:
+/// it is answered here, as the scan answers it, because there is no reading of
+/// it left to fall back to.
 fn keyed_map_asks_for_its_keys(
-    fields: &[Field],
-    undeclared: Undeclared,
+    reading: &RecordReading<'_>,
     dict: &Bound<'_, PyDict>,
     frame: &mut Frame<'_, '_>,
     plan: &RecordPlan,
     decided: Option<&mut Decided>,
 ) -> Option<bool> {
+    let (fields, undeclared) = (reading.fields, reading.undeclared);
     let ctx = frame.ctx;
-    // By its keys where the keys settle it. A record whose clause reads an
-    // undeclared key together with its value has to be scanned, and the scan
-    // walks the declared fields as it goes, so reading those by key first would
-    // be work done twice; such a record is not read here.
-    if undeclared == Undeclared::Read || plan.keys.len() != fields.len() {
+    if plan.keys.len() != fields.len() {
         return None;
     }
     // A fast frame over the caller's buffers, which a fast walk writes nothing
@@ -838,11 +834,57 @@ fn keyed_map_asks_for_its_keys(
                     _ => Some(read_whole(&keys, ctx)),
                 }
             }
-            // Kept out by the guard above; were it not, the scan still decides,
-            // at the cost of the reading just done.
-            Undeclared::Read => None,
+            // A clause that reads an undeclared key together with its value --
+            // the `str: J` every object of a JSON Schema translation carries --
+            // is asked of each undeclared key, and of nothing the fields above
+            // read: an explaining walk resumes past them.
+            Undeclared::Read => Some(undeclared_held(
+                fields,
+                reading.defaults,
+                dict,
+                plan,
+                &sub.ctx,
+            )),
         }
     })
+}
+
+/// Whether a clause covers every key of `dict` that reaches no declared name,
+/// for a record whose clause reads an undeclared key with its value
+/// ([`Undeclared::Read`]) and whose declared fields the probes of
+/// [`keyed_map_asks_for_its_keys`] admitted.
+///
+/// A key is resolved as the scan resolves it ([`declared_position`]), and a
+/// declared one is skipped: its field was read by the probes, and a field read
+/// twice runs a predicate on it twice. Out of line, as [`other_keys_reach_names`]
+/// is: a record holding a key it does not declare is the rarer reading, and the
+/// probes are inlined into the reader of a list of records.
+#[cold]
+#[inline(never)]
+fn undeclared_held(
+    fields: &[Field],
+    defaults: &[MapClause],
+    dict: &Bound<'_, PyDict>,
+    plan: &RecordPlan,
+    ctx: &Ctx<'_>,
+) -> bool {
+    let ctx = *ctx;
+    let names = Names {
+        by_text: |name: &str| plan.by_name.get(name).copied(),
+        interned: Some(&plan.keys),
+        read: RefCell::default(),
+    };
+    let mut unwritten = Unwritten::default();
+    let mut sub = unwritten.frame(ctx);
+    let scan = scan_dict(dict, ctx.state, |key, value| {
+        let declared = declared_position(key, fields, &names, ctx, Entry { dict, value }).is_some();
+        if declared || covered(defaults, &Value::Py(key), &Value::Py(value), &mut sub) {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    read_whole(&scan, ctx)
 }
 
 /// Whether every key of `dict` that is not a `str` reaches a declared name, for
@@ -902,7 +944,7 @@ fn keyed_map_matches_py(
         fields,
         defaults,
         plan,
-        undeclared,
+        ..
     } = *reading;
     let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
@@ -934,14 +976,9 @@ fn keyed_map_matches_py(
         }
     }
     if let Some(plan) = plan {
-        if let Some(answered) = keyed_map_asks_for_its_keys(
-            fields,
-            undeclared,
-            dict,
-            frame,
-            plan,
-            decided.as_deref_mut(),
-        ) {
+        if let Some(answered) =
+            keyed_map_asks_for_its_keys(reading, dict, frame, plan, decided.as_deref_mut())
+        {
             return answered;
         }
         keyed_map_scan(

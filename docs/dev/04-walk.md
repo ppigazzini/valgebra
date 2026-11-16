@@ -300,10 +300,11 @@ that reaches one. An explaining walk reads each branch a refused
 union has to walk twice -- once to decide whether any branch admits the value,
 once to explain it -- and a union left with one branch to walk once. It reads
 twice a keyed map that fails: a record read by its keys re-reads the field its
-deciding pass stopped at and everything beneath it, a map read by a scan
-re-reads every entry up to the refused one (`resume` in `Decided` is `None`
-there), and either walks a clause once more against an undeclared key it does
-not cover, to report it. A keyed map
+deciding pass stopped at and everything beneath it, and none of its fields
+where an undeclared key refused it, a map read by a scan re-reads every entry
+up to the refused one (`resume` in `Decided` is `None` there), and either walks
+a clause once more against an undeclared key it does not cover, to report it. A
+keyed map
 that is a union's branch takes the second read only where the union refuses the
 value, since its explaining pass waits for that. A predicate
 is user code, so each occurrence the walk reaches is a call, and a cache keyed
@@ -416,20 +417,24 @@ declared keys has no undeclared key for any clause to govern. **By a scan**
 resolves it -- an exact `str` by its text, any other key as the declared name
 its hash and `==` reach (`declared_position`), where the dict answers that name
 with this entry (`the_entry_a_name_finds`) -- and each undeclared key read
-against the clause that covers it. **Explaining**
+against the clause that covers it: a mapping, and a record its plan holds no
+interned key of every field for. **Explaining**
 (`keyed_map_explain`): the scan that reports every violation rather than the
 first. A list of records reads its node's plan and clauses once
-(`RecordReading` in `walk/record.rs`). Which of the first two a record takes is
-`Undeclared::of` reading the record's clauses: an undeclared key is *refused* (no clause), *admitted* (the
-top clause), *admitted when it is a string* (`str: anything`, which is what a
-`TypedDict` builds), or *read* (any other clause). The invariant that makes
-the by-keys path sound is that it never probes an undeclared key, so it may
-take a record only where the clause's verdict on such a key is stated without
-the key's value: the three readings above say it -- refused is `False`,
-admitted is `True`, a string clause is `isinstance(key, str)` over every key,
-with a key of another type asked whether it reaches a declared name -- and a
-clause that reads a key together with its value keeps the scan. All three
-readings, and the explaining one, resolve a key alike, or the explaining walk,
+(`RecordReading` in `walk/record.rs`). What a record read by its keys asks of
+the keys it does not declare is `Undeclared::of` reading its clauses: an
+undeclared key is *refused* (no clause), *admitted* (the top clause),
+*admitted when it is a string* (`str: anything`, which is what a `TypedDict`
+builds), or *read* (any other clause). The by-keys path never probes an
+undeclared key. The first three readings state the clause's verdict on one
+without its value -- refused is `False`, admitted is `True`, a string clause is
+`isinstance(key, str)` over every key, with a key of another type asked whether
+it reaches a declared name -- and a clause that reads a key together with its
+value, the `str: J` a JSON Schema translation writes, is asked of each key a
+scan resolves to no declared name, after the probes (`undeclared_held`): a
+declared key is skipped, since the probes read its field, and a field read
+twice runs a predicate on it twice. All the readings, and the explaining one,
+resolve a key alike, or the explaining walk,
 which asks the dict, finds nothing to report against a value a scan refused
 and names a mutation of a value nothing moved.
 The JSON reading takes the plan for an open record too, since a document's

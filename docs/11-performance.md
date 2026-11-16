@@ -986,8 +986,14 @@ program that builds validators per request, and to no validation call.
   about an undeclared key -- it is admitted exactly when it is a `str` -- can be
   said without reading its value (`Undeclared::of` in
   `crates/valgebra-py/src/check/walk/record.rs`; `--binding-open`). A record
-  whose clause reads a key together with its value scans its entries, because
-  that clause has to see each one.
+  whose clause reads a key together with its value -- the `str: J` a JSON Schema
+  translation writes for `additionalProperties` absent -- is read by its keys as
+  well, and where the value holds a key it does not declare, those keys alone are
+  scanned against the clause (`undeclared_held`): a list of two hundred records
+  `{id: integer, name: str, tags: list[str], str: J}`, as valgebra-jsonschema
+  writes an array of objects, reads 21.5% fewer instructions on the profiled
+  CPython 3.15 wheel (16.97 to 10.68 us), a list of two such records' tagged
+  `oneOf` 26.9%, and a `$ref` tree of 511 such nodes 17.1%.
 - **A dataclass's attribute names are interned once per validator**, so
   `getattr` is handed an object the interpreter already holds. The object is
   read borrowed, as the walk holds it, so reading a record writes no reference

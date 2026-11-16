@@ -634,13 +634,14 @@ to decide whether any branch admits the value and again to explain it, so a
 predicate inside runs twice there, and a union left with one branch to walk
 explains it once. A dict schema -- a record, a `TypedDict`, a mapping -- that
 refuses a value is read twice: a deciding pass, then an explaining pass. A
-record read by its keys -- a closed record, a `TypedDict` -- resumes at the
-field the first pass stopped at, so a predicate on or under that field runs a
-second time. A mapping, or a record whose catch-all clause reads its values, is
-read by a scan, and its explaining pass starts at the first entry: a predicate
-on every entry up to the refused one runs a second time, and one on the clause
-an undeclared key falls under runs once to find whether the clause covers the
-entry and again to report it (`docs/dev/04-walk.md`). A dict schema
+record -- closed, a `TypedDict`, or open under a catch-all clause that reads
+its values -- is read by its keys, and resumes at the field the first pass
+stopped at, so a predicate on or under that field runs a second time, and past
+its fields where an undeclared key refused it. A mapping is read by a scan, and
+its explaining pass starts at the first entry: a predicate on every entry up to
+the refused one runs a second time. A predicate on the clause an undeclared key
+falls under runs once to find whether the clause covers the entry and again to
+report it (`docs/dev/04-walk.md`). A dict schema
 that is a branch of a union is read the second time only where no branch admits
 the value. Without
 `fail_fast`, `validate` also reads past the first failure, running the

@@ -9128,14 +9128,14 @@ fn a_union_of_records_reports_alike_wherever_it_sits() {
     });
 }
 
-/// A record whose catch-all clause reads its values is read by a scan, so its
-/// explaining pass starts at the first entry, and a predicate on an entry
-/// before the refused one runs a second time (`docs/05-refinements.md`).
+/// A record whose catch-all clause reads its values is read by its keys, then
+/// its undeclared keys by the clause: the explaining pass resumes at the field
+/// the first pass refused, or past the fields where an undeclared key refused,
+/// so a predicate on a field before it runs once, and a field is read once in a
+/// record its clause admits whatever keys it holds (`docs/05-refinements.md`).
 #[test]
-fn a_record_whose_clause_reads_values_is_explained_from_its_first_entry() {
+fn a_record_whose_clause_reads_values_reads_each_field_once() {
     Python::attach(|py| {
-        let module = counting(py, "explained_from_the_first_entry");
-        let pool: Vec<Py<PyAny>> = vec![module.getattr("count").expect("count").unbind()];
         let record = Schema::keyed_map(
             vec![
                 field("a", checked_by(0), true),
@@ -9143,17 +9143,32 @@ fn a_record_whose_clause_reads_values_is_explained_from_its_first_entry() {
             ],
             vec![MapClause {
                 key: Schema::Str,
-                value: Schema::Int,
+                value: Schema::Str,
             }],
         );
-        let (admitted, report) = explain(py, &record, &eval(py, "{'a': 1, 'b': 'x'}"), &pool, &[]);
-        assert!(!admitted);
-        assert_eq!(codes_at(&report), [("int_type", "b".to_owned())]);
-        assert_eq!(
-            calls(&module),
-            2,
-            "the deciding scan and the explaining one"
-        );
+        let cases = [
+            (
+                "{'a': 1, 'b': 'x'}",
+                false,
+                vec![("int_type", "b".to_owned())],
+            ),
+            (
+                "{'a': 1, 'b': 2, 'c': 3}",
+                false,
+                vec![("string_type", "c".to_owned())],
+            ),
+            // The clause refuses the fields' values: a declared key is no
+            // question of the clause.
+            ("{'a': 1, 'b': 2, 'c': 'x'}", true, vec![]),
+        ];
+        for (source, member, codes) in cases {
+            let module = counting(py, "reads_each_field_once");
+            let pool: Vec<Py<PyAny>> = vec![module.getattr("count").expect("count").unbind()];
+            let (admitted, report) = explain(py, &record, &eval(py, source), &pool, &[]);
+            assert_eq!(admitted, member, "{source}");
+            assert_eq!(codes_at(&report), codes, "{source}");
+            assert_eq!(calls(&module), 1, "{source}: the field's predicate");
+        }
     });
 }
 
