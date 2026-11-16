@@ -9878,9 +9878,9 @@ fn a_mapping_of_a_tree_is_read_where_each_value_would_be() {
 
 /// A container's scan admits a value by its type alone where the tree's leaf
 /// decides that type whatever the number, and keeps the type for the next
-/// value; a value whose number the leaf reads, a container and a type the leaf
-/// refuses are named for the reading, and a value of no exact builtin type for
-/// the walk.
+/// value; a `float` is answered by the leaf's interval, a container and a type
+/// the leaf refuses are named for the reading, and a value of no exact builtin
+/// type for the walk.
 #[test]
 fn a_scan_admits_a_value_by_its_type_where_the_leaf_decides_it() {
     use super::tree::{Named, Seen};
@@ -9896,7 +9896,9 @@ fn a_scan_admits_a_value_by_its_type_where_the_leaf_decides_it() {
             ("2", Named::Kept),
             ("'x'", Named::Kept),
             ("None", Named::Kept),
-            ("1.5", Named::Exact(Exact::Float)),
+            ("1.5", Named::Answered(true)),
+            ("-1.5", Named::Answered(false)),
+            ("float('nan')", Named::Answered(false)),
             ("[1]", Named::Exact(Exact::List)),
             ("{}", Named::Exact(Exact::Dict)),
             ("b'y'", Named::Exact(Exact::Bytes)),
@@ -10098,8 +10100,33 @@ fn leaves() -> Vec<Schema> {
             ]
             .into(),
         ),
-        // The top and the bottom as parts of a leaf, which construction folds
-        // away and a term built by hand keeps.
+    ]
+    .into_iter()
+    .chain(built_leaves())
+    .collect()
+}
+
+/// The leaves [`leaves`] holds beside the ones a translation writes: a float in
+/// an interval, which order bounds alone make two comparisons, and the top and
+/// the bottom as parts of a leaf, which construction folds away and a term
+/// built by hand keeps.
+fn built_leaves() -> [Schema; 3] {
+    let not_bool = || Schema::Complement(Arc::new(Schema::Bool));
+    [
+        Schema::Union(
+            vec![
+                Schema::NoneType,
+                Schema::Refine {
+                    base: Arc::new(Schema::Float),
+                    constraints: vec![
+                        Constraint::Ge(OperandIx::new(2)),
+                        Constraint::Lt(OperandIx::new(3)),
+                    ]
+                    .into(),
+                },
+            ]
+            .into(),
+        ),
         Schema::Intersection(
             vec![Schema::Anything(valgebra_core::Spelling::Any), not_bool()].into(),
         ),

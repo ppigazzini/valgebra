@@ -163,7 +163,13 @@ pub(super) fn leaf_admits(plan: &LeafPlan, value: &Bound<'_, PyAny>, exact: Exac
     let number = match exact {
         Exact::Int => Number::Int(value.extract::<i64>().map_err(set_aside).ok()?),
         Exact::Bool => Number::Int(i64::from(value.is_truthy().map_err(set_aside).ok()?)),
-        Exact::Float => Number::Float(value.cast_exact::<PyFloat>().ok()?.value()),
+        Exact::Float => {
+            let number = value.cast_exact::<PyFloat>().ok()?.value();
+            if let Some(range) = plan.floats() {
+                return Some(range.holds(number));
+            }
+            Number::Float(number)
+        }
         _ => Number::None,
     };
     Some(plan.holds(exact, number))
@@ -180,7 +186,10 @@ pub(super) fn json_leaf_admits(plan: &LeafPlan, value: &JsonValue<'_>) -> Option
         JsonValue::Bool(truth) => (Exact::Bool, Number::Int(i64::from(*truth))),
         JsonValue::Int(number) => (Exact::Int, Number::Int(*number)),
         JsonValue::BigInt(_) => return plan.decided(Exact::Int),
-        JsonValue::Float(number) => (Exact::Float, Number::Float(*number)),
+        JsonValue::Float(number) => match plan.floats() {
+            Some(range) => return Some(range.holds(*number)),
+            None => (Exact::Float, Number::Float(*number)),
+        },
         JsonValue::Str(_) => (Exact::Str, Number::None),
         JsonValue::Array(_) => (Exact::List, Number::None),
         JsonValue::Object(_) => (Exact::Dict, Number::None),

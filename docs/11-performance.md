@@ -808,6 +808,11 @@ program that builds validators per request, and to no validation call.
   against `number` 83%, and a document of a thousand integers 67%, the parse
   included; a test holds the reader to the general loop's verdict, stop, moves,
   fatal signal and report in every mode.
+  A leaf over `float`s that is order bounds alone is held as the interval
+  they admit (`Interval` in `check/index.rs`), two comparisons where the
+  bounds were each a test through the leaf's tree: a thousand floats against
+  `number` count 44% fewer instructions again, and a list or a mapping of a
+  tree answers an exact `float` by the interval at once.
 - **A tree of scalars is read by each value's type.** A definition whose union
   holds only leaves refusing every list and dict, a list of the definition and a
   mapping of `str` keys to it -- the values `json.loads` returns, `int |

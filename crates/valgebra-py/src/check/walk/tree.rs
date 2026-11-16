@@ -12,7 +12,7 @@
 use std::ops::ControlFlow;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString};
+use pyo3::types::{PyDict, PyFloat, PyList, PyString};
 use valgebra_core::{DefIx, Schema};
 
 use super::record::scan_dict;
@@ -305,6 +305,7 @@ fn element_read(
     let ctx = frame.ctx;
     let read = match seen.name(plan, item) {
         Named::Kept => Some(true),
+        Named::Answered(admitted) => Some(admitted),
         Named::Exact(_) => {
             ctx.state.depth.set(depth + 1);
             let read = read(plan, id, element, item, frame);
@@ -343,6 +344,8 @@ pub(super) struct Seen(Option<*mut pyo3::ffi::PyTypeObject>);
 pub(super) enum Named {
     /// Admitted by its type alone.
     Kept,
+    /// A `float` the leaf's interval answers for.
+    Answered(bool),
     /// Of this exact builtin type, for the reading to take.
     Exact(Exact),
     /// Of no exact builtin type.
@@ -357,6 +360,11 @@ impl Seen {
         let kind = item.get_type_ptr();
         if self.0 == Some(kind) {
             return Named::Kept;
+        }
+        if let Some(range) = plan.leaf.floats()
+            && let Ok(number) = item.cast_exact::<PyFloat>()
+        {
+            return Named::Answered(range.holds(number.value()));
         }
         match exact_of(item) {
             Some(exact) if plan.leaf.decided(exact) == Some(true) => {

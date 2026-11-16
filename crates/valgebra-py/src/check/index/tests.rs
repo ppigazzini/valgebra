@@ -352,3 +352,79 @@ fn the_program_table_drops_the_programs_gone_as_it_doubles() {
         "the program gone is dropped, the ones held kept"
     );
 }
+
+/// A leaf over `float`s of order bounds alone is the interval they admit:
+/// each end closed or open, a `nan` in none, an infinity where the bounds put
+/// it; a leaf with a step, with no bound or with a `nan` operand is none.
+#[test]
+fn a_float_leaf_of_order_bounds_is_an_interval() {
+    use pyo3::basic::CompareOp::{Ge, Gt, Le, Lt};
+    let floats = |tests: &[FloatTest]| Leaf::Floats(tests.to_vec().into());
+    let order = FloatTest::Order;
+    let range = Interval::of(&floats(&[order(Ge, 0.0), order(Lt, 5.0)])).expect("bounds");
+    for (number, want) in [
+        (0.0, true),
+        (-0.0, true),
+        (4.5, true),
+        (5.0, false),
+        (-1.0, false),
+        (f64::NAN, false),
+        (f64::INFINITY, false),
+    ] {
+        assert_eq!(range.holds(number), want, "{number}");
+    }
+    let open = Interval::of(&floats(&[order(Gt, 0.0), order(Le, 5.0)])).expect("bounds");
+    assert_eq!((open.holds(0.0), open.holds(5.0)), (false, true));
+    let below = Interval::of(&floats(&[order(Ge, f64::NEG_INFINITY)])).expect("a bound");
+    assert_eq!(
+        (
+            below.holds(f64::NEG_INFINITY),
+            below.holds(f64::INFINITY),
+            below.holds(f64::NAN)
+        ),
+        (true, true, false)
+    );
+    let met = Leaf::All(
+        vec![
+            floats(&[order(Ge, 1.0)]),
+            floats(&[order(Gt, 1.0), order(Le, 3.0)]),
+        ]
+        .into(),
+    );
+    let met = Interval::of(&met).expect("a meet of bounds");
+    assert_eq!(
+        (met.holds(1.0), met.holds(1.5), met.holds(3.0)),
+        (false, true, true)
+    );
+    // Two ends at one number are one end, open where either is, on each side
+    // and in either order; `-0.0` and `0.0` are one number.
+    for tests in [
+        [order(Le, 3.0), order(Lt, 3.0)],
+        [order(Lt, 3.0), order(Le, 3.0)],
+    ] {
+        let range = Interval::of(&floats(&tests)).expect("bounds");
+        assert_eq!((range.holds(3.0), range.holds(2.5)), (false, true));
+    }
+    for tests in [
+        [order(Ge, 1.0), order(Gt, 1.0)],
+        [order(Gt, 1.0), order(Ge, 1.0)],
+    ] {
+        let range = Interval::of(&floats(&tests)).expect("bounds");
+        assert_eq!((range.holds(1.0), range.holds(1.5)), (false, true));
+    }
+    let zero = Interval::of(&floats(&[order(Le, 0.0), order(Lt, -0.0)])).expect("bounds");
+    assert_eq!(
+        (zero.holds(0.0), zero.holds(-0.0), zero.holds(-1.0)),
+        (false, false, true)
+    );
+    assert_eq!(Interval::of(&floats(&[])), None);
+    assert_eq!(
+        Interval::of(&floats(&[order(Ge, 0.0), FloatTest::Step(1.0)])),
+        None
+    );
+    assert_eq!(Interval::of(&floats(&[order(Ge, f64::NAN)])), None);
+    assert_eq!(
+        Interval::of(&Leaf::Not(Box::new(floats(&[order(Ge, 0.0)])))),
+        None
+    );
+}

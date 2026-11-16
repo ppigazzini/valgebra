@@ -473,12 +473,17 @@ pub(crate) struct LeafPlan {
     /// The levels below the level the leaf is asked at, its own included,
     /// that the walk opens to reach its deepest type test.
     pub(crate) levels: usize,
+    /// The leaf over `float`s as the interval it admits, where it is order
+    /// bounds alone ([`Interval::of`]).
+    floats: Option<Interval>,
 }
 
 impl LeafPlan {
     fn new(leaf: &Leaf) -> LeafPlan {
         let specialized = Exact::ALL.map(|exact| leaf.specialized(exact));
+        let floats = specialized.get(Exact::Float.place()).and_then(Interval::of);
         LeafPlan {
+            floats,
             decided: specialized.each_ref().map(Leaf::constant),
             specialized,
             levels: leaf.levels(),
@@ -495,6 +500,13 @@ impl LeafPlan {
     #[inline]
     pub(crate) fn decided(&self, exact: Exact) -> Option<bool> {
         self.decided.get(exact.place()).copied().flatten()
+    }
+
+    /// The interval a `float` is admitted in, where the leaf over `float`s is
+    /// order bounds alone.
+    #[inline]
+    pub(crate) fn floats(&self) -> Option<Interval> {
+        self.floats
     }
 
     /// What the leaf answers for a value of the exact type `exact` holding
@@ -518,6 +530,111 @@ impl LeafPlan {
 /// it holds. So a value of an exact builtin type is the leaves' answer, and a
 /// list or a dict the same question asked of what it holds (`tree_member` in
 /// `check/walk/tree.rs`).
+/// A leaf over `float`s that is order bounds alone, as the interval they
+/// admit: each end a bound or an infinity, closed or open.
+///
+/// The bounds are tested one by one at every number otherwise, through the
+/// leaf's tree; as an interval they are two comparisons. A `nan` is in no
+/// interval, as it holds no order bound, and an infinity lies where its bounds
+/// put it, so the interval admits exactly the numbers the bounds do. A leaf
+/// with no bound, or with a step, a complement or a union in it, is no
+/// interval and is read by its tree.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Interval {
+    least: f64,
+    least_open: bool,
+    most: f64,
+    most_open: bool,
+}
+
+impl Interval {
+    /// The interval of every number but `nan`.
+    const NUMBERS: Interval = Interval {
+        least: f64::NEG_INFINITY,
+        least_open: false,
+        most: f64::INFINITY,
+        most_open: false,
+    };
+
+    /// The interval `leaf` admits, or `None` where it is not order bounds alone.
+    fn of(leaf: &Leaf) -> Option<Interval> {
+        match leaf {
+            Leaf::Floats(tests) if !tests.is_empty() => tests
+                .iter()
+                .try_fold(Interval::NUMBERS, |range, test| range.bounded(*test)),
+            Leaf::All(parts) if !parts.is_empty() => {
+                parts.iter().try_fold(Interval::NUMBERS, |range, part| {
+                    Some(range.meet(Interval::of(part)?))
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// This interval narrowed by one test, or `None` where it is no order bound.
+    fn bounded(self, test: FloatTest) -> Option<Interval> {
+        let FloatTest::Order(op, operand) = test else {
+            return None;
+        };
+        if operand.is_nan() {
+            return None;
+        }
+        let end = |open| Interval {
+            least: operand,
+            least_open: open,
+            ..Interval::NUMBERS
+        };
+        let top = |open| Interval {
+            most: operand,
+            most_open: open,
+            ..Interval::NUMBERS
+        };
+        Some(self.meet(match op {
+            CompareOp::Ge => end(false),
+            CompareOp::Gt => end(true),
+            CompareOp::Le => top(false),
+            CompareOp::Lt => top(true),
+            _ => return None,
+        }))
+    }
+
+    /// The numbers both intervals admit. No end is `nan`, and two ends at one
+    /// number, `-0.0` and `0.0` among them, are one end, open where either is.
+    fn meet(self, other: Interval) -> Interval {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+        let (least, least_open) = match other.least.partial_cmp(&self.least) {
+            Some(Greater) => (other.least, other.least_open),
+            Some(Equal) => (self.least, self.least_open || other.least_open),
+            _ => (self.least, self.least_open),
+        };
+        let (most, most_open) = match other.most.partial_cmp(&self.most) {
+            Some(Less) => (other.most, other.most_open),
+            Some(Equal) => (self.most, self.most_open || other.most_open),
+            _ => (self.most, self.most_open),
+        };
+        Interval {
+            least,
+            least_open,
+            most,
+            most_open,
+        }
+    }
+
+    /// Whether `number` lies in the interval.
+    #[inline]
+    pub(crate) fn holds(self, number: f64) -> bool {
+        (if self.least_open {
+            number > self.least
+        } else {
+            number >= self.least
+        }) && (if self.most_open {
+            number < self.most
+        } else {
+            number <= self.most
+        })
+    }
+}
+
 pub(crate) struct TreePlan {
     /// The members that are leaves, as their union.
     pub(crate) leaf: LeafPlan,
