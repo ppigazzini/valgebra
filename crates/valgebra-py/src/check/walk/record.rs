@@ -20,7 +20,9 @@ use pyo3::types::{PyDict, PyString};
 use rustc_hash::FxHashMap;
 use valgebra_core::{Attribute, Field, MapClause, PathSegment, Schema, Violation, quoted};
 
-use super::scalar::{Scalar, admitted_quietly, scalar_admits, scalar_member, scalar_of};
+use super::scalar::{
+    Scalar, admitted_quietly, exact_of, leaf_admits, scalar_admits, scalar_member, scalar_of,
+};
 use super::tree::tree_dict_read;
 #[cfg(PyPy)]
 use super::{Base, held_dict, reads_its_length, reads_its_values};
@@ -28,7 +30,7 @@ use super::{
     Frame, Scan, Unwritten, again, fast, fold, is_fatal, member, mutated, record_fatal,
     record_if_fatal, record_move, stop,
 };
-use crate::check::ctx::{Ctx, WalkState};
+use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkState};
 use crate::check::index::{RecordPlan, decided_by_its_value};
 use crate::check::violation::{at_key, key_segment, located, summarize_value, type_mismatch};
 use crate::codes::{DICT_TYPE, EXTRA_FORBIDDEN, MISSING_ATTRIBUTE, MISSING_KEY};
@@ -914,6 +916,9 @@ fn keyed_map_matches_py(
         if let Some(answered) = scalar_map_matches(defaults, dict, ctx, decided.as_deref_mut()) {
             return answered;
         }
+        if let Some(answered) = leaf_dict_read(defaults, dict, frame) {
+            return answered;
+        }
         // A mapping of a tree's reference -- `dict[str, J]`. What a union's
         // deciding pass keeps is kept in a walk that explains, which the
         // reading declines to the scan below.
@@ -1032,6 +1037,52 @@ pub(super) fn scalar_map_matches(
         keep.admitted = admitted;
         keep.inside = false;
     }
+    Some(read_whole(&scan, ctx))
+}
+
+/// A mapping of `str` keys to a leaf -- `dict[str, integer]` -- each entry's
+/// key an instance of `str` and its value read by its exact type and number,
+/// as [`leaf_list_read`](super::sequence::leaf_list_read) reads a list's
+/// elements, or `None` where the index holds no plan for the value, the levels
+/// to its deepest type test are not free, or the walk explains.
+///
+/// The scan asks each value through its clause and the walk of the meet, the
+/// union and the complement the leaf is made of, around tests the value's type
+/// answers. A value no type settles -- a subclass, an `int` past a word the
+/// leaf reads -- is walked from the mapping's level, where the scan walks it.
+/// What a union's deciding pass keeps is kept in a walk that explains, which
+/// this declines to the scan.
+#[inline(never)]
+pub(super) fn leaf_dict_read(
+    defaults: &[MapClause],
+    dict: &Bound<'_, PyDict>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    let [
+        MapClause {
+            key: Schema::Str,
+            value: schema,
+        },
+    ] = defaults
+    else {
+        return None;
+    };
+    let plan = ctx.index.leaf(schema)?;
+    if ctx.mode.explains() || ctx.state.depth.get() + plan.levels > MAX_WALK_DEPTH {
+        return None;
+    }
+    let scan = scan_dict(dict, ctx.state, |key, item| {
+        let admitted = key.is_instance_of::<PyString>()
+            && exact_of(item)
+                .and_then(|exact| leaf_admits(plan, item, exact))
+                .unwrap_or_else(|| member(schema, &Value::Py(item), frame));
+        if admitted {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
     Some(read_whole(&scan, ctx))
 }
 

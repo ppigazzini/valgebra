@@ -1224,6 +1224,16 @@ before it asks the reading, and without that test the profiled wheel laid
 reading 12% more cycles on CPython 3.15, its frontend stalls three times as
 many.
 
+A mapping of `str` keys to a leaf, `dict[str, integer]`, is read the same way
+too (`leaf_dict_read` in `walk/record.rs`): the index plans the value of a
+mapping's one `str` clause as it plans a list's element, and each entry's key
+is asked to be an instance of `str` and its value read by its type and number,
+a value no type settles walked from the mapping's level, where the scan walks
+it. A walk that explains reads the scan, which reports a refused entry by its
+key and keeps what a union's deciding pass asks.
+`a_mapping_of_leaves_is_read_as_the_walk_reads_it` holds it to the scan in every
+mode, and `a_mapping_of_leaves_is_read_where_its_levels_are_free` where it reads.
+
 ## A tree of scalars is read by each value's type
 
 A definition whose body is a union of leaves refusing every list and dict, a

@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
-use valgebra_core::{Constraint, DefIx, OperandIx, Schema, SeqKind};
+use valgebra_core::{Constraint, DefIx, MapClause, OperandIx, Schema, SeqKind};
 
 use super::memo::{self, MemoPlan, for_each_child};
 use crate::input::Value;
@@ -1151,13 +1151,25 @@ fn hold_leaves(
     py: Python<'_>,
     leaves: &mut FxHashMap<usize, LeafPlan>,
 ) {
-    if let Schema::Seq {
-        container: SeqKind::List,
-        shape,
-    } = schema
-        && shape.prefix.is_empty()
-        && let Some(element @ (Schema::Union(_) | Schema::Intersection(_) | Schema::Complement(_))) =
-            shape.tail.as_deref()
+    // A list's element, or the value a mapping of `str` keys holds.
+    let held = match schema {
+        Schema::Seq {
+            container: SeqKind::List,
+            shape,
+        } if shape.prefix.is_empty() => shape.tail.as_deref(),
+        Schema::KeyedMap { fields, defaults } if fields.is_empty() => match &defaults[..] {
+            [
+                MapClause {
+                    key: Schema::Str,
+                    value,
+                },
+            ] => Some(value),
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some(element @ (Schema::Union(_) | Schema::Intersection(_) | Schema::Complement(_))) =
+        held
         && !matches!(element, Schema::Union(members) if members.iter().all(|m| matches!(m, Schema::NoneType | Schema::Bool | Schema::Int | Schema::Float | Schema::Str | Schema::Bytes)))
         && let Some(plan) = LeafPlan::of(element, pool, py)
     {

@@ -10005,7 +10005,18 @@ class Grow(float):\n\
 def moving():\n\
 \x20   grow = Grow(1.0)\n\
 \x20   grow.into = [1, grow, 2]\n\
-\x20   return grow.into\n";
+\x20   return grow.into\n\
+class Spread(float):\n\
+\x20   def __mod__(self, other):\n\
+\x20       self.into[len(self.into)] = 0\n\
+\x20       return 0.0\n\
+\x20   def __ge__(self, other):\n\
+\x20       self.into[len(self.into)] = 0\n\
+\x20       return True\n\
+def moving_map():\n\
+\x20   spread = Spread(1.0)\n\
+\x20   spread.into = {'a': 1, 'b': spread, 'c': 2}\n\
+\x20   return spread.into\n";
 
 /// The leaves a list is read through, over the operands of [`LEAF_VALUES`]:
 /// JSON Schema's `integer` and `number`, an `integer` from 0 to a million, the
@@ -10356,6 +10367,137 @@ fn a_parsed_array_hands_a_leaf_to_its_reader_where_the_index_reads() {
                 Some(want),
                 "{element:?}"
             );
+        }
+    });
+}
+
+/// A mapping of `str` keys to a leaf read by each value's type and number
+/// answers as the general scan does: the verdict, the stop, the moves, the
+/// fatal signal and the report, for a mapping of each value alone, of all of
+/// them, keyed by a value that is no `str`, and one that moves, in every mode.
+#[test]
+fn a_mapping_of_leaves_is_read_as_the_walk_reads_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(py, LEAF_VALUES, c"leaf_maps.py", c"leaf_maps")
+            .expect("the corpus compiles");
+        let listed = |name: &str| -> Vec<Bound<'_, PyAny>> {
+            module
+                .getattr(name)
+                .expect("the corpus")
+                .try_iter()
+                .expect("a list")
+                .map(|item| item.expect("an element"))
+                .collect()
+        };
+        let pool: Vec<Py<PyAny>> = listed("OPERANDS").into_iter().map(Bound::unbind).collect();
+        let values = listed("VALUES");
+        let mut maps: Vec<Bound<'_, PyAny>> = values
+            .iter()
+            .map(|value| {
+                let map = PyDict::new(py);
+                map.set_item("k", value).expect("a key");
+                map.into_any()
+            })
+            .collect();
+        let every = PyDict::new(py);
+        for (at, value) in values.iter().enumerate() {
+            every.set_item(format!("k{at}"), value).expect("a key");
+        }
+        maps.push(every.into_any());
+        let keyed = PyDict::new(py);
+        keyed.set_item(1, 1).expect("a key");
+        maps.push(keyed.into_any());
+        for leaf in leaves() {
+            let root = Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: leaf,
+                }],
+            );
+            let (read, walked) = read_and_walked(py, &root, &[], &pool);
+            let Schema::KeyedMap { defaults, .. } = &root else {
+                unreachable!("a mapping")
+            };
+            let value = defaults
+                .first()
+                .map(|clause| &clause.value)
+                .expect("a clause");
+            assert!(read.leaf(value).is_some(), "{value:?} is a leaf");
+            let moving = module.getattr("moving_map").expect("the corpus");
+            let made = (0..2).map(|_| moving.call0().expect("a mapping that moves"));
+            for map in maps.iter().cloned().chain(made) {
+                for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle] {
+                    let tree = (&root, &[][..], &pool[..]);
+                    assert_eq!(
+                        walked_in(&read, tree, &map, (0, 0), mode),
+                        walked_in(&walked, tree, &map, (0, 0), mode),
+                        "{value:?} at {map:?} in {mode:?}"
+                    );
+                }
+            }
+        }
+    });
+}
+
+/// The reader of a mapping of leaves reads where the levels to the leaf's
+/// deepest type test are free below the mapping's, in a walk that explains
+/// nothing, and declines one level past and where the walk explains.
+#[test]
+fn a_mapping_of_leaves_is_read_where_its_levels_are_free() {
+    use super::record::leaf_dict_read;
+    Python::attach(|py| {
+        let pool = vec![evaluate(py, "1").unbind()];
+        let leaf = leaves().remove(0);
+        let defaults = vec![MapClause {
+            key: Schema::Str,
+            value: leaf,
+        }];
+        let root = Schema::keyed_map(Vec::new(), defaults.clone());
+        let index = build_index(py, &root, &[], &pool);
+        let Schema::KeyedMap { defaults, .. } = &root else {
+            unreachable!("a mapping")
+        };
+        let levels = index
+            .leaf(&defaults.first().expect("a clause").value)
+            .expect("a leaf")
+            .levels;
+        let map = evaluate(py, "{'a': 1, 'b': 2}");
+        let dict = map.cast::<PyDict>().expect("a dict");
+        let read_at = |depth: usize, mode: WalkMode| {
+            let state = WalkState::new();
+            state.depth.set(depth);
+            let ctx = Ctx {
+                pool: &pool,
+                defs: &[],
+                index: &index,
+                state: &state,
+                mode,
+            };
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            leaf_dict_read(defaults, dict, &mut Frame::new(&mut path, &mut out, ctx))
+        };
+        assert_eq!(read_at(0, WalkMode::Fast), Some(true));
+        assert_eq!(read_at(0, WalkMode::Settle), Some(true));
+        assert_eq!(read_at(0, WalkMode::Explain), None);
+        assert_eq!(read_at(MAX_WALK_DEPTH - levels, WalkMode::Fast), Some(true));
+        assert_eq!(read_at(MAX_WALK_DEPTH - levels + 1, WalkMode::Fast), None);
+        // The index plans the value of a mapping's one `str` clause and a
+        // list's element behind no prefix, as the readers read them: a
+        // record's clause and a prefixed list's tail hold no plan.
+        let leaf = leaves().remove(0);
+        let clause = MapClause {
+            key: Schema::Str,
+            value: leaf.clone(),
+        };
+        let record = Schema::keyed_map(vec![field("f", Schema::Int, true)], vec![clause]);
+        let prefixed = Schema::list(SeqShape {
+            prefix: vec![Schema::Int].into(),
+            tail: Some(Arc::new(leaf)),
+        });
+        for unread in [record, prefixed] {
+            let index = build_index(py, &unread, &[], &pool);
+            assert!(!index.has_readings(), "{unread:?}");
         }
     });
 }
