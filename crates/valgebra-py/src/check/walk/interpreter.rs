@@ -9876,6 +9876,38 @@ fn a_mapping_of_a_tree_is_read_where_each_value_would_be() {
     });
 }
 
+/// A container's scan admits a value by its type alone where the tree's leaf
+/// decides that type whatever the number, and keeps the type for the next
+/// value; a value whose number the leaf reads, a container and a type the leaf
+/// refuses are named for the reading, and a value of no exact builtin type for
+/// the walk.
+#[test]
+fn a_scan_admits_a_value_by_its_type_where_the_leaf_decides_it() {
+    use super::tree::{Named, Seen};
+    Python::attach(|py| {
+        let root = Schema::Ref(DefIx::new(0));
+        let defs = [trees().remove(0)];
+        let pool = vec![evaluate(py, "0").unbind()];
+        let index = build_index(py, &root, &defs, &pool);
+        let plan = index.tree(DefIx::new(0)).expect("a tree");
+        let mut seen = Seen::default();
+        for (source, want) in [
+            ("1", Named::Kept),
+            ("2", Named::Kept),
+            ("'x'", Named::Kept),
+            ("None", Named::Kept),
+            ("1.5", Named::Exact(Exact::Float)),
+            ("[1]", Named::Exact(Exact::List)),
+            ("{}", Named::Exact(Exact::Dict)),
+            ("b'y'", Named::Exact(Exact::Bytes)),
+            ("object()", Named::Other),
+            ("3", Named::Kept),
+        ] {
+            assert_eq!(seen.name(plan, &evaluate(py, source)), want, "{source}");
+        }
+    });
+}
+
 /// Where a memo is armed the definition is walked, since a kept walk reads how
 /// deep the walks inside it reached. The second branch keeps the definition at
 /// a list subclass, which the reading leaves to the walk, around a chain the

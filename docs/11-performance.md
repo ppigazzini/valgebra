@@ -830,9 +830,10 @@ program that builds validators per request, and to no validation call.
   with, read each value as the tree's reading does at the value's reference,
   the bounds asked once for the container (`tree_list_read` and
   `tree_dict_read` in `check/walk/tree.rs`). On the profiled CPython 3.15 wheel
-  `list[J]` over a thousand integers takes 3.8 us where the reference's arm
-  took 6.8, and `dict[str, J]` over a thousand entries 7.2 us where it took
-  13.2. The list arm asks it behind the index's word, since a list of a
+  `list[J]` over a thousand integers takes 2.5 us where the reference's arm
+  took 6.8, and `dict[str, J]` over a thousand entries 6.2 us where it took
+  13.2: each reader keeps the type of the last value its leaf admits whatever
+  the number, so a value of that type is one comparison of its type pointer. The list arm asks it behind the index's word, since a list of a
   reference in a validator holding no reading paid the reader's call: the memo's
   shape read 3.5% dearer without it, and reads 1.6% dearer with it on the build
   without a profile, a list of records 0.9% and a list nested twenty-five deep

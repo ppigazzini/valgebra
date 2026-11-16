@@ -225,8 +225,9 @@ pub(super) fn tree_list_read(
         return None;
     }
     let mut admitted = true;
+    let mut seen = Seen::default();
     let scan = scan_list(list, |_, item| {
-        admitted = element_read(plan, id, element, item, depth, frame);
+        admitted = element_read(plan, id, element, item, depth, frame, &mut seen);
         if admitted {
             ControlFlow::Continue(())
         } else {
@@ -267,9 +268,10 @@ pub(super) fn tree_dict_read(
         return None;
     }
     let mut admitted = true;
+    let mut seen = Seen::default();
     let scan = scan_dict(dict, ctx.state, |key, item| {
         admitted = key.is_instance_of::<PyString>()
-            && element_read(plan, id, value_schema, item, depth, frame);
+            && element_read(plan, id, value_schema, item, depth, frame, &mut seen);
         if admitted {
             ControlFlow::Continue(())
         } else {
@@ -298,14 +300,71 @@ fn element_read(
     item: &Bound<'_, PyAny>,
     depth: usize,
     frame: &mut Frame<'_, '_>,
+    seen: &mut Seen,
 ) -> bool {
     let ctx = frame.ctx;
-    ctx.state.depth.set(depth + 1);
-    let read = read(plan, id, element, item, frame);
-    ctx.state.depth.set(depth);
+    let read = match seen.name(plan, item) {
+        Named::Kept => Some(true),
+        Named::Exact(_) => {
+            ctx.state.depth.set(depth + 1);
+            let read = read(plan, id, element, item, frame);
+            ctx.state.depth.set(depth);
+            read
+        }
+        Named::Other => None,
+    };
     if let Some(admitted) = read {
         ctx.state.memo.enter();
         return admitted;
     }
     member(element, &Value::Py(item), frame)
+}
+
+/// The exact type of a scalar a container's scan admitted by its type alone,
+/// so the next value of that type is admitted by one comparison.
+///
+/// A list or a mapping is mostly of one type, and the leaf's answer for a
+/// type it decides whatever the number is a constant ([`LeafPlan`]'s
+/// `decided`); naming the type again took a comparison per kind before it,
+/// the levels set and reset, and the reading's call, around that constant.
+/// Only such a type is kept, so a value whose number the leaf reads -- a
+/// `float` under a bound -- is read every time, and so is a value of any other
+/// type. A list or a mapping of the tree keeps one; the tree's own containers
+/// do not, since a value of a tree is as often a container beside a scalar,
+/// and kept there, the type that missed at every other value read
+/// `--binding-recursive` 8% dearer.
+///
+/// [`LeafPlan`]: crate::check::index::LeafPlan
+#[derive(Default)]
+pub(super) struct Seen(Option<*mut pyo3::ffi::PyTypeObject>);
+
+/// What [`Seen::name`] reads a value as.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Named {
+    /// Admitted by its type alone.
+    Kept,
+    /// Of this exact builtin type, for the reading to take.
+    Exact(Exact),
+    /// Of no exact builtin type.
+    Other,
+}
+
+impl Seen {
+    /// What `item` is to a scan of the tree `plan`, keeping its type where the
+    /// leaf admits every value of it. A tree's leaves refuse every list and
+    /// dict, so a container is never kept and is read as a container.
+    pub(super) fn name(&mut self, plan: &TreePlan, item: &Bound<'_, PyAny>) -> Named {
+        let kind = item.get_type_ptr();
+        if self.0 == Some(kind) {
+            return Named::Kept;
+        }
+        match exact_of(item) {
+            Some(exact) if plan.leaf.decided(exact) == Some(true) => {
+                self.0 = Some(kind);
+                Named::Kept
+            }
+            Some(exact) => Named::Exact(exact),
+            None => Named::Other,
+        }
+    }
 }

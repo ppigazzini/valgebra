@@ -1284,6 +1284,13 @@ walk that explains, which the mapping's reader declines.
 loop's and scan's answers in every mode from starts at both bounds, and
 `a_list_of_a_tree_is_read_where_each_element_would_be` and
 `a_mapping_of_a_tree_is_read_where_each_value_would_be` where each reads.
+Each keeps the exact type of the last value its tree's leaf admits whatever
+the number (`Seen`), so a list or a mapping of one such type pays one
+comparison of a type pointer a value. A type whose number the leaf reads is
+read every time, and the tree's own containers keep none: a value of a tree is
+as often a container as a scalar, and the type missed at every other value.
+`a_scan_admits_a_value_by_its_type_where_the_leaf_decides_it` holds what it
+keeps.
 
 ## The limit
 
