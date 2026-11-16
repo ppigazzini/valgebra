@@ -10692,9 +10692,12 @@ fn text_meet() -> Schema {
 }
 
 /// A list of a meet of `str` and its length refinements read by each exact
-/// `str`'s length answers as the general loop does: the verdict, the stop, the
-/// moves, the fatal signal and the report, for a list of each value and of all
-/// of them, from starts near the depth bound, in every mode.
+/// `str`'s length answers as the walk of a tuple of the same elements, which
+/// no reader takes: the verdict, the stop, the moves, the fatal signal and the
+/// report, for a list of each value and of all of them, from starts near the
+/// depth bound, in every mode. The list is read alone, where the index holds
+/// no reading, as a translation writes it, and beside a list of a leaf, where
+/// it holds one.
 #[test]
 fn a_list_of_a_meet_of_lengths_is_read_as_the_walk_reads_it() {
     Python::attach(|py| {
@@ -10707,42 +10710,44 @@ fn a_list_of_a_meet_of_lengths_is_read_as_the_walk_reads_it() {
             .expect("a list")
             .map(|item| item.expect("an element"))
             .collect();
-        // Beside a list of a leaf, so the index holds a reading.
-        let root = Schema::tuple(SeqShape::fixed([
-            Schema::list(SeqShape::homogeneous(text_meet())),
-            Schema::list(SeqShape::homogeneous(Schema::Complement(Arc::new(
-                Schema::Bytes,
-            )))),
-        ]));
-        let (read, walked) = read_and_walked(py, &root, &[], &[]);
-        assert!(read.has_readings());
-        let empty = PyList::empty(py);
-        let mut tuples: Vec<Bound<'_, PyAny>> = values
-            .iter()
-            .map(|value| {
-                let list = PyList::new(py, [value]).expect("a list");
-                PyTuple::new(py, [list.as_any(), empty.as_any()])
-                    .expect("a tuple")
-                    .into_any()
-            })
-            .collect();
-        let every = PyList::new(py, &values).expect("a list");
-        tuples.push(
-            PyTuple::new(py, [every.as_any(), empty.as_any()])
-                .expect("a tuple")
-                .into_any(),
-        );
+        let leaves = Schema::list(SeqShape::homogeneous(Schema::Complement(Arc::new(
+            Schema::Bytes,
+        ))));
+        let empty = PyList::empty(py).into_any();
+        let mut cases: Vec<Vec<&Bound<'_, PyAny>>> = values.iter().map(|v| vec![v]).collect();
+        cases.push(values.iter().collect());
         let mut starts = vec![0];
         starts.extend((0..8).map(|below| MAX_WALK_DEPTH - below));
-        for value in &tuples {
-            for &depth in &starts {
-                for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle] {
-                    let tree = (&root, &[][..], &[][..]);
-                    assert_eq!(
-                        walked_in(&read, tree, value, (depth, 0), mode),
-                        walked_in(&walked, tree, value, (depth, 0), mode),
-                        "{value:?} from {depth} in {mode:?}"
-                    );
+        for beside in [false, true] {
+            let root = |inner: Schema| {
+                if beside {
+                    Schema::tuple(SeqShape::fixed([inner, leaves.clone()]))
+                } else {
+                    inner
+                }
+            };
+            let listed_root = root(Schema::list(SeqShape::homogeneous(text_meet())));
+            let tupled_root = root(Schema::tuple(SeqShape::homogeneous(text_meet())));
+            let read = build_index(py, &listed_root, &[], &[]);
+            let walked = build_index(py, &tupled_root, &[], &[]);
+            assert_eq!(read.has_readings(), beside);
+            for case in &cases {
+                let listed = PyList::new(py, case).expect("a list").into_any();
+                let tupled = PyTuple::new(py, case).expect("a tuple").into_any();
+                let (listed, tupled) = if beside {
+                    let pair = |inner| PyTuple::new(py, [inner, empty.clone()]).expect("a tuple");
+                    (pair(listed).into_any(), pair(tupled).into_any())
+                } else {
+                    (listed, tupled)
+                };
+                for &depth in &starts {
+                    for mode in [WalkMode::Fast, WalkMode::Explain, WalkMode::Settle] {
+                        assert_eq!(
+                            walked_in(&read, (&listed_root, &[], &[]), &listed, (depth, 0), mode),
+                            walked_in(&walked, (&tupled_root, &[], &[]), &tupled, (depth, 0), mode),
+                            "{listed:?} from {depth} in {mode:?}"
+                        );
+                    }
                 }
             }
         }
@@ -10789,6 +10794,27 @@ fn a_list_of_a_meet_of_lengths_is_read_where_its_levels_are_free() {
             Some(false)
         );
         assert_eq!(read_at(MAX_WALK_DEPTH - 2, WalkMode::Fast, &[]), None);
+        // Alone, the list's index holds no reading, and the meet is read all the
+        // same.
+        let alone = build_index(
+            py,
+            &Schema::list(SeqShape::homogeneous(element.clone())),
+            &[],
+            &[],
+        );
+        assert!(!alone.has_readings());
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            index: &alone,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let (mut path, mut out) = (Vec::new(), Vec::new());
+        let mut frame = Frame::new(&mut path, &mut out, ctx);
+        let read = element_list_matches(list, &[], &element, &Value::Py(&value), &mut frame);
+        assert_eq!(read, Some(false));
         // A length refinement of another base is no string's: the meet with
         // a refinement of `bytes` holds no `str`, and is left to the walk.
         let bytes = Schema::Intersection(

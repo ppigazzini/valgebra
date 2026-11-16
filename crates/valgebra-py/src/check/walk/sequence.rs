@@ -843,7 +843,7 @@ pub(super) fn element_list_matches(
             [Schema::Instance(index), Schema::AttrRecord { fields }] => {
                 class_record_list_matches(list, prefix, element, *index, fields, value, frame)
             }
-            _ => named_tuple_list_matches(list, prefix, element, members, value, frame),
+            _ => meet_list_read(list, prefix, element, members, value, frame),
         },
         Schema::Complement(_) if frame.ctx.index.has_readings() => {
             leaf_list_read(list, prefix, element, value, frame)
@@ -900,14 +900,29 @@ fn read_or_leaf(
                     list, prefix, element, *index, fields, value, frame,
                 );
             }
-            _ => match text_lengths(members) {
-                Some(range) => text_meet_list(list, prefix, element, range, value, frame),
-                None => named_tuple_list_matches(list, prefix, element, members, value, frame),
-            },
+            _ => meet_list_read(list, prefix, element, members, value, frame),
         },
         _ => None,
     };
     read.or_else(|| leaf_list_read(list, prefix, element, value, frame))
+}
+
+/// A list of a meet that is no class and its attributes: of `str` and its
+/// length bounds ([`text_meet_list`]), whatever else the index holds, or a
+/// named tuple's. A translation that writes `minLength` beside `maxLength`
+/// writes the meet with no reading beside it in `list[...]` alone.
+fn meet_list_read(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    members: &[Schema],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    match text_lengths(members) {
+        Some(range) => text_meet_list(list, prefix, element, range, value, frame),
+        None => named_tuple_list_matches(list, prefix, element, members, value, frame),
+    }
 }
 
 /// The one range of lengths a meet of `str` and refinements of `str` by length

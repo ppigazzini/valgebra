@@ -892,10 +892,13 @@ length the walk reads by its storage, is the element's own check.
 bounds. A meet of `str` and its length refinements, the spelling a JSON Schema
 translation gives `minLength` beside `maxLength`, is that one range too
 (`text_lengths`, read by `text_meet_list` where the three levels below the list's
-to the base's type test are free, in a walk that explains nothing): an exact
+to the base's type test are free, in a walk that explains nothing, whatever
+other reading the index holds: the translation writes `list[...]` of the meet
+alone): an exact
 `str` is its length against the range, and any other element is walked whole
 from the list's level. `a_list_of_a_meet_of_lengths_is_read_as_the_walk_reads_it`
-holds it to the general loop in every mode from starts near the depth bound. A list of records is read so too
+holds it to the walk of a tuple of the same elements, in every mode from starts
+near the depth bound, alone and beside a reading. A list of records is read so too
 (`record_list_matches`):
 each element is its record's check, inlined into the reader, with the level
 held across the list, and the fatal-signal flag read at every element, as
