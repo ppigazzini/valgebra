@@ -18,7 +18,7 @@ use valgebra_core::{DefIx, Schema};
 use super::record::scan_dict;
 use super::scalar::{exact_of, leaf_admits};
 use super::sequence::scan_list;
-use super::{Frame, Scan, member, mutated, record_move};
+use super::{Frame, Scan, member, mutated, note_scalar_reach, record_move};
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
 use crate::check::index::{Exact, TreePlan};
 use crate::input::Value;
@@ -29,13 +29,13 @@ pub(super) const TO_AN_ELEMENT: usize = 3;
 
 /// What [`member`] answers for `schema`, a reference to the definition `id`
 /// that the index reads as a tree of scalars, at `value`, or `None` where the
-/// general walk must read it: a walk in another mode or with a memo armed, a
-/// parsed value, a value of no exact builtin type, a container met inside
-/// itself, and a value where a bound may stop the walk.
+/// general walk must read it: a walk in another mode, a parsed value, a value
+/// of no exact builtin type, a container met inside itself or in a walk with
+/// a memo armed, and a value where a bound may stop the walk.
 ///
 /// Asked from the reference's arm, with its level open. A kept walk reads how
-/// deep the walks inside it reached, which this reading does not count, so
-/// where one may be kept the general walk reads the definition. Its answer is
+/// deep the walks inside it reached, which the reading of a container does not
+/// count, so there a scalar alone is read ([`kept_scalar_read`]). Its answer is
 /// the general walk's: a value is settled here only where the walk could not
 /// stop -- the levels to its type tests free, and its reference's pair below
 /// the trail's bound -- and such a type test runs no Python and records
@@ -57,7 +57,7 @@ pub(super) fn tree_member(
     let plan = ctx.index.tree(id)?;
     let height = ctx.state.guard.borrow().height();
     if ctx.state.memo.is_armed() || !readable(plan, ctx.state.depth.get(), height) {
-        return None;
+        return kept_scalar_read(plan, id, value, height, ctx);
     }
     let admitted = read(plan, id, schema, value, frame)?;
     ctx.state.memo.enter();
@@ -198,8 +198,8 @@ fn held(
 /// tree of scalars -- `list[J]`, which a JSON Schema translation meets every
 /// array with -- each element read as [`tree_member`] reads it at the element's
 /// reference, or `None` where that reading would decline at every element: a
-/// walk in another mode, a memo armed, a prefix, or a reference's level or its
-/// pair past a bound.
+/// walk in another mode, a prefix, or a reference's level or its pair past a
+/// bound. In a walk with a memo armed, [`kept_list_read`] reads it.
 ///
 /// The general loop pays each element's level, its reference's arm and the
 /// reading's own entry around a question the element's type answers. Here the
@@ -216,8 +216,11 @@ pub(super) fn tree_list_read(
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
     let ctx = frame.ctx;
-    if !prefix.is_empty() || ctx.mode != WalkMode::Fast || ctx.state.memo.is_armed() {
+    if !prefix.is_empty() || ctx.mode != WalkMode::Fast {
         return None;
+    }
+    if ctx.state.memo.is_armed() {
+        return kept_list_read(id, element, list, value, frame);
     }
     let plan = ctx.index.tree(id)?;
     let depth = ctx.state.depth.get();
@@ -246,6 +249,7 @@ pub(super) fn tree_list_read(
 /// every object with -- each entry read as the general scan reads it, its key
 /// an instance of `str` and its value read as [`tree_list_read`] reads a
 /// list's element, or `None` where that reading would decline at every value.
+/// In a walk with a memo armed, [`kept_dict_read`] reads it.
 ///
 /// The scan asks each value through its clause, the reference's arm and the
 /// reading's own entry; here the bounds are asked once, as each value's
@@ -259,8 +263,11 @@ pub(super) fn tree_dict_read(
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
     let ctx = frame.ctx;
-    if ctx.mode != WalkMode::Fast || ctx.state.memo.is_armed() {
+    if ctx.mode != WalkMode::Fast {
         return None;
+    }
+    if ctx.state.memo.is_armed() {
+        return kept_dict_read(id, value_schema, dict, frame);
     }
     let plan = ctx.index.tree(id)?;
     let depth = ctx.state.depth.get();
@@ -316,6 +323,154 @@ fn element_read(
     };
     if let Some(admitted) = read {
         ctx.state.memo.enter();
+        return admitted;
+    }
+    member(element, &Value::Py(item), frame)
+}
+
+/// [`tree_member`] where it declines, in a walk kept for the memo, one a node
+/// armed: a scalar read by its exact type, with the reach its reference's walk
+/// would have noted, where the walk could not stop on it, and `None` for a
+/// container, which the general walk keeps. Asked where the reading declines,
+/// so with no memo armed the bounds declined it, and decline it here.
+///
+/// A kept walk reads how far the walks inside it reached. A scalar's walk
+/// enters no reference below it, so its reach is its reference's own; the
+/// reading of a container reads levels below it that no reach would count.
+/// And kept, a container is found by a deeper meet that reaches the definition
+/// at it again, which a reading would read whole a second time. Asked from the
+/// branch where the reading declines, so the reading's own entry reads as it
+/// does in a walk that keeps nothing.
+#[cold]
+#[inline(never)]
+fn kept_scalar_read(
+    plan: &TreePlan,
+    id: DefIx,
+    value: &Bound<'_, PyAny>,
+    height: usize,
+    ctx: Ctx<'_>,
+) -> Option<bool> {
+    let depth = ctx.state.depth.get();
+    if !readable(plan, depth, height) {
+        return None;
+    }
+    let exact = exact_of(value)?;
+    if plan.reads(exact) {
+        return None;
+    }
+    let admitted = leaf_admits(&plan.leaf, value, exact)?;
+    note_scalar_reach(id, (depth, height), ctx);
+    ctx.state.memo.enter();
+    Some(admitted)
+}
+
+/// [`tree_list_read`] in a walk kept for the memo, the fast walk of a list with
+/// no prefix: each scalar element read as [`kept_scalar_read`] reads one, the
+/// reach of its reference noted once for the list, and each other element
+/// walked whole from the list's level; `None` where a reference's level or its
+/// pair is past a bound.
+///
+/// Asked once the mode and the prefix are read, so it takes the five
+/// arguments that pass in registers: asked where the reading declines, with
+/// the prefix besides, it cost [`tree_list_read`]'s own loop an instruction an
+/// element on the profiled `CPython` 3.15 wheel.
+#[cold]
+#[inline(never)]
+fn kept_list_read(
+    id: DefIx,
+    element: &Schema,
+    list: &Bound<'_, PyList>,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    let plan = ctx.index.tree(id)?;
+    let depth = ctx.state.depth.get();
+    let height = ctx.state.guard.borrow().height();
+    if !readable(plan, depth + 1, height) {
+        return None;
+    }
+    let (mut admitted, mut read) = (true, false);
+    let scan = scan_list(list, |_, item| {
+        admitted = kept_element_read(plan, element, item, frame, &mut read);
+        if admitted {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    if read {
+        note_scalar_reach(id, (depth + 1, height), ctx);
+    }
+    Some(match scan {
+        Scan::Complete => admitted,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
+}
+
+/// [`tree_dict_read`] in a walk kept for the memo, the fast walk, each value
+/// read as [`kept_list_read`] reads a list's element.
+#[cold]
+#[inline(never)]
+fn kept_dict_read(
+    id: DefIx,
+    value_schema: &Schema,
+    dict: &Bound<'_, PyDict>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    let plan = ctx.index.tree(id)?;
+    let depth = ctx.state.depth.get();
+    let height = ctx.state.guard.borrow().height();
+    if !readable(plan, depth + 1, height) {
+        return None;
+    }
+    let (mut admitted, mut read) = (true, false);
+    let scan = scan_dict(dict, ctx.state, |key, item| {
+        admitted = key.is_instance_of::<PyString>()
+            && kept_element_read(plan, value_schema, item, frame, &mut read);
+        if admitted {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    if read {
+        note_scalar_reach(id, (depth + 1, height), ctx);
+    }
+    Some(match scan {
+        Scan::Complete => admitted,
+        Scan::Stopped => false,
+        Scan::Unreadable => {
+            record_move(ctx);
+            false
+        }
+    })
+}
+
+/// Whether a value a kept list or mapping of the tree holds is a member: a
+/// scalar read by its type, which sets `read`, and any other value walked
+/// whole from the container's level.
+///
+/// It names no type ([`Seen`]): a second caller of [`Seen::name`] left it out
+/// of line in [`element_read`], and a list of a thousand integers against the
+/// companion's `integer` counted 28 instructions an element more on the
+/// profiled `CPython` 3.15 wheel.
+fn kept_element_read(
+    plan: &TreePlan,
+    element: &Schema,
+    item: &Bound<'_, PyAny>,
+    frame: &mut Frame<'_, '_>,
+    read: &mut bool,
+) -> bool {
+    let answered = match exact_of(item) {
+        Some(exact) if !plan.reads(exact) => leaf_admits(&plan.leaf, item, exact),
+        _ => None,
+    };
+    if let Some(admitted) = answered {
+        *read = true;
+        frame.ctx.state.memo.enter();
         return admitted;
     }
     member(element, &Value::Py(item), frame)

@@ -1757,13 +1757,7 @@ fn walked_reaching(
     room: Room,
 ) -> (bool, Option<Code>, Room) {
     let ctx = frame.ctx;
-    let own = Room {
-        levels: room
-            .levels
-            .saturating_add(ctx.index.memo.levels(id))
-            .min(MAX_WALK_DEPTH),
-        unfolded: (room.unfolded + 1).min(MAX_RECURSION_DEPTH),
-    };
+    let own = own_reach(id, room, ctx);
     let mut outer = Room::default();
     ctx.state
         .keep(|kept| outer = std::mem::replace(&mut kept.reached, own));
@@ -1772,6 +1766,32 @@ fn walked_reaching(
     let met = ctx.state.signals.stopped.get();
     ctx.state.signals.stopped.set(earlier.or(met));
     (admitted, met, outer)
+}
+
+/// The reach of a walk of the definition `id` begun at `room`: the levels its
+/// body can open by itself (`MemoPlan::levels`) and one more unfolding, within
+/// the bounds. A walk that enters no reference below reaches this and no
+/// further.
+fn own_reach(id: DefIx, room: Room, ctx: Ctx<'_>) -> Room {
+    Room {
+        levels: room
+            .levels
+            .saturating_add(ctx.index.memo.levels(id))
+            .min(MAX_WALK_DEPTH),
+        unfolded: (room.unfolded + 1).min(MAX_RECURSION_DEPTH),
+    }
+}
+
+/// Note, for the walk kept around it, the reach of a reference to `id` that a
+/// reading answered at a scalar, at `levels` with `unfolded` pairs on the
+/// trail: what [`remembered_ref`] notes where it walks the reference, since a
+/// scalar's walk enters no reference below it.
+///
+/// A reading reads a tree of scalars, which reaches no code the walk calls,
+/// so wherever a memo arms -- a validator whose definitions the plan holds --
+/// the tree is remembered, and its reference is walked by [`remembered_ref`].
+pub(super) fn note_scalar_reach(id: DefIx, (levels, unfolded): (usize, usize), ctx: Ctx<'_>) {
+    note_reach(ctx, own_reach(id, Room { levels, unfolded }, ctx));
 }
 
 /// How far a walk inside the one being kept reached, for that walk to read.

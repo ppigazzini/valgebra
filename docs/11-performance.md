@@ -827,8 +827,9 @@ program that builds validators per request, and to no validation call.
   value cost 73% fewer instructions and `int | list[t]` over a tree twelve deep
   61%, and `--binding-recursive` 46% on the build without a profile. A value of
   no exact builtin type, one near either bound and one inside itself are handed
-  to the walk where it would have reached them, and a walk that explains,
-  settles a complement or has a memo armed reads the definition generally; a
+  to the walk where it would have reached them, a walk that explains or
+  settles a complement reads the definition generally, and one with a memo
+  armed reads its scalars alone, noting the reach their walks would note; a
   test holds the reading to the walk's verdict, stop, moves and fatal signal.
   The index holds the plans of leaves and trees behind one word, and the
   reference's arm asks whether it holds any and whether the value is a Python
@@ -846,6 +847,22 @@ program that builds validators per request, and to no validation call.
   shape read 3.5% dearer without it, and reads 1.6% dearer with it on the build
   without a profile, a list of records 0.9% and a list nested twenty-five deep
   0.5%; on the profiled wheel every shape counts within 0.5%.
+- **A kept walk reads a tree's scalars by type.** A JSON Schema translation
+  meets each array with `list[J]` and a list of its items, each record reaching
+  `J` too, so the meet's second member is walked with the memo armed, and there
+  every reading of the tree declined: each value cost a hash insert and the
+  general walk. The readings read a scalar there by its exact type, noting the
+  reach its reference's walk would note, and leave a container to the walk,
+  which keeps it for the deeper meets that reach `J` at it (`kept_scalar_read`,
+  `kept_list_read` and `kept_dict_read`). On the profiled CPython 3.15 wheel
+  valgebra-jsonschema's array of two hundred records counts 25% fewer
+  instructions a call and checks in 52 us where it took 67, its `if`/`then`
+  array 29% fewer and 64 us where it took 96, and its tagged `oneOf` 21% fewer;
+  a chain of sixty objects against a recursive `$ref` checks in 22 us where it
+  took 25. The kept list and mapping readers take five and four arguments,
+  asked once the mode and the prefix are read: asked with the prefix where the
+  reading declines, they cost the plain `list[J]` reader an instruction an
+  element.
 
 ### Sequences and sets
 
@@ -1509,6 +1526,17 @@ gate holds, under `scripts/perf_gate.py --against` unless it says otherwise:
   and every frame holding a validator is laid out anew: `--binding-boundary`
   read 2.9% dearer on the build without a profile, though it walks no
   reference. One word fits the alignment's padding.
+- **Leaving a tree of scalars out of the memo**: a value meets at most one of a
+  tree's members, so a walk of it reads each value below once, and a JSON
+  Schema translation's meets of `list[J]` and `dict[str, J]` arm the memo for
+  the tree alone. Not remembered, the tree is read whole again at every level
+  of such meets, where kept, each container is read once: on the profiled
+  CPython 3.15 wheel valgebra-jsonschema's record array checked in 43.6 us where
+  the kept walk took 79, but a chain of sixty objects against a recursive `$ref`
+  took 56.7 us where it took 26, a chain of forty arrays of objects 124 where
+  it took 38.5, and its `$ref` tree eight deep 220 where it took 196. A kept
+  walk reads the tree's scalars by type instead
+  ([a kept walk](#walking-a-python-value)).
 
 ## Regression gate
 

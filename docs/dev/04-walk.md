@@ -1267,20 +1267,26 @@ near either bound -- is handed to the general walk at the level and with the tra
 that walk would hold there, so it stops, records and runs Python as it would
 have, and a container that moves is a move. The reference's arm asks for the
 reading in the plain fast walk alone. A walk that explains or settles a
-complement reads the definition generally, and so does one with a memo armed:
-a kept walk reads how deep the walks inside it reached, which the reading does
-not count, so kept beside it, an answer would claim a room no walk measured,
-and a deeper walk of the same pair would take it where the walk stops. The
-index holds no plan on `PyPy`, where a level the walk opens asks the stack
-probe the reading would pass.
+complement reads the definition generally. In a walk with a memo armed the
+reading takes a scalar alone (`kept_scalar_read`): a kept walk reads how deep
+the walks inside it reached, which the reading of a container does not count,
+so kept beside it, an answer would claim a room no walk measured, and a deeper
+walk of the same pair would take it where the walk stops. A scalar's walk
+enters no reference below it, so its reach is its reference's own, which the
+reading notes as `remembered_ref` notes it (`note_scalar_reach`); a container
+is walked, so it is kept, and a deeper meet reaching the definition at it finds
+it rather than reading it whole again. The index holds no plan on `PyPy`, where
+a level the walk opens asks the stack probe the reading would pass.
 
 `a_tree_of_scalars_is_read_as_the_walk_reads_it` in `check/walk/interpreter.rs`
 holds the verdict, the stop, the moves, a fatal signal and the report to the
 general walk's in every mode, for six trees, over a value of every exact type
 and a subclass of each, at the root and inside each container, from starts at
 both bounds; `an_armed_memo_reads_a_tree_of_scalars_as_the_walk_does` holds the
-memo's half, and `a_tree_of_scalars_is_read_as_far_as_the_bounds_let_it` how
-far down a chain the reading reads, which no verdict shows.
+memo's half, `an_armed_memo_keeps_what_the_walk_keeps_where_the_readers_read`
+every answer a kept walk over the readings leaves, its deepest room included,
+to the general walk's, and `a_tree_of_scalars_is_read_as_far_as_the_bounds_let_it`
+how far down a chain the reading reads, which no verdict shows.
 
 **A list or a mapping of the definition is read the same way.** A JSON Schema
 translation meets every array with `list[J]` and every object with `dict[str,
@@ -1290,9 +1296,12 @@ ask the bounds once, as each value's reference would ask them -- its level one
 below the container's and its pair below the trail's bound -- and read each
 value as `tree_member` does at that level, a mapping's key an instance of `str`
 as the scan asks it; a value the reading declines is walked whole from the
-container's level, where the loop and the scan walk it. They read the fast walk
-with no memo armed, as `tree_member` does, and a memo armed for one value's
-walk is put back when it returns, so a list's reading holds for every value. A
+container's level, where the loop and the scan walk it. They read the fast walk,
+as `tree_member` does, and a memo armed for one value's walk is put back when it
+returns, so a list's reading holds for every value. In a walk with a memo armed
+they read the scalars alone (`kept_list_read`, `kept_dict_read`), noting the
+reach of the values' references once for the container, and walk every other
+value. A
 union's deciding pass keeps what a mapping's scan admitted, and it runs in a
 walk that explains, which the mapping's reader declines.
 `a_list_of_a_tree_is_read_as_the_walk_reads_it` and

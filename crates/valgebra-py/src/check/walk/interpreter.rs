@@ -9728,6 +9728,37 @@ fn a_list_of_a_tree_is_read_where_each_element_would_be() {
             Some(true)
         );
         assert_eq!(read_at(&flat, (0, full), WalkMode::Fast, &[]).0, None);
+        // In a walk kept for the memo the scalars are read and the nested list
+        // is walked, entering its definition and reading its item: four. Its
+        // elements' references stand where the plain reading's would.
+        let kept_at = |value: &Bound<'_, PyAny>, depth: usize| {
+            let state = WalkState::new();
+            state.depth.set(depth);
+            let ctx = Ctx {
+                pool: &pool,
+                defs: &defs,
+                index: &index,
+                state: &state,
+                mode: WalkMode::Fast,
+            };
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx);
+            let list = value.cast::<PyList>().expect("a list");
+            let read = state.memo.armed(|| {
+                tree_list_read(
+                    DefIx::new(0),
+                    &element,
+                    &[],
+                    list,
+                    &Value::Py(value),
+                    &mut frame,
+                )
+            });
+            (read, state.memo.count())
+        };
+        assert_eq!(kept_at(&nested, 0), (Some(true), 4));
+        assert_eq!(kept_at(&flat, edge).0, Some(true));
+        assert_eq!(kept_at(&flat, edge + 1).0, None);
     });
 }
 
@@ -9863,6 +9894,30 @@ fn a_mapping_of_a_tree_is_read_where_each_value_would_be() {
         assert_eq!(read_at(&flat, (0, full), WalkMode::Fast).0, None);
         let keyed = evaluate(py, "{1: 1}");
         assert_eq!(read_at(&keyed, (0, 0), WalkMode::Fast).0, Some(false));
+        // In a walk kept for the memo the scalars are read and the nested
+        // mapping is walked, entering its definition and reading its value.
+        // Its values' references stand where the plain reading's would.
+        let kept_at = |value: &Bound<'_, PyAny>, depth: usize| {
+            let state = WalkState::new();
+            state.depth.set(depth);
+            let ctx = Ctx {
+                pool: &pool,
+                defs: &defs,
+                index: &index,
+                state: &state,
+                mode: WalkMode::Fast,
+            };
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx);
+            let dict = value.cast::<PyDict>().expect("a mapping");
+            let read = state
+                .memo
+                .armed(|| tree_dict_read(DefIx::new(0), &element, dict, &mut frame));
+            (read, state.memo.count())
+        };
+        assert_eq!(kept_at(&nested, 0), (Some(true), 4));
+        assert_eq!(kept_at(&flat, edge).0, Some(true));
+        assert_eq!(kept_at(&flat, edge + 1).0, None);
         let mut walked = build_index(py, &root, &defs, &pool);
         walked.forget_readings();
         let walk = (&root, &defs[..], &pool[..]);
@@ -9910,66 +9965,177 @@ fn a_scan_admits_a_value_by_its_type_where_the_leaf_decides_it() {
     });
 }
 
-/// Where a memo is armed the definition is walked, since a kept walk reads how
-/// deep the walks inside it reached. The second branch keeps the definition at
-/// a list subclass, which the reading leaves to the walk, around a chain the
-/// reading would read; it meets the subclass again deeper, where the walk stops
-/// once the chain is long enough, and a kept walk that noted no reach would
-/// answer there.
+/// Where a memo is armed a container of the definition is walked, and a scalar
+/// read with the reach its walk would note, since a kept walk reads how deep
+/// the walks inside it reached. The second branch keeps the definition at a
+/// container subclass, which the reading leaves to the walk, around a chain
+/// whose lists or mappings the readers read in the kept walk; it meets the
+/// subclass again deeper, where the walk stops once the chain is long enough,
+/// and a kept walk that noted no reach, or too little, would answer there.
 #[test]
 fn an_armed_memo_reads_a_tree_of_scalars_as_the_walk_does() {
     Python::attach(|py| {
         let root = Schema::Ref(DefIx::new(0));
-        let defs = [Schema::Union(
-            vec![
-                Schema::Int,
-                Schema::list(SeqShape::homogeneous(root.clone())),
-            ]
-            .into(),
-        )];
-        let union = Schema::Union(
-            vec![
-                Schema::list(SeqShape::homogeneous(root.clone())),
-                Schema::list(SeqShape::homogeneous(Schema::Union(
-                    vec![root, Schema::Bytes].into(),
-                ))),
-            ]
-            .into(),
-        );
-        let (read, walked) = read_and_walked(py, &union, &defs, &[]);
-        let walk = (&union, &defs[..], &[][..]);
-        for (length, wrap) in (40..=126)
-            .step_by(2)
-            .flat_map(|n| [1, 10, 40].map(move |m| (n, m)))
-        {
-            let value = PyModule::from_code(
-                py,
-                &std::ffi::CString::new(format!(
-                    "class L(list): pass\n\
-                     chain = 1\n\
-                     for _ in range({length}):\n\
-                     \x20   chain = [chain]\n\
-                     held = L([chain])\n\
-                     deeper = held\n\
-                     for _ in range({wrap}):\n\
-                     \x20   deeper = [deeper]\n\
-                     VALUE = [b'x', held, deeper]\n"
-                ))
-                .expect("no nul"),
-                c"armed_chain.py",
-                c"armed_chain",
-            )
-            .and_then(|module| module.getattr("VALUE"))
-            .expect("the chain builds");
-            let (by_type, by_walk) = (
-                walked_from(&read, walk, &value, (0, 0)),
-                walked_from(&walked, walk, &value, (0, 0)),
+        let list = Schema::list(SeqShape::homogeneous(root.clone()));
+        let map = Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: root.clone(),
+        });
+        for (container, wrap_in) in [(list, "[INNER]"), (map, "{'k': INNER}")] {
+            let defs = [Schema::Union(vec![Schema::Int, container].into())];
+            let union = Schema::Union(
+                vec![
+                    Schema::list(SeqShape::homogeneous(root.clone())),
+                    Schema::list(SeqShape::homogeneous(Schema::Union(
+                        vec![root.clone(), Schema::Bytes].into(),
+                    ))),
+                ]
+                .into(),
             );
-            assert_eq!(
-                (by_type.0, by_type.1),
-                (by_walk.0, by_walk.1),
-                "a chain of {length} met again {wrap} deeper"
+            let (read, walked) = read_and_walked(py, &union, &defs, &[]);
+            let walk = (&union, &defs[..], &[][..]);
+            let wrapped = |inner: &str| wrap_in.replace("INNER", inner);
+            for (length, wrap) in (40..=126)
+                .step_by(2)
+                .flat_map(|n| [1, 10, 40].map(move |m| (n, m)))
+            {
+                let value = PyModule::from_code(
+                    py,
+                    &std::ffi::CString::new(format!(
+                        "class L(list): pass\n\
+                         class D(dict): pass\n\
+                         def wrap(inner):\n\
+                         \x20   return {}\n\
+                         chain = 1\n\
+                         for _ in range({length}):\n\
+                         \x20   chain = wrap(chain)\n\
+                         held = {}\n\
+                         deeper = held\n\
+                         for _ in range({wrap}):\n\
+                         \x20   deeper = wrap(deeper)\n\
+                         VALUE = [b'x', held, deeper]\n",
+                        wrapped("inner"),
+                        if wrap_in.starts_with('[') {
+                            "L([chain])"
+                        } else {
+                            "D(k=chain)"
+                        },
+                    ))
+                    .expect("no nul"),
+                    c"armed_chain.py",
+                    c"armed_chain",
+                )
+                .and_then(|module| module.getattr("VALUE"))
+                .expect("the chain builds");
+                let (by_type, by_walk) = (
+                    walked_from(&read, walk, &value, (0, 0)),
+                    walked_from(&walked, walk, &value, (0, 0)),
+                );
+                assert_eq!(
+                    (by_type.0, by_type.1),
+                    (by_walk.0, by_walk.1),
+                    "a chain of {length} in {wrap_in} met again {wrap} deeper"
+                );
+            }
+        }
+    });
+}
+
+/// In a walk a node armed, a reading leaves kept exactly what the walk keeps
+/// at every container, the reach of each scalar it read counted: for a list
+/// and a mapping tree, over values whose containers hold scalars at several
+/// depths, every answer kept by the walk over the readings is the general
+/// walk's own, its deepest room included, and the tree's answer at a scalar,
+/// which the walk keeps too, is read and kept nowhere.
+#[test]
+fn an_armed_memo_keeps_what_the_walk_keeps_where_the_readers_read() {
+    Python::attach(|py| {
+        let root = Schema::Ref(DefIx::new(0));
+        let list = Schema::list(SeqShape::homogeneous(root.clone()));
+        let map = Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: root.clone(),
+        });
+        // The second branch's element: the tree beside `bytes`, or a
+        // definition that is that union, whose kept walk reaches the tree at
+        // a scalar through the reference's own arm.
+        let beside = Schema::Union(vec![root.clone(), Schema::Bytes].into());
+        let through = Schema::Ref(DefIx::new(1));
+        let sources = [
+            (&list, &beside, "[b'x', [1, [2, 3], [[4]]], [[[5, [6]]]]]"),
+            (&list, &beside, "[b'x', [[[[[[[7]]]]]]], [8, 9]]"),
+            (&list, &through, "[b'x', 1, [2, [3]], b'y', 4]"),
+            (
+                &map,
+                &beside,
+                "[b'x', {'a': 1, 'b': {'c': 2, 'd': {'e': 3}}}, {'f': {'g': {'h': 4}}}]",
+            ),
+            (
+                &map,
+                &beside,
+                "[b'x', {'a': {'b': {'c': {'d': {'e': 5}}}}}, {'f': 6}]",
+            ),
+            (&map, &through, "[b'x', 1, {'a': 2, 'b': {'c': 3}}, 4]"),
+        ];
+        for (container, element, source) in sources {
+            let defs = [
+                Schema::Union(vec![Schema::Int, container.clone()].into()),
+                beside.clone(),
+            ];
+            let union = Schema::Union(
+                vec![
+                    Schema::list(SeqShape::homogeneous(root.clone())),
+                    Schema::list(SeqShape::homogeneous(element.clone())),
+                ]
+                .into(),
             );
+            let (read, walked) = read_and_walked(py, &union, &defs, &[]);
+            let value = evaluate(py, source);
+            let kept = |index: &ValidatorIndex| {
+                let state = WalkState::new();
+                let ctx = Ctx {
+                    pool: &[],
+                    defs: &defs,
+                    index,
+                    state: &state,
+                    mode: WalkMode::Fast,
+                };
+                let admitted = member(
+                    &union,
+                    &Value::Py(&value),
+                    &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
+                );
+                assert!(admitted, "{source}");
+                assert!(state.memo.in_use(), "{source}: the memo was not armed");
+                state
+                    .recall(|kept| Some(kept.answers()))
+                    .unwrap_or_default()
+            };
+            let (by_type, by_walk) = (kept(&read), kept(&walked));
+            assert!(!by_type.is_empty(), "{source}: the reading kept nothing");
+            // The walk keeps the tree's answer at each scalar too, which the
+            // reading reads and keeps nowhere.
+            let scalars: Vec<usize> = py
+                .eval(
+                    c"lambda v: [id(x) for x in (lambda f: f(f, v))(lambda f, x: \
+                      [y for z in (x.values() if isinstance(x, dict) else x) \
+                      for y in f(f, z)] if isinstance(x, (list, dict)) else [x])]",
+                    None,
+                    None,
+                )
+                .and_then(|scalars| scalars.call1((&value,)))
+                .and_then(|ids| ids.extract())
+                .expect("the scalars' ids");
+            assert!(
+                scalars.iter().any(|at| by_walk.contains_key(&(*at, 0))),
+                "{source}: the walk kept no scalar"
+            );
+            for at in &scalars {
+                assert!(!by_type.contains_key(&(*at, 0)), "{source}: a scalar kept");
+            }
+            for (key, answer) in &by_type {
+                assert_eq!(by_walk.get(key), Some(answer), "{source}");
+            }
         }
     });
 }
