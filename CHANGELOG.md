@@ -15,6 +15,22 @@ answer of its own, or a repair to a change not yet released.
 
 -->
 
+## [0.0.29] - 2026-11-18
+
+A release of the user guide's addresses, with no change to an answer, a message
+or a code: every membership, relation, error and render is the one 0.0.28
+gave.
+
+### Changed
+
+- **The user guide's pages are named for their topics.** A page's address is
+  its section of the site and its topic, `/guides/schema-language/` where it was
+  `/03-schema-language/`, the release notes at `/changelog/` and the API
+  reference at `/reference/api/`. Every address the site has served answers
+  still, with a page that sends the reader to the new one and keeps the anchor
+  the link named where the browser runs scripts, so a link in the README of an
+  earlier release keeps working.
+
 ## [0.0.28] - 2026-11-16
 
 A release of speed, with no addition, no fix and no node. The walk reads the shapes a JSON Schema
@@ -5042,7 +5058,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.28...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.29...HEAD
+[0.0.29]: https://github.com/ppigazzini/valgebra/compare/v0.0.28...v0.0.29
 [0.0.28]: https://github.com/ppigazzini/valgebra/compare/v0.0.27...v0.0.28
 [0.0.27]: https://github.com/ppigazzini/valgebra/compare/v0.0.26...v0.0.27
 [0.0.26]: https://github.com/ppigazzini/valgebra/compare/v0.0.25...v0.0.26
