@@ -3400,6 +3400,13 @@ type Readings = FxHashMap<(u64, Schema), bool>;
 /// for the query, and a failed disjunct has nothing in it to roll back.
 type Leaves = FxHashMap<(u64, Schema, Schema), Relation>;
 
+/// Whether the sets read a value of a schema the last asking hands them
+/// ([`Schema::a_value_the_sets_read`]), by the query and the schema, held for the
+/// reason [`Leaves`] is and emptied at the same bound. Every meet and complement
+/// of a pair is one, and a query of drawn JSON shapes asked the sets of a meet of
+/// nine nodes 3,609 times, where a reading of one thread's queries asks it once.
+type Values = FxHashMap<(u64, Schema), bool>;
+
 /// The most answers the memo holds before it is emptied.
 ///
 /// A query that repeats a reading repeats it within a few hundred goals, and
@@ -3413,6 +3420,8 @@ thread_local! {
     static READINGS: RefCell<Readings> = RefCell::new(Readings::default());
     /// The pairs the last askings on this thread read by the sets, by query number.
     static LEAVES: RefCell<Leaves> = RefCell::new(Leaves::default());
+    /// The values the last askings on this thread read by the sets, by query number.
+    static VALUES: RefCell<Values> = RefCell::new(Values::default());
     /// The query whose respelled meet is being asked on this thread, or zero
     /// where none is ([`a_meet_respelled_below`]). Held beside the query for the
     /// reason [`Readings`] is, and by number, so a query a callback starts
@@ -3532,6 +3541,24 @@ impl<'a> Cx<'a> {
                 readings.clear();
             }
             readings.insert(key, answer);
+        });
+        answer
+    }
+
+    /// Whether the set representation reads a value of `schema`, which holds no
+    /// reference, read once a query ([`Values`]).
+    fn reads_a_value(&self, schema: &Schema) -> bool {
+        let key = (self.query(), schema.clone());
+        if let Some(known) = VALUES.with_borrow(|values| values.get(&key).copied()) {
+            return known;
+        }
+        let answer =
+            lower(schema, self.oracle).is_some_and(|set| set.emptiness() == Verdict::Inhabited);
+        VALUES.with_borrow_mut(|values| {
+            if values.len() >= READINGS_HELD {
+                values.clear();
+            }
+            values.insert(key, answer);
         });
         answer
     }

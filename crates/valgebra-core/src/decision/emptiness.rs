@@ -22,9 +22,7 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 
 use crate::descr::classes::Reach;
-use crate::descr::lower::{
-    Constants, Operand, an_empty_reading_stands, floats_meet, lower, read_widened,
-};
+use crate::descr::lower::{Constants, Operand, an_empty_reading_stands, floats_meet, read_widened};
 use crate::ir::{
     Attribute, ClassIx, ConstIx, Constraint, Constraints, Field, MapClause, REACHED, Schema,
 };
@@ -226,22 +224,41 @@ impl Schema {
         {
             return record.verdict_rec(cx);
         }
-        if verdict == Verdict::Unknown && cx.reads_leaves {
-            return self.a_value_the_sets_read(cx);
-        }
-        verdict
+        verdict.or_else(|| self.a_value_the_leaves_read(cx))
     }
 
-    /// `Inhabited` where the set representation reads a value of a refinement with
-    /// no reference, in the asking that reads a pair's leaves. With no cut a set read
-    /// inhabited holds a value, the one a relation refutes on when it reads this
-    /// schema against nothing. Only that half is read: a set read empty rests on the
-    /// label check, and the rules' answer stands on it.
+    /// [`a_value_the_sets_read`](Self::a_value_the_sets_read) in the asking that
+    /// reads a pair's leaves, and `Unknown` in every other: the reading the rules
+    /// end on for a refinement, a meet and a complement they leave open.
+    ///
+    /// A product is empty exactly where a component is [FCB08, Lem. 6.5], and a
+    /// record exactly where a required field is [Cas23, (11)], so a component
+    /// read here composes through the rules' product arm. The set reading of the
+    /// whole product is refused where one component is past the build's bounds,
+    /// and read a component at a time the others are not: `("", 0)` is a value of
+    /// `tuple[Annotated[str, MaxLen(584)], M]`, for `M` the meet a translation
+    /// writes for `{"type": "integer", "minimum": 0}`, whose string is a table
+    /// past the state bound and whose meet only the sets read.
+    #[inline]
+    fn a_value_the_leaves_read(&self, cx: &Cx<'_>) -> Verdict {
+        if cx.reads_leaves {
+            self.a_value_the_sets_read(cx)
+        } else {
+            Verdict::Unknown
+        }
+    }
+
+    /// `Inhabited` where the set representation reads a value of a schema with no
+    /// reference. With no cut a set read inhabited holds a value, the one a
+    /// relation refutes on when it reads this schema against nothing. Only that
+    /// half is read: a set read empty rests on the label check, and the rules'
+    /// answer stands on it.
     ///
     /// Charged a step for [`NODES_A_STEP`] nodes, since no step counts a lowering,
     /// and at most [`LEAF_READING`]. Charged that apiece, as a goal is, one asking's
     /// many small refinements spent its steps, and it lost answers it holds at this
-    /// figure.
+    /// figure. Read once a query and held ([`Cx::reads_a_value`]), and charged each
+    /// time it is asked, so the memo changes no answer and no allowance.
     #[inline(never)]
     pub(super) fn a_value_the_sets_read(&self, cx: &Cx<'_>) -> Verdict {
         if self.has_reference() {
@@ -252,7 +269,7 @@ impl Schema {
             a_bound_is_met();
             return Verdict::Unknown;
         }
-        if lower(self, cx.oracle).is_some_and(|set| set.emptiness() == Verdict::Inhabited) {
+        if cx.reads_a_value(self) {
             Verdict::Inhabited
         } else {
             Verdict::Unknown
@@ -611,30 +628,7 @@ impl Schema {
             // And it holds a value where its inner is a finite set of
             // constants, which a fresh `object()` is no value of
             // ([`misses_a_fresh_object`]).
-            Schema::Complement(inner) => {
-                let (_, inner_region) = inner.empty_and_region(cx);
-                let region = match inner_region {
-                    Regions::Known(regions) => Regions::Known(regions.complement()),
-                    Regions::Unknown => Regions::Unknown,
-                };
-                let verdict = match region.verdict() {
-                    Verdict::Unknown
-                        if inner.covers_the_universe()
-                            || (matches!(&**inner, Schema::Union(_))
-                                && pushed_complement_is_placed(
-                                    inner,
-                                    &Schema::Nothing,
-                                    cx.defs,
-                                )) =>
-                    {
-                        Verdict::Empty
-                    }
-                    Verdict::Unknown if misses_a_fresh_object(inner) => Verdict::Inhabited,
-                    Verdict::Unknown => a_complemented_member_holds_a_value(inner),
-                    settled => settled,
-                };
-                (verdict, region)
-            }
+            Schema::Complement(inner) => self.complement_verdict(inner, cx),
             // A literal denotes `{x | type(x) is type(c) and x == c}`, the
             // model's singleton [FCB08, §4.2] widened to the values `==` joins
             // to `c`, which holds `c` itself exactly when `c` equals itself. A
@@ -671,6 +665,33 @@ impl Schema {
             // it cannot relate, so neither direction is proven of it.
             _ => (Verdict::Unknown, Regions::Unknown),
         }
+    }
+
+    /// The verdict and the region of this complement of `inner`, read as the
+    /// comment at its arm in [`empty_and_region_at`](Self::empty_and_region_at)
+    /// says, and where every reading there leaves it open, by the sets in the
+    /// asking that reads a pair's leaves ([`a_value_the_leaves_read`](Self::a_value_the_leaves_read)).
+    /// Out of the fold, which holds an arm for every node.
+    fn complement_verdict(&self, inner: &Schema, cx: &mut Cx<'_>) -> (Verdict, Regions) {
+        let (_, inner_region) = inner.empty_and_region(cx);
+        let region = match inner_region {
+            Regions::Known(regions) => Regions::Known(regions.complement()),
+            Regions::Unknown => Regions::Unknown,
+        };
+        let verdict = match region.verdict() {
+            Verdict::Unknown
+                if inner.covers_the_universe()
+                    || (matches!(inner, Schema::Union(_))
+                        && pushed_complement_is_placed(inner, &Schema::Nothing, cx.defs)) =>
+            {
+                Verdict::Empty
+            }
+            Verdict::Unknown if misses_a_fresh_object(inner) => Verdict::Inhabited,
+            Verdict::Unknown => a_complemented_member_holds_a_value(inner)
+                .or_else(|| self.a_value_the_leaves_read(cx)),
+            settled => settled,
+        };
+        (verdict, region)
     }
 }
 
@@ -875,7 +896,8 @@ fn intersection_verdict(meet: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> (
                 } else {
                     Verdict::Unknown
                 }
-            }),
+            })
+            .or_else(|| meet.a_value_the_leaves_read(cx)),
         settled => settled,
     };
     (verdict, region)

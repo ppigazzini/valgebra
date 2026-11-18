@@ -1229,12 +1229,21 @@ value, which a relation of `~S` read the same way. Asked of a reference, an attr
 record or a keyed map holding no value by its shape and holding a reference: the rest
 are read by the sets, with nothing cut.
 
-**A refinement the rules cannot read holds a value by the sets, in the same asking.** A
-refutation stands on a value of its subject, and `refinement_verdict` is `Unknown` for a
-refinement it has no reading of, so `recursive(lambda t: union(Annotated[str, Regex("a")],
-tuple[t]))` below `str` declined over `("a",)`. In the last asking
-(`a_value_the_sets_read`) a refinement with no reference is lowered, and a set read
-inhabited with no cut holds a value. Only that half is read. It is charged a step for
+**A refinement, a meet or a complement the rules cannot read holds a value by the sets,
+in the same asking.** A refutation stands on a value of its subject, and
+`refinement_verdict` is `Unknown` for a refinement it has no reading of, so
+`recursive(lambda t: union(Annotated[str, Regex("a")], tuple[t]))` below `str` declined
+over `("a",)`. In the last asking (`a_value_the_leaves_read`) such a refinement, and a
+meet or a complement every reading of the rules leaves open, with no reference, is
+lowered alone, and a set read inhabited with no cut holds a value. Only that half is
+read. It is the reading a product's emptiness takes a component at a time: a product
+holds a value where each component does [FCB08, Lem. 6.5], and a record where each
+required field does [Cas23, (11)], while the set of the whole is refused where one
+component is past the build's bounds. A string of at most 584 code points is such a
+component, its table seven states a code point and past the state bound, so
+`tuple[Annotated[str, MaxLen(584)], M]`, for `M` the meet a translation writes for
+`{"type": "integer", "minimum": 0}`, declined below `nothing` beside the value `("", 0)`,
+and the record of the two fields below `{}`, which `MaxLen(583)` decides. It is charged a step for
 `NODES_A_STEP` nodes: at `LEAF_READING` apiece an asking's many small refinements spent
 its steps and lost 44 answers in 1,119 gained, and at this figure 3 in 1,127. Over a release's
 answers it loses none. `holds_parts` stays as it is for a refinement over a constructor:
@@ -1492,6 +1501,17 @@ spent before it is looked up, so a pair read back is charged as one read: the me
 changes no answer and no allowance. Where no pair repeats, the key's two copies and
 its hash read the relation matrix +0.49%.
 `a_declined_goal_is_read_by_the_sets_once_a_query` holds it.
+
+**A value the last asking reads of a schema is read once a query.**
+`a_value_the_sets_read` is asked of every refinement, meet and complement the rules
+leave open in the last asking, and a query asks the same ones again: one question over
+drawn JSON shapes asked the sets of a meet of nine nodes 3,609 times, and read for 94
+ms against 6.2 ms without the reading, where both decline. The answer is a function of
+the schema and the pool, the schema holding no reference, so `Cx::reads_a_value` holds
+it under the query's number (`Values` in `decision.rs`), emptied at the same bound, and
+the steps are spent before it is looked up: the memo changes no answer and no
+allowance, and the question reads 8.7 ms. `a_value_the_sets_read_is_held_for_the_query`
+holds it.
 
 **A meet's verdict is read once a query where it rests on nothing.** A query
 asks one meet many times over where its rules decline the goals reaching it, and

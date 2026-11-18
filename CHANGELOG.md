@@ -13,7 +13,19 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- feat: a meet or a complement only the sets read holds a value
+
 -->
+
+### Added
+
+- **A meet or a complement only the sets read holds a value a refutation stands on.**
+  `tuple[Annotated[str, MaxLen(584)], M]`, for `M` the meet a translation of `{"type": "integer",
+  "minimum": 0}` writes, is `not_subset` of `nothing` by `("", 0)`, and a record of the same two
+  required fields is `not_subset` of `{}`, where both stayed `undecided`. A string of at most 584
+  code points is a table past the set representation's state bound, so the pair's set is refused
+  whole, and the meet beside it is read alone, as a refinement is. A complement such as
+  `~Annotated[int, Ge(0)]` beside the same string is read the same way.
 
 ## [0.0.29] - 2026-11-18
 
