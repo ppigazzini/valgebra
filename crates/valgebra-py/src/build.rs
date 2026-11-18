@@ -1537,7 +1537,7 @@ pub(super) fn build_constant(
 ///
 /// Looked up in `sys.modules` rather than imported: an instance exists only once
 /// the module is loaded, and importing `dataclasses` from here is the import
-/// that deadlocks against a lazy import on 3.15 (`docs/dev/08-testing.md`).
+/// that deadlocks against a lazy import on 3.15 (`docs/dev/testing.md`).
 fn is_init_var(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = obj.py();
     let Some(module) = loaded_modules(py)?.get_item(intern!(py, "dataclasses"))? else {

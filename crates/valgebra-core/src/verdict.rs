@@ -6,7 +6,7 @@
 //! Both sit below the two deciders rather than inside either, because both
 //! answer in them: a procedure returning `false` for "no" and for "I ran out of
 //! budget" alike returns something strictly weaker than a decision, and telling
-//! those apart is what these two are for. `docs/dev/02-decision.md` describes
+//! those apart is what these two are for. `docs/dev/decision.md` describes
 //! the pair that shares them.
 
 /// What a decision could establish about a *relation* between two schemas.

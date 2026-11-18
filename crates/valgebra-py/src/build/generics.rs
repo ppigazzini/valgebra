@@ -6,7 +6,7 @@
 //! refusal rather than a guess. A list literal and a dict literal answer the
 //! same question from the other side -- `[A, B]` is the fixed-length list
 //! `typing` has no spelling for -- so they are read here. The section "What a
-//! parametrized form says" in `docs/dev/03-frontend.md` is this module.
+//! parametrized form says" in `docs/dev/frontend.md` is this module.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::intern;

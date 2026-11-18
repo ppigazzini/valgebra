@@ -1,6 +1,6 @@
 """A workflow installs the lock, once, and runs on what it installed.
 
-`docs/dev/07-tooling-ci.md` says every lane installs with one `uv sync` and runs
+`docs/dev/tooling-ci.md` says every lane installs with one `uv sync` and runs
 every later command under `uv run --no-sync`. Both halves decide what a lane
 tests. A `uv sync` without `--locked` resolves afresh where the lock is stale,
 so a Pages deploy can publish a site built from a resolution no lane tested. A

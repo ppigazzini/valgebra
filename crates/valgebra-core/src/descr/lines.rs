@@ -17,7 +17,7 @@
 //! complement splits each line into two, both bounded by [`MAX_LINES`].
 //!
 //! The alternative shapes each fail one test, recorded in
-//! `docs/dev/01-schema-ir.md` under "Where a class and an attribute record go":
+//! `docs/dev/schema-ir.md` under "Where a class and an attribute record go":
 //! a DNF over the whole descriptor loses the partition, and scoping classes to
 //! the kindless slot cannot describe a value that has both a builtin kind and a
 //! class.

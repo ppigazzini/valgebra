@@ -436,7 +436,7 @@ def test_an_uncaught_failure_prints_as_the_line_it_carries() -> None:
     The interpreter prints an exception group as a tree: the group's line, then
     each member in a box of its own. A failure raised as a group of one prints
     its line twice, and every log a caller writes with `logging.exception`
-    prints it so. `docs/dev/05-errors.md` holds what that refuses.
+    prints it so. `docs/dev/errors.md` holds what that refuses.
     """
     with pytest.raises(ValidationError) as info:
         Validator({"a": int}).validate({"a": "x"})

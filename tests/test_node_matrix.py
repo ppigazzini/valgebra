@@ -163,7 +163,7 @@ def test_node_admits_its_denotation(label: str) -> None:
 # one: the explaining walk takes a level where the fast one did not, the JSON
 # path parses before it walks, and `ensure` and `load` answer with the value
 # rather than with a verdict. So each row runs through all of them and they are
-# held to one answer -- which is what `docs/dev/04-walk.md` puts first.
+# held to one answer -- which is what `docs/dev/walk.md` puts first.
 
 
 def _object_path(compiled: Validator, value: object) -> dict[str, bool]:

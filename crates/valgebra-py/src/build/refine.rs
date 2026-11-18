@@ -5,7 +5,7 @@
 //! by the `__module__` of a class in the marker's method resolution order, and
 //! off no other library's marker that happens to carry the same names; the
 //! vocabulary is never imported. The section "How `Annotated` metadata is read"
-//! in `docs/dev/03-frontend.md` is this module.
+//! in `docs/dev/frontend.md` is this module.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::intern;

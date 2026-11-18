@@ -66,15 +66,15 @@ other:
   ``README.md`` names fails, and a row naming a page that does not exist fails.
   The user pages keep no such table: the site's ``nav`` is their list.
 * **The table of products.** A test carrying a ``PRODUCT:`` marker with no row
-  in the products table of ``docs/dev/08-testing.md`` fails, and a row naming a
+  in the products table of ``docs/dev/testing.md`` fails, and a row naming a
   test that declares no product fails. The ledger rule below is satisfied by a
   mention anywhere on the page; this one is about the table a reader counts.
 * **The table of ledgers.** A test carrying a ``LEDGER:`` marker with no row in
-  ``docs/dev/08-testing.md`` fails, and a row naming a test that does not exist
+  ``docs/dev/testing.md`` fails, and a row naming a test that does not exist
   fails. The pages state no count of them: a count in prose is a second copy
   of the table, and it drifts by one entry at a time.
 * **The table of zones.** A production ``.rs`` file under ``crates/*/src`` that
-  no row of the zone table in ``docs/dev/00-architecture.md`` names fails, and
+  no row of the zone table in ``docs/dev/architecture.md`` names fails, and
   a row naming a path the tree does not hold fails. A row naming a directory
   owns every file below it. "Fix the page that owns the zone in the same
   commit" is a rule only where every file has a zone, and a file that has none
@@ -478,7 +478,7 @@ DOCUMENTED = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
 #: forbid them.
 HISTORY_EXEMPT = {
     "CHANGELOG.md",
-    "docs/dev/12-writing.md",
+    "docs/dev/writing.md",
     "scripts/docs_lint.py",
     "tests/test_docs_lint.py",
 }
@@ -785,7 +785,7 @@ def check_ledger_table() -> list[str]:
     a universe built by matching a sentence silently omits whichever file worded
     it differently -- which is the failure this rule exists to stop.
     """
-    page = ROOT / "docs" / "dev" / "08-testing.md"
+    page = ROOT / "docs" / "dev" / "testing.md"
     tests = ROOT / "tests"
     if not page.exists() or not tests.is_dir():
         return []
@@ -804,13 +804,13 @@ def check_ledger_table() -> list[str]:
         line for line in text.splitlines() if line.lstrip().startswith("|")
     )
     problems = [
-        f"docs/dev/08-testing.md: tests/{name} is a ledger with no row"
+        f"docs/dev/testing.md: tests/{name} is a ledger with no row"
         for name in sorted(declared)
         if name not in rows
     ]
     listed = set(re.findall(r"`tests/(test_\w+\.py)`", text))
     problems += [
-        f"docs/dev/08-testing.md: names tests/{name}, which does not exist"
+        f"docs/dev/testing.md: names tests/{name}, which does not exist"
         for name in sorted(listed)
         if not (tests / name).exists()
     ]
@@ -842,7 +842,7 @@ def check_product_table() -> list[str]:
     the reason the ledger marker is: a universe inferred from a sentence omits
     whichever file worded it differently.
     """
-    page = ROOT / "docs" / "dev" / "08-testing.md"
+    page = ROOT / "docs" / "dev" / "testing.md"
     tests = ROOT / "tests"
     if not page.exists() or not tests.is_dir():
         return []
@@ -851,7 +851,7 @@ def check_product_table() -> list[str]:
     if PRODUCTS_HEADER not in lines:
         # The detector. A parse that finds no table reports no problems, which
         # reads exactly like a page whose table is right.
-        return [f"docs/dev/08-testing.md: no products table ({PRODUCTS_HEADER})"]
+        return [f"docs/dev/testing.md: no products table ({PRODUCTS_HEADER})"]
     start = lines.index(PRODUCTS_HEADER)
     rows = []
     for line in lines[start + 1 :]:
@@ -866,11 +866,11 @@ def check_product_table() -> list[str]:
         if "PRODUCT:" in path.read_text(encoding="utf-8")
     }
     problems = [
-        f"docs/dev/08-testing.md: tests/{name} is a product with no row"
+        f"docs/dev/testing.md: tests/{name} is a product with no row"
         for name in sorted(declared - listed)
     ]
     problems += [
-        f"docs/dev/08-testing.md: the products table names tests/{name}, "
+        f"docs/dev/testing.md: the products table names tests/{name}, "
         f"which declares no product"
         for name in sorted(listed - declared)
     ]
@@ -986,7 +986,7 @@ def check_bounds_ledger() -> list[str]:
     and not on the page is the failure this exists to catch, and it is the one a
     both-directions name check would miss.
     """
-    page = ROOT / "docs" / "dev" / "00-architecture.md"
+    page = ROOT / "docs" / "dev" / "architecture.md"
     if not page.exists():
         return []
     tree = chosen_constants()
@@ -995,18 +995,18 @@ def check_bounds_ledger() -> list[str]:
         for where, name, value in BOUND_ROW.findall(page.read_text(encoding="utf-8"))
     }
     problems = [
-        f"docs/dev/00-architecture.md: {where} defines {name}, which has no row"
+        f"docs/dev/architecture.md: {where} defines {name}, which has no row"
         for where, name in sorted(tree)
         if (where, name) not in listed
     ]
     problems += [
-        f"docs/dev/00-architecture.md: names {name} in {where}, which defines no "
+        f"docs/dev/architecture.md: names {name} in {where}, which defines no "
         "such constant"
         for where, name in sorted(listed)
         if (where, name) not in tree
     ]
     problems += [
-        f"docs/dev/00-architecture.md: says {name} is `{listed[where, name]}`; "
+        f"docs/dev/architecture.md: says {name} is `{listed[where, name]}`; "
         f"{where} says `{tree[where, name]}`"
         for where, name in sorted(listed.keys() & tree.keys())
         if listed[where, name] != tree[where, name]
@@ -1015,7 +1015,7 @@ def check_bounds_ledger() -> list[str]:
     # having found nothing, and a tree read as empty would pass the other.
     if not tree or not listed:
         problems.append(
-            "docs/dev/00-architecture.md: the bounds table or the scan reads as empty"
+            "docs/dev/architecture.md: the bounds table or the scan reads as empty"
         )
     return problems
 
@@ -1092,12 +1092,12 @@ def check_bound_holders() -> list[str]:
     nobody checked. At least one holder must name it: a row may also name a gate
     that measures the bound's cost without spelling it.
     """
-    page = ROOT / "docs" / "dev" / "00-architecture.md"
+    page = ROOT / "docs" / "dev" / "architecture.md"
     if not page.exists():
         return []
     rows = BOUND_HOLDER_ROW.findall(page.read_text(encoding="utf-8"))
     problems = [
-        f"docs/dev/00-architecture.md: the row for {name} in {where} names no "
+        f"docs/dev/architecture.md: the row for {name} in {where} names no "
         "holder that names it"
         for where, name, cell in rows
         if not any(
@@ -1107,7 +1107,7 @@ def check_bound_holders() -> list[str]:
     ]
     if not rows:
         problems.append(
-            "docs/dev/00-architecture.md: no row of the bounds table read whole"
+            "docs/dev/architecture.md: no row of the bounds table read whole"
         )
     return problems
 
@@ -1154,20 +1154,19 @@ def zone_problems(page: str, production: list[str], held: set[str]) -> list[str]
     files = {path for path in zones if not path.endswith("/")}
     directories = tuple(path for path in zones if path.endswith("/"))
     problems = [
-        f"docs/dev/00-architecture.md: {source} is in no zone"
+        f"docs/dev/architecture.md: {source} is in no zone"
         for source in sorted(production)
         if source not in files and not source.startswith(directories)
     ]
     problems += [
-        f"docs/dev/00-architecture.md: a zone names {path}, which the tree does "
-        "not hold"
+        f"docs/dev/architecture.md: a zone names {path}, which the tree does not hold"
         for path in zones
         if path not in held
     ]
     # The table is the detector: a page whose table reads as empty owns
     # nothing, and every file would fail for a reason that is not theirs.
     if not zones:
-        problems.append("docs/dev/00-architecture.md: the zone table reads as empty")
+        problems.append("docs/dev/architecture.md: the zone table reads as empty")
     return problems
 
 
@@ -1179,7 +1178,7 @@ def check_zone_table() -> list[str]:
     in no zone is a change whose page nobody can name, and a table that reads
     as complete with a file missing is how such a file goes unseen.
     """
-    page = ROOT / "docs" / "dev" / "00-architecture.md"
+    page = ROOT / "docs" / "dev" / "architecture.md"
     if not page.exists():
         return []
     sources = [

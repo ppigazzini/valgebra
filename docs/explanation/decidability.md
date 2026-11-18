@@ -1714,7 +1714,7 @@ and the work is a product of the branches. A `False` there may mean "not proven
 within the bound" rather than "not a subtype"; on anything else it means the
 relation is outside the decided fragment above. The bound caps cost and does
 not stand in for termination: every goal a query asks is drawn from a finite
-closure of its subterms, which `docs/dev/02-decision.md` in the repository
+closure of its subterms, which `docs/dev/decision.md` in the repository
 writes out. Nor does it stand in for a goal memo on most shapes: over the
 `--decision`, `--decision-refute` and `--decision-repeat` workloads of
 `scripts/perf_gate.py` the goals a query *repeats* number zero, because the

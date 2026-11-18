@@ -316,7 +316,7 @@ def test_a_bytes_refinement_is_explained_at_its_own_bound() -> None:
 #: second it reads in place again. The numbers are `SNAPSHOT_MIN_ELEMENTS` and
 #: `SNAPSHOT_MAX_ELEMENTS` in `crates/valgebra-py/src/check/walk/sequence.rs`,
 #: restated here because a test asserting behavior at a boundary has to name
-#: it; the bounds table in `docs/dev/00-architecture.md` names this file as
+#: it; the bounds table in `docs/dev/architecture.md` names this file as
 #: what measures them.
 SNAPSHOT_BAND = (16, 262_144)
 

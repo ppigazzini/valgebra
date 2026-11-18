@@ -620,7 +620,7 @@ def test_the_ledger_is_serializable_for_a_report() -> None:
 def _disagreements() -> list[str]:
     """Pairs where `a <= b` and `a & ~b is empty` give different answers.
 
-    `docs/dev/02-decision.md` defines `a <= b` as "`a & ~b` admitting no value",
+    `docs/dev/decision.md` defines `a <= b` as "`a & ~b` admitting no value",
     and `docs/explanation/decidability.md` decides by `a ∧ ¬b = ∅`. Both procedures are
     sound, so a disagreement is one of them being *less complete* than the
     definition the pages give -- not an unsoundness, and not something a caller

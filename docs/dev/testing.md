@@ -386,7 +386,7 @@ its child, so the binary runs with a preloaded library whose constructor calls
 "thread apply all bt"` reads it. `faulthandler.dump_traceback_later` gives the
 Python frames of the plain-interpreter reproduction. What the frontend does
 about the race, and the part of it a program keeps, is on [the frontend
-page](03-frontend.md#what-a-parametrized-form-says).
+page](frontend.md#what-a-parametrized-form-says).
 
 **A corpus module is named by the test that reads it.** `PyModule::from_code`
 runs its source in the `sys.modules` entry of the name it is given when there
@@ -517,7 +517,7 @@ ledger that holds it in both directions:
 | every schema node, in every walk mode | the `Schema` enum in `ir.rs` | the node is driven through each entry point and the answer asserted | `tests/test_node_matrix.py` |
 | every public name a caller reaches | the type stub the package ships | the product suite *names* the cell, read from the syntax tree with the prose cut | `tests/test_use_case_ledger.py` |
 | every error code a report can carry | the walk that writes them | the same: the suite names the code | `tests/test_use_case_ledger.py` |
-| every result, obligation and deviation the design rests on | `10-theory.md`'s tags, with the debt it admits recorded | a `HELD-BY:` names a test that fails when the sentence is false | `tests/test_theory_ledger.py` |
+| every result, obligation and deviation the design rests on | `theory.md`'s tags, with the debt it admits recorded | a `HELD-BY:` names a test that fails when the sentence is false | `tests/test_theory_ledger.py` |
 | every `SOURCE:` line, against the argument it quotes | the argument, which the distribution does not carry | the quotation is found where the line says it is -- **on a clone that has the argument only**, so these rows skip in every lane and run on the maintainer's gate | `tests/test_theory_ledger.py` |
 | every refusal the frontend writes | the error constructors in `build*.rs` | a test matches the message the constructor writes | `tests/test_frontend_refusals.py` |
 | every code a report can carry, in both modes and on both paths | the same walk | the code is driven at that mode and on that path | `tests/test_error_matrix.py`, held by `tests/test_use_case_ledger.py` |
@@ -812,7 +812,7 @@ regions landing on doc-comment lines, blank lines and `use` items -- lines no
 program executes -- where a fresh `CARGO_TARGET_DIR` reads the same file at 99%.
 Each lane runs `cargo llvm-cov clean --workspace` before it measures
 (`.github/workflows/ci.yml`), and a figure taken by hand is taken in a fresh
-`CARGO_TARGET_DIR`; [07-tooling-ci.md](07-tooling-ci.md) names the tell.
+`CARGO_TARGET_DIR`; [tooling-ci.md](tooling-ci.md) names the tell.
 
 A difference of that size in a **total** is indistinguishable from a real hole
 of the same size, and neither figure alone settles which it is. What settles it

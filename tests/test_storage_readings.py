@@ -8,7 +8,7 @@ set that is not the value -- admitting a container whose storage the schema
 excludes, which is an accept no value supports.
 
 The rule is one rule for every container the walk reads, and it is the rule
-`docs/dev/04-walk.md` already states for a list and a tuple: a subclass that
+`docs/dev/walk.md` already states for a list and a tuple: a subclass that
 *inherits* the base's slot is read where it lies, and one that **overrides** it
 is read through the base type's own slot. Both halves are held here, because
 reading every subclass through the base would cost the common subclass -- a

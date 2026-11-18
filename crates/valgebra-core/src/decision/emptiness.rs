@@ -1059,7 +1059,7 @@ pub(super) enum ReadBack {
 /// memo takes no answer away. An `Unknown` a bound stopped is not held, since
 /// more steps may decide it, and nothing that rests on a hypothesis is, which
 /// is what a memo inside the coinductive procedure owes [LN26, §5.1]
-/// (`docs/dev/10-theory.md`, "A cache under coinduction is revertible or
+/// (`docs/dev/theory.md`, "A cache under coinduction is revertible or
 /// absent").
 ///
 /// A meet open for the query's budget lends a reading one hypothesis, that a

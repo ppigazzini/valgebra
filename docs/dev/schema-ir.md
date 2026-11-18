@@ -43,7 +43,7 @@ well, which is what keeps the typing spec's distinction between `Literal[1]`,
 `Literal[True]` and `Literal[1.0]`. For the spec's own `Literal` types that is
 the one value `c`; for a float zero or a `Decimal` it is every value `==` joins
 to `c` within the type, which
-[10-theory.md](10-theory.md) states as a deviation with what it costs a
+[theory.md](theory.md) states as a deviation with what it costs a
 proof. The same-type test runs **before** `==`, so a value of another
 type never reaches the comparison — which is why a raising `__eq__` is only
 observable from an object of the pooled constant's own type. The set
@@ -136,7 +136,7 @@ than a formality: valgebra exposes its algebra through standard Python typing
 syntax, so a set that syntax can express and valgebra cannot is a completeness
 gap, while a set only a bespoke combinator could name is not. Whoever owns the
 algebra decides where that line sits; a page here records the decision, and
-[10-theory.md](10-theory.md) already shows the form such a decision takes — the
+[theory.md](theory.md) already shows the form such a decision takes — the
 map clauses may overlap where the paper's may not, written down as the
 deviation `clauses-may-overlap`.
 
@@ -169,7 +169,7 @@ denotes dicts and has no carrier field, so supplying one changes the
 constructor. Beyond the admission test, two costs specific to this one:
 
 - The model `KeyedMap` is built from is recorded in
-  [10-theory.md](10-theory.md) as a *quasi K-step function* — named fields
+  [theory.md](theory.md) as a *quasi K-step function* — named fields
   plus a default per key type. No carrier appears in that description, and
   **none appears in the source either**, which the title makes worth saying
   out loud. Castagna's "struct" is an *access style*, not a
@@ -211,7 +211,7 @@ it, measured on its own first; `collections.abc.Mapping` and
 **A spelling for the carrier-free attribute record.** A `Protocol` is that
 spelling: the node is in the closure — `AttrRecord` denotes exactly "any object
 whose `.a` is an `int`" — and the frontend builds a protocol as the record of
-its members with no class beside it ([03-frontend.md](03-frontend.md), "What a
+its members with no class beside it ([frontend.md](frontend.md), "What a
 class declares"). A protocol adds no node and no combinator: the annotation
 form the typing spec gives for "an object with these attributes" is the
 spelling, which is the surface rule.
@@ -223,7 +223,7 @@ its instances alone, since the frontend reads the class's name as the class met
 with its declaration. The spelling adds no node. It is a combinator rather than an
 annotation form because the typing form for "the instances of `C`" is `C`
 itself, which the declaration reading takes, and the alternatives to a
-combinator are refused in [03-frontend.md](03-frontend.md), "Refused, and the
+combinator are refused in [frontend.md](frontend.md), "Refused, and the
 test each one fails".
 
 **A class-with-record node, so that a meet of two attribute-carrying classes
@@ -436,7 +436,7 @@ Two things the compiler does not force, and both are held by a test:
 Five payloads are integers addressing something the validator holds, and four of
 them address the **same** constants pool: a literal's constant, a class, a
 comparison operand, a user predicate. Each has its own type, and
-[06-type-design.md](06-type-design.md) owns why and what a crossing would cost.
+[type-design.md](type-design.md) owns why and what a crossing would cost.
 
 `Constraint::MinLen`, `Constraint::MaxLen` and `Constraint::Regex` sit in the
 same enum and are **not** pool indices at all — they carry the length or the
@@ -520,7 +520,7 @@ complement the bottom (`has_complementary_pair_within` in
 not among them**: `A | (A & B)` and `A` are one set and two terms. Absorption is
 one case of `A | B` folding to `A` wherever `A` contains `B`, and a containment
 is what the decision procedures answer rather than what a constructor folds
-([02-decision.md](02-decision.md) draws the line). A `recursive` whose body
+([decision.md](decision.md) draws the line). A `recursive` whose body
 never names the fixpoint is that body, `μt. A` being `A` where `t` does not occur
 in `A`, rather than a definition no reference reaches. And the clause list
 `open` and `close` rewrite names each key schema once, two clauses over one key
@@ -824,7 +824,7 @@ decision procedure declines. Whether it may be *asked* is a cost question, and
 the cost is measured on the shapes the two disagree about.
 
 The wins are cheap and the costs are exponential in nesting depth, both measured
-by `cargo bench --bench core`; [02-decision.md](02-decision.md) names the rows
+by `cargo bench --bench core`; [decision.md](decision.md) names the rows
 and what they say. Bounding the depth does not bound the cost, because breadth
 multiplies too: a union of four records at depth three, minus a union of its
 siblings, spends **345
@@ -840,7 +840,7 @@ holds, with every checksum unchanged.
 
 That last number is the shape of the problem. `MAX_LINES`, `MAX_ATOMS` and
 `MAX_STATES` -- rows in the table of every bound in the tree
-([00-architecture.md](00-architecture.md)) -- bound the descriptor a build may
+([architecture.md](architecture.md)) -- bound the descriptor a build may
 **produce**, and say nothing about the work a build may **do**. Held by them
 alone, refusing costs as much as succeeding, and a caller cannot buy safety by
 being asked to accept less: the cost is not a bound set too high, but a quantity
@@ -939,7 +939,7 @@ predicate and no class whose metaclass answers `isinstance`.
 The **structural rules** decide by shape, and reach what the descriptor cannot
 build: every recursive schema is theirs alone. Where both reach, building a
 descriptor costs about three orders of magnitude more than a rule that already
-answers, which [02-decision.md](02-decision.md) measures under "The bounds,
+answers, which [decision.md](decision.md) measures under "The bounds,
 each measured"; a shape the rules settle in nanoseconds is not worth a set
 representation. So the rules answer first, and the descriptor answers where
 they decline.
@@ -956,7 +956,7 @@ describes the decision says so in that order.
 answering a common one far more cheaply.** A rule that only repeats what the
 descriptor decides is dead weight the mutation sweep cannot see through the
 public relations, and it goes. Each rule that stays is named on
-[02-decision.md](02-decision.md) with which of the two reasons it has.
+[decision.md](decision.md) with which of the two reasons it has.
 
 **Every bound is measured.** A numeric bound in the decision -- the nodes a
 lowering reads, the nesting it descends, the work a build spends, the steps the
@@ -989,7 +989,7 @@ as such: two spellings of one set can open into two, and close into two -- a
 meet of two open records and the open record of their fields are one set, and
 closing them gives an empty meet and a record. What the laws hold is that
 closing commutes with absorption and that a second application gives the set
-the first did ([10-theory.md](10-theory.md)).
+the first did ([theory.md](theory.md)).
 
 `ensure` is `validate(x); return x` and is kept for what it reads as, typed as
 the identity it is. That is a judgment about the surface rather than about the
@@ -1000,7 +1000,7 @@ syntax writes a union that way -- `int | str` is a union before this library
 sees it, and `__ror__` is what lets `None | validator` work -- so answering `|`
 is answering the language. `&` and `~` would be second spellings of
 `intersection` and `complement`, which
-[the ship-versus-recipe rule](00-architecture.md#where-new-work-goes) refuses: shorter is not a
+[the ship-versus-recipe rule](architecture.md#where-new-work-goes) refuses: shorter is not a
 reason. `in` is kept for the reason `|` is: it is Python's own
 spelling of the one question the product answers, membership, as `|` is
 Python's spelling of a union, where `&` and `~` would spell combinators the
@@ -1023,7 +1023,7 @@ What sharing gives beyond the copy is identity where a node is built twice:
 need. What is missing is the memo itself, and the reason is the trail a
 coinductive decision carries rather than a missing key — a result reached under
 an open hypothesis may not be kept once the hypothesis is discharged. The rules
-carry a work budget instead ([02-decision.md](02-decision.md)).
+carry a work budget instead ([decision.md](decision.md)).
 
 A transform over the tree answers with the handle it was given when it changed
 nothing: opening a schema with no record in it, closing one already closed, or

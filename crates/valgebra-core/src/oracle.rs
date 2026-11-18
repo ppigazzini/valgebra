@@ -461,7 +461,7 @@ pub(crate) fn complemented_members(
 /// **That assumption is contractivity [Cas23, Def. 2.1], and this does not
 /// check it.** A
 /// contractive body denotes one set of finite values, by induction on the
-/// value (`docs/dev/10-theory.md`, Recursion), which is what makes "the set the
+/// value (`docs/dev/theory.md`, Recursion), which is what makes "the set the
 /// reference denotes" a thing to speak of at all; a body whose reference is
 /// unguarded may have many fixpoints or none, and `t = ~t` has none. Read as
 /// a set anyway, such a reference lets a caller fold `t | ~t` to the top --

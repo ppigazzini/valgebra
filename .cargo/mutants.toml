@@ -20,7 +20,7 @@
 # 3.13 for it: a mutant one release reports as a survivor can be one another
 # kills, because releases answer a C accessor differently. Point `PYO3_PYTHON`
 # at a 3.13 before running this by hand, or read a verdict that is about the
-# interpreter -- `docs/dev/07-tooling-ci.md` carries the whole invocation.
+# interpreter -- `docs/dev/tooling-ci.md` carries the whole invocation.
 #
 # The files excluded below are reached only through pytest, which *this* harness
 # cannot observe: `cargo test` never loads the extension, so their mutants would

@@ -123,7 +123,7 @@ macro_rules! pool_index {
 /// one node holds both. A gradual type is an atom apart from the top for a
 /// *second* question, consistency, which a static checker asks at every site
 /// where a value crosses between typed and untyped code; a validator has no
-/// such site and never asks it (`docs/dev/01-schema-ir.md`, "What `Any` is"),
+/// such site and never asks it (`docs/dev/schema-ir.md`, "What `Any` is"),
 /// so the two descriptors Castagna & Duboc carry a gradual type in
 /// [CD24, §7.1] are one here. What is left is a spelling, and a spelling is
 /// worth giving back.
@@ -908,7 +908,7 @@ pub enum Schema {
     /// of a type comparing by identity -- the empty set for `nan`, which equals
     /// nothing, and a wider set where `==` joins more: `Literal[0.0]` holds
     /// `-0.0` and `Literal[Decimal("1.00")]` holds `Decimal("1.0")`
-    /// (`docs/dev/10-theory.md`, "A constant is the values equal to it"). The
+    /// (`docs/dev/theory.md`, "A constant is the values equal to it"). The
     /// same-type test is what keeps Python's cross-type `==` out
     /// (`1 == True == 1.0`): equality alone would make `Literal[1]` also admit
     /// `True` and `1.0`, and `type(x) is type(c)` keeps the typing spec's
@@ -1016,7 +1016,7 @@ pub enum Schema {
     /// -- a protocol member and a dataclass field are both present on an
     /// instance -- and a state only a test can build is one the walk, the
     /// lowering and the rules can read three ways unseen
-    /// (`docs/dev/01-schema-ir.md`).
+    /// (`docs/dev/schema-ir.md`).
     ///
     /// An attribute is read as the value's own, so the record is a set under the
     /// trust base, which takes what a value answers to be a fact about it
@@ -1203,7 +1203,7 @@ pub enum SeqKind {
 ///
 /// This is a *linear* language rather than a regular one, and deliberately so.
 /// The general form is a regular expression over element schemas, as Hosoya,
-/// Vouillon and Pierce give it (`docs/dev/10-theory.md`, "Sequences as a
+/// Vouillon and Pierce give it (`docs/dev/theory.md`, "Sequences as a
 /// regular language"), and the automaton that decides inclusion between such
 /// languages is built one representation over (`descr/symbolic.rs`), so what
 /// keeps this shape linear is the schema language: nothing in this crate or the

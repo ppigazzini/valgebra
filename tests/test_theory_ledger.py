@@ -1,6 +1,6 @@
 """Every result, obligation and deviation names the test that holds it.
 
-`docs/dev/10-theory.md` says what the design rests on: "A citation here is a
+`docs/dev/theory.md` says what the design rests on: "A citation here is a
 claim that a specific line exists because of it, not a reading list." A claim
 tagged `[LOAD-BEARING]` says code in this tree would be wrong without the result;
 one tagged `[OBLIGATION]` says the theory demands a shape of the implementation;
@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.repository
 
-THEORY = ROOT / "docs" / "dev" / "10-theory.md"
+THEORY = ROOT / "docs" / "dev" / "theory.md"
 
 #: The tags a *claim* carries, each with the id that names it. The page's own
 #: paragraph explaining them writes the words without brackets, which is what

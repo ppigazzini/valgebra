@@ -67,7 +67,7 @@ the first three replace would admit a combination -- fail-fast without
 explaining -- that means nothing, and the type leaves it unnameable. The
 discriminants are ordered so both predicates the walk asks per node are a single
 comparison, and a test pins both over every variant — that order is load-bearing
-and measured, not cosmetic ([06-type-design.md](06-type-design.md)).
+and measured, not cosmetic ([type-design.md](type-design.md)).
 
 ## The comparison-raises policy
 
@@ -615,7 +615,7 @@ pay for its own allocation under a global lock, above the second walking it
 costs more cache than the counts it avoids, and the transient stops at two
 mebibytes. The free-threaded build takes the copy at every width up to the
 second, since the calls it saves per element outweigh the allocation. Both are
-in the bounds table of [00-architecture.md](00-architecture.md), and neither
+in the bounds table of [architecture.md](architecture.md), and neither
 changes an answer.
 
 The band is a rule about length, measured on distinct integers, and the walk
@@ -970,7 +970,7 @@ errors those loops answer with are dropped in functions of their own --
 `walk/record.rs` -- and in the extension, refined integers cost 2.8% fewer
 instructions that way and a list of dataclasses 1.2%. The instruction gate
 cannot read this, as [the tooling
-page](07-tooling-ci.md#what-each-instrument-cannot-see) says, so a change that
+page](tooling-ci.md#what-each-instrument-cannot-see) says, so a change that
 moves a drop into a loop is read off the built extension.
 
 ## The explaining walk resumes where the deciding one stopped
@@ -1366,4 +1366,4 @@ pinned by a case.
 that.** Its adequacy is measured by mutation, over the value corpus in
 `crates/valgebra-py/src/check/walk/interpreter.rs`, compiled under the
 `interpreter-tests` feature that embeds the interpreter;
-[08-testing.md](08-testing.md) owns what that measures and what it skips.
+[testing.md](testing.md) owns what that measures and what it skips.

@@ -17,7 +17,7 @@
 //! partition, because a component per kind is what closes each under
 //! complement. Neither owns the frame they share, and a test holds the
 //! direction: `crates/valgebra-core/src/descr/` imports nothing from
-//! `decision.rs`. `docs/dev/02-decision.md` describes the two vocabularies and
+//! `decision.rs`. `docs/dev/decision.md` describes the two vocabularies and
 //! why a change to one is a change to the other.
 
 use crate::verdict::Verdict;

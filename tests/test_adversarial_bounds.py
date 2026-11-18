@@ -1542,7 +1542,7 @@ def test_a_marker_type_past_the_cache_bound_is_still_read() -> None:
     Built well past the bound on purpose: the rows below are the ones the cache
     cannot have seen.
     """
-    # Four times the bound `docs/dev/00-architecture.md` records for it. The
+    # Four times the bound `docs/dev/architecture.md` records for it. The
     # value is not published -- it changes no answer, only how often one is
     # recomputed -- so it is spelled here, and a bound raised past this is a
     # bound whose test stops reaching the far side.

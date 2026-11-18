@@ -175,7 +175,7 @@ maps where `False` is exact and where it is conservative, and why the docs say
 ## How the argument is mechanized
 
 The argument is checked, not just asserted. Four of the suite's layers bear on
-it directly; `docs/dev/08-testing.md` in the repository owns the full list, with
+it directly; `docs/dev/testing.md` in the repository owns the full list, with
 what each layer is blind to beside it.
 
 - **Denotation oracle.** Each node's `⟦S⟧` is written as a reference predicate

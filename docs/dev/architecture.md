@@ -10,24 +10,24 @@ the ones beside it, and carries no claim of its own.
 
 | Zone | Owns | Page |
 |---|---|---|
-| `crates/valgebra-core/src/ir.rs`, `ir/` | the schema IR: the node set, what each node denotes, the sharing of nodes built alike (`ir/intern.rs`), and the rewrites from one node to another (`ir/transform.rs`) | [01-schema-ir.md](01-schema-ir.md) |
+| `crates/valgebra-core/src/ir.rs`, `ir/` | the schema IR: the node set, what each node denotes, the sharing of nodes built alike (`ir/intern.rs`), and the rewrites from one node to another (`ir/transform.rs`) | [schema-ir.md](schema-ir.md) |
 | `crates/valgebra-core/src/lib.rs` | the core crate's root: the modules it declares, the names the binding imports from it, and the `forbid(unsafe_code)` below | this page |
-| `crates/valgebra-core/src/kind.rs`, `verdict.rs`, `oracle.rs` | the value-universe partition, its region summary, the two three-valued answers, and `LeafRelations`, the questions only the host can answer and the default that answers none — the frame both deciders and the constructors read | [02-decision.md](02-decision.md) |
-| `crates/valgebra-core/src/carries.rs` | whether the values a base admits can answer a constraint: the one rule the frontend refuses a refinement by and the laws' generator draws its refinements by | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-core/src/decision.rs`, `decision/` | the structural rules: subtyping, equivalence and disjointness in the file, emptiness and the constructor rules one module each beside it | [02-decision.md](02-decision.md) |
-| `crates/valgebra-core/src/descr/` | the set representation: one component per kind, each closed under the three operations. `lower.rs` maps a term to a set and holds the build's `Bounds`; the components are `integers.rs` and its span arithmetic (`interval.rs`), `floats.rs`, `regular.rs` for the two word kinds, `records.rs`, `maps.rs`, `sets.rs` and `symbolic.rs` for the sequence automaton, `classes.rs` for the class atoms; `lines.rs` is the per-kind normal form they share, `automaton.rs` the state bound and the walks the two automata share, `polar.rs` the union of summands under a polarity that a lattice built from parts holds its set as, `values.rs` the `T⊥` a key or attribute holds, and `budget.rs` what a build may spend | [02-decision.md](02-decision.md) |
-| `crates/valgebra-py/src/build.rs`, `build/` | typing annotations and native forms into the IR: the dispatch, the pool and the guard in the file, the marker protocol in `build/refine.rs`, what a class declares in `build/classes.rs`, the typing introspection in `build/generics.rs`, and the regex forms the two engines read as two languages, refused in `build/dialect.rs` | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-py/src/check.rs`, `check/` | the membership walk: the aggregator that re-exports it in `check.rs`, the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs`, and the per-validator precompute in `check/index.rs`. `check/ctx.rs` holds the read-only context a walk threads, its two depth bounds and the trail that refuses a cyclic value; `check/violation.rs` builds the structured failure a walk records, whose type is `crates/valgebra-core/src/violation.rs` | [04-walk.md](04-walk.md) |
-| `crates/valgebra-py/src/input.rs` | the `Value` the walk runs over: a borrowed Python object or a borrowed parsed JSON value, and the decoders that turn a caller's `str` or `bytes` into one — which is what keeps the two input paths membership-equivalent by construction | [04-walk.md](04-walk.md) |
-| `crates/valgebra-py/src/equality.rs` | `==` on two validators, read through the constant pools rather than slot for slot: whether two schemas *are* the same set, which is what the constructors settle and not what the decision procedures prove | [01-schema-ir.md](01-schema-ir.md) |
-| `crates/valgebra-core/src/violation.rs`, `codes.rs` | the structured failure a walk records, and the codes a node reports that the binding's walk reports too, spelled once | [05-errors.md](05-errors.md) |
-| `crates/valgebra-py/src/errors.rs`, `exception.rs`, `codes.rs`, `render.rs` | the Python exception, named in the leaf `exception.rs` and raised from a `Violation` by `errors.rs`; the failure codes the walk writes, named once in `codes.rs`; and the annotation render | [05-errors.md](05-errors.md) |
-| `crates/valgebra-py/src/oracle.rs` | the binding's half of `LeafRelations`: the questions the core cannot decide alone — whether a literal belongs to a set, whether two sets of constants share a value, how two bounds order, what an enumeration lists | [02-decision.md](02-decision.md) |
-| `crates/valgebra-py/src/finite.rs` | a relation from finitely many constants, read where both deciders decline: the subject's values built as Python objects, at most `FINITE_VALUES` of at most `FINITE_PARTS` parts each, and the supertype walked on each where no atom of it runs code a second call may answer differently | [02-decision.md](02-decision.md) |
-| `python/valgebra/` | the Python half of the package: `__init__.py` re-exports the extension's names and is what `import valgebra` costs, `_markers.py` defines `Regex`, the one refinement marker neither typing nor `annotated_types` provides, and `_valgebra.pyi` is the stub `stubtest` holds against the built extension | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-py/src/validator.rs` | the compiled `Validator`: the object a caller holds and every method on it, the three construction limits, and `checked`, which refuses a schema past them and prunes the definitions nothing reaches | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the three set combinators (`union`, `intersection`, `complement`), the `recursive` fixpoint, `instance_of` for a class alone, and the two lattice bounds `anything` and `nothing` | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-py/src/workload.rs` | the instruction gate's instrument: the shapes `scripts/perf_gate.py --binding-*` measures, which no caller reaches and no suite runs, so coverage and the mutation sweep skip it by name | [07-tooling-ci.md](07-tooling-ci.md) |
+| `crates/valgebra-core/src/kind.rs`, `verdict.rs`, `oracle.rs` | the value-universe partition, its region summary, the two three-valued answers, and `LeafRelations`, the questions only the host can answer and the default that answers none — the frame both deciders and the constructors read | [decision.md](decision.md) |
+| `crates/valgebra-core/src/carries.rs` | whether the values a base admits can answer a constraint: the one rule the frontend refuses a refinement by and the laws' generator draws its refinements by | [frontend.md](frontend.md) |
+| `crates/valgebra-core/src/decision.rs`, `decision/` | the structural rules: subtyping, equivalence and disjointness in the file, emptiness and the constructor rules one module each beside it | [decision.md](decision.md) |
+| `crates/valgebra-core/src/descr/` | the set representation: one component per kind, each closed under the three operations. `lower.rs` maps a term to a set and holds the build's `Bounds`; the components are `integers.rs` and its span arithmetic (`interval.rs`), `floats.rs`, `regular.rs` for the two word kinds, `records.rs`, `maps.rs`, `sets.rs` and `symbolic.rs` for the sequence automaton, `classes.rs` for the class atoms; `lines.rs` is the per-kind normal form they share, `automaton.rs` the state bound and the walks the two automata share, `polar.rs` the union of summands under a polarity that a lattice built from parts holds its set as, `values.rs` the `T⊥` a key or attribute holds, and `budget.rs` what a build may spend | [decision.md](decision.md) |
+| `crates/valgebra-py/src/build.rs`, `build/` | typing annotations and native forms into the IR: the dispatch, the pool and the guard in the file, the marker protocol in `build/refine.rs`, what a class declares in `build/classes.rs`, the typing introspection in `build/generics.rs`, and the regex forms the two engines read as two languages, refused in `build/dialect.rs` | [frontend.md](frontend.md) |
+| `crates/valgebra-py/src/check.rs`, `check/` | the membership walk: the aggregator that re-exports it in `check.rs`, the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs`, and the per-validator precompute in `check/index.rs`. `check/ctx.rs` holds the read-only context a walk threads, its two depth bounds and the trail that refuses a cyclic value; `check/violation.rs` builds the structured failure a walk records, whose type is `crates/valgebra-core/src/violation.rs` | [walk.md](walk.md) |
+| `crates/valgebra-py/src/input.rs` | the `Value` the walk runs over: a borrowed Python object or a borrowed parsed JSON value, and the decoders that turn a caller's `str` or `bytes` into one — which is what keeps the two input paths membership-equivalent by construction | [walk.md](walk.md) |
+| `crates/valgebra-py/src/equality.rs` | `==` on two validators, read through the constant pools rather than slot for slot: whether two schemas *are* the same set, which is what the constructors settle and not what the decision procedures prove | [schema-ir.md](schema-ir.md) |
+| `crates/valgebra-core/src/violation.rs`, `codes.rs` | the structured failure a walk records, and the codes a node reports that the binding's walk reports too, spelled once | [errors.md](errors.md) |
+| `crates/valgebra-py/src/errors.rs`, `exception.rs`, `codes.rs`, `render.rs` | the Python exception, named in the leaf `exception.rs` and raised from a `Violation` by `errors.rs`; the failure codes the walk writes, named once in `codes.rs`; and the annotation render | [errors.md](errors.md) |
+| `crates/valgebra-py/src/oracle.rs` | the binding's half of `LeafRelations`: the questions the core cannot decide alone — whether a literal belongs to a set, whether two sets of constants share a value, how two bounds order, what an enumeration lists | [decision.md](decision.md) |
+| `crates/valgebra-py/src/finite.rs` | a relation from finitely many constants, read where both deciders decline: the subject's values built as Python objects, at most `FINITE_VALUES` of at most `FINITE_PARTS` parts each, and the supertype walked on each where no atom of it runs code a second call may answer differently | [decision.md](decision.md) |
+| `python/valgebra/` | the Python half of the package: `__init__.py` re-exports the extension's names and is what `import valgebra` costs, `_markers.py` defines `Regex`, the one refinement marker neither typing nor `annotated_types` provides, and `_valgebra.pyi` is the stub `stubtest` holds against the built extension | [frontend.md](frontend.md) |
+| `crates/valgebra-py/src/validator.rs` | the compiled `Validator`: the object a caller holds and every method on it, the three construction limits, and `checked`, which refuses a schema past them and prunes the definitions nothing reaches | [frontend.md](frontend.md) |
+| `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the three set combinators (`union`, `intersection`, `complement`), the `recursive` fixpoint, `instance_of` for a class alone, and the two lattice bounds `anything` and `nothing` | [frontend.md](frontend.md) |
+| `crates/valgebra-py/src/workload.rs` | the instruction gate's instrument: the shapes `scripts/perf_gate.py --binding-*` measures, which no caller reaches and no suite runs, so coverage and the mutation sweep skip it by name | [tooling-ci.md](tooling-ci.md) |
 
 `scripts/docs_lint.py` holds the table to the tree: a production source file
 under `crates/*/src` that no row names fails, as does a row naming a path the
@@ -98,7 +98,7 @@ the `Verdict`/`Relation` answers and the `LeafRelations` questions — sits in
 `kind.rs`, `verdict.rs` and `oracle.rs` below the pair rather than inside
 either. The reverse edge is allowed and used: `decision.rs` asks
 `descr::lower` where its own rules decline. `tests/test_module_direction.py`
-holds both halves, and [02-decision.md](02-decision.md) says what each decider
+holds both halves, and [decision.md](decision.md) says what each decider
 reaches.
 
 Modules import each other in five places, each named with what crosses it in
@@ -146,7 +146,7 @@ interpreter in the loop, and it is checkable in one line of
 The second invariant is why the core asks the binding about anything it cannot
 decide alone, through the `LeafRelations` trait: a class hierarchy and a concrete
 value are Python facts, and the core takes them as answers rather than reaching
-for them. [02-decision.md](02-decision.md) owns that boundary.
+for them. [decision.md](decision.md) owns that boundary.
 
 ## How a value flows
 
@@ -192,7 +192,7 @@ or a JSON document -- is presented through one `Value`
 (`crates/valgebra-py/src/input.rs`), and one membership walk
 (`crates/valgebra-py/src/check/walk.rs`) decides it, in one of four modes: a
 *fast* mode that returns a bool and allocates only the storage a reading or the
-walk's memo says it needs, each at its site ([04-walk.md](04-walk.md)); a
+walk's memo says it needs, each at its site ([walk.md](walk.md)); a
 *settle* mode, the fast mode a complement's inner walk runs in, where a stop is
 a third value read in Kleene's strong logic; an *explain* mode that builds a
 `Violation` with the path, the expected label and a value summary for each
@@ -207,7 +207,7 @@ stricter (`docs/guides/json.md`).
 
 The constants pool is one `Vec<Py<PyAny>>` holding four kinds of object — a
 literal's constant, a class, a comparison operand, a user predicate — addressed
-by four distinct index types. [06-type-design.md](06-type-design.md) owns why.
+by four distinct index types. [type-design.md](type-design.md) owns why.
 
 ## How two schemas are compared
 
@@ -222,7 +222,7 @@ costs about three orders of magnitude more than a rule that already answered
 asked of both); the rules alone reach a recursive schema, a predicate or a
 hooked class. A question about a class, a constant or a comparison operand is
 asked back through `LeafRelations`, which `crates/valgebra-py/src/oracle.rs`
-implements. [02-decision.md](02-decision.md) owns the detail and
+implements. [decision.md](decision.md) owns the detail and
 `docs/explanation/decidability.md` the published boundary.
 
 ## The invariants every zone keeps
@@ -231,7 +231,7 @@ A change that breaks one of these is a defect, not a trade-off.
 
 - **One walk.** Deciding and explaining are one `member` function parameterized
   by the walk's mode. Where a reading has a reader per mode, a test rather than
-  the construction holds the pair to one verdict ([04-walk.md](04-walk.md)).
+  the construction holds the pair to one verdict ([walk.md](walk.md)).
 - **One boundary crossing.** Tree walks, key lookups and bound checks run in the
   Rust validator tree, and no per-element Python work is added to the loop. A
   user predicate is a documented Python-callback slow path, never a silent
@@ -273,8 +273,8 @@ above it, and each is refused where an earlier row reaches the same thing.
 | a set the existing forms reach | a **recipe**: a section of a page, no code | a paragraph, and a block the doc lanes run | a conditional field, JSON's values, an `int` that is no `bool` |
 | a set typing syntax spells, which the frontend refuses and the nodes reach | the **frontend** (`build/`) | a form, what it denotes, and a refusal for what it does not name | `np.ndarray[S, np.dtype[T]]` |
 | a set the forms reach, which a decider declines | a **decider** (`descr/`, `decision*`), and no node | a reading, its laws, the release differential, a gate shape | a step over floats, a key narrowed by a pattern |
-| a set no combination reaches, in the domain | a **node**, by the [admission test](01-schema-ir.md#whether-to-add-a-variant) | every match over the IR, and the ledgers | |
-| another language's schemas | a **companion**, a package of its own | a repository, a gate, a re-pin per [release](09-releasing.md#a-companion-reads-the-release) | `valgebra-jsonschema`, `valgebra-vtjson` |
+| a set no combination reaches, in the domain | a **node**, by the [admission test](schema-ir.md#whether-to-add-a-variant) | every match over the IR, and the ledgers | |
+| another language's schemas | a **companion**, a package of its own | a repository, a gate, a re-pin per [release](releasing.md#a-companion-reads-the-release) | `valgebra-jsonschema`, `valgebra-vtjson` |
 
 **A recipe is the default.** The algebra expressing a pattern is the point of it, so a wrapper
 around one line is not shipped: it would be a second spelling to document, test and keep, and
@@ -286,7 +286,7 @@ written and the decider learns the set, so a caller writing plain Python gains t
 JSON's integers are a recipe, the step over floats they read is in the decider, and nothing about
 JSON is in the core. A decider change shows who asks, since every gate after it holds what it costs.
 A dyadic step asks for a table and 3 of the 243 `multipleOf` in JSONSchemaBench write one, so it
-[stays out](02-decision.md); `0.01`, which no table holds, is 147 of them.
+[stays out](decision.md); `0.01`, which no table holds, is 147 of them.
 
 **A value universe is a recipe.** What a format holds is a set of Python values, so it is a set to
 write and a meet to ask inside, with no crate, trait or package
@@ -444,8 +444,8 @@ the tree keeps in the proposal's place and what that rule stands on -- a figure
 with the command or the page that reproduces it, or the reason where no figure
 exists -- and it ends with the tests that hold it. `tests/test_refusals_ledger.py`
 holds every entry to holders that exist and every holder it defines to an
-entry. The algebra's refusals are on [01-schema-ir.md](01-schema-ir.md) and the
-frontend's on [03-frontend.md](03-frontend.md), each with the test it fails.
+entry. The algebra's refusals are on [schema-ir.md](schema-ir.md) and the
+frontend's on [frontend.md](frontend.md), each with the test it fails.
 
 **Breaking the module cycles, or gating a coupling metric over them.** The crate
 is rustc's compilation unit and the wheel one `.so` statically linking the core,
@@ -467,7 +467,7 @@ crate in the lockfile. Held by `test_the_walk_dispatches_by_match` in
 `tests/test_refusals_ledger.py`.
 
 **A stable-ABI wheel, `abi3` or `abi3t`.** A release builds one wheel per
-interpreter version ([09-releasing.md](09-releasing.md)), because the walk
+interpreter version ([releasing.md](releasing.md)), because the walk
 chooses its readings by the interpreter it is built against:
 `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x` and
 `Py_GIL_DISABLED` flags, and which reading of a list is cheaper differs by
@@ -486,14 +486,14 @@ an interpreter to run the instrumented build, and nothing about the ABI. Held by
 descriptor builds no cycle, predicate or hooked class, and the rules decline
 pairs it decides. Where both reach, a set costs about three orders of magnitude
 more than a rule that answers (`scripts/perf_gate.py --decision-sets` against
-`--decision-rules`), and [02-decision.md](02-decision.md) owns both halves. Held
+`--decision-rules`), and [decision.md](decision.md) owns both halves. Held
 by `test_the_pages_give_the_gap_between_the_deciders_the_record_holds` in
 `tests/test_perf_gate.py`, and `test_the_two_deciders_are_measured_against_each_other`
 in `tests/test_completeness_probe.py`.
 
 **Normalizing a query's arguments where a decision starts.** The lattice laws
 are settled once, where a schema is built
-([01-schema-ir.md](01-schema-ir.md#which-laws-construction-settles)), so the
+([schema-ir.md](schema-ir.md#which-laws-construction-settles)), so the
 deciders read a schema already in the constructors' normal form and rebuild none
 per query: a construction happens once, a query many times. No figure for the
 per-query cost is recorded, and the holder refuses a normalizing pass, named
@@ -501,7 +501,7 @@ per-query cost is recorded, and the holder refuses a normalizing pass, named
 `test_the_deciders_never_normalize_a_query` in `tests/test_refusals_ledger.py`,
 and `test_eq_is_the_normal_form_and_not_the_set` in `tests/test_operators.py`.
 
-**A streaming JSON check.** [04-walk.md](04-walk.md) refuses it: a stream saves
+**A streaming JSON check.** [walk.md](walk.md) refuses it: a stream saves
 at most the tree's construction and drop, and nothing where a node reads its
 value again, and it answers differently from the tree on three documents. Held
 by `test_invalid_utf8_in_an_unread_value_is_not_a_document`,
@@ -515,7 +515,7 @@ pydantic-core as a per-call ratio, which cancels the runner's speed; no absolute
 time gates a merge. The ratio's ratchet is armed from a window of the lane's
 readings, never one run, since the bench lane reads one tree on several classes
 of machine further apart than a tolerance
-([07-tooling-ci.md](07-tooling-ci.md)). Held by
+([tooling-ci.md](tooling-ci.md)). Held by
 `test_only_the_argued_tests_read_a_clock` in `tests/test_clock_ledger.py`, and
 `test_a_tolerance_is_a_spread_rather_than_a_wish` and
 `test_no_reading_of_the_recorded_window_drifts` in
@@ -537,7 +537,7 @@ two members and the cargo configuration to no alias. Held by
 `test_the_workspace_is_the_two_crates` in `tests/test_refusals_ledger.py`.
 
 **A crate or a trait for the value universe.** A universe whose values embed in
-Python's is a set below the top ([10-theory.md](10-theory.md)), so it has no second
+Python's is a set below the top ([theory.md](theory.md)), so it has no second
 instance of a component to share: `Schema`, the deciders and the walk read it as
 they stand, and a trait over the kinds would be designed from one implementor, as
 an uncertain change is. A trait over the terms has less to go on: such a universe
@@ -579,7 +579,7 @@ number a caller may not import is not published. Held by
 
 ## Where to look next
 
-A change to what a schema *means* is [01-schema-ir.md](01-schema-ir.md) and
-[06-type-design.md](06-type-design.md). A change to what is *decidable* is
-[02-decision.md](02-decision.md). A change to what a value *matches* is
-[04-walk.md](04-walk.md), and it is the file where soundness is decided.
+A change to what a schema *means* is [schema-ir.md](schema-ir.md) and
+[type-design.md](type-design.md). A change to what is *decidable* is
+[decision.md](decision.md). A change to what a value *matches* is
+[walk.md](walk.md), and it is the file where soundness is decided.

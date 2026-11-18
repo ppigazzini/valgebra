@@ -30,7 +30,7 @@ import pytest
 from _toml import load
 from _tree import ROOT
 
-PAGE = ROOT / "docs" / "dev" / "02-decision.md"
+PAGE = ROOT / "docs" / "dev" / "decision.md"
 TRAIT = ROOT / "crates" / "valgebra-core" / "src" / "oracle.rs"
 #: The structural rules, where a pair no rule decides is handed to the
 #: readings that refute.

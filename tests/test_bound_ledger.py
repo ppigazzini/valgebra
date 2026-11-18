@@ -41,7 +41,7 @@ pytestmark = pytest.mark.repository
 
 CRATES = ROOT / "crates"
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
-PAGE = ROOT / "docs" / "dev" / "00-architecture.md"
+PAGE = ROOT / "docs" / "dev" / "architecture.md"
 
 #: A row of the bounds table kinded as no bound: a capacity the scan reads
 #: because it is a figure somebody chose, which bounds nothing a test could

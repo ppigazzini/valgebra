@@ -1024,7 +1024,7 @@ UNREACHED = {
     "mutants-diff-walk": (
         "a mutation sweep, and its verdict is the embedded interpreter's -- "
         "run it in a venv of the 3.13 `ci.yml` names, its `bin` first on PATH, "
-        "as docs/dev/07-tooling-ci.md's recipe does, or a mutant reads "
+        "as docs/dev/tooling-ci.md's recipe does, or a mutant reads "
         "differently here than on the lane"
     ),
 }

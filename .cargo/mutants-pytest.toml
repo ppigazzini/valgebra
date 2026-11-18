@@ -12,7 +12,7 @@
 # Run with `--features pytest-sweep` and `VALGEBRA_SWEEP_VENV` naming a prepared
 # environment; the test refuses rather than passing where the variable is unset,
 # because a sweep that lost it would report every mutant caught while measuring
-# nothing. `docs/dev/07-tooling-ci.md` carries the whole invocation.
+# nothing. `docs/dev/tooling-ci.md` carries the whole invocation.
 #
 # The examples and the build script stay out for the reasons they always had:
 # neither is code a test can observe. `workload.rs` stays out because it is the

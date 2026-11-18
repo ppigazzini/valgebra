@@ -204,7 +204,7 @@ exception that is not an ordinary `Exception` (`KeyboardInterrupt`,
 `SystemExit`, `GeneratorExit`), and `MemoryError` and `RecursionError`,
 propagate, because a check that swallowed one would make the process
 unstoppable from inside a loop or hide the interpreter running out of a
-resource. The set is the one the walk page (`docs/dev/04-walk.md`) owns and
+resource. The set is the one the walk page (`docs/dev/walk.md`) owns and
 [the error model](../guides/error-model.md) lists. Everything else a
 predicate raises is reported as `predicate_error` rather than as a rejected
 value ([refinements](../guides/refinements.md)), so a bug in your callable is not

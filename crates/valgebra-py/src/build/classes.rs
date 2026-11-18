@@ -6,7 +6,7 @@
 //! `dataclasses.is_dataclass` reads, a `Protocol` by
 //! `_is_protocol`; every other class names its instances and is an
 //! `isinstance` atom. The section "What a class declares" in
-//! `docs/dev/03-frontend.md` is this module.
+//! `docs/dev/frontend.md` is this module.
 
 use pyo3::PyTypeInfo;
 use pyo3::exceptions::{PyBaseException, PyException, PyTypeError, PyValueError};
@@ -158,7 +158,7 @@ pub(super) fn build_type_object(
     // unparameterized generic. Read as an `isinstance` atom it would be a
     // different sort of thing from the sequence node beside it -- in no kind at
     // all -- and neither spelling would be decided below the other. See "What a
-    // bare builtin class denotes" in `docs/dev/01-schema-ir.md`.
+    // bare builtin class denotes" in `docs/dev/schema-ir.md`.
     if ty.is(py.get_type::<PyList>()) {
         return Ok(Schema::list(SeqShape::homogeneous(Schema::ANYTHING)));
     }
@@ -1351,7 +1351,7 @@ pub(super) fn field_name<'a>(name: &'a Bound<'_, PyString>) -> PyResult<&'a str>
 /// is a deviation a caller has no way to see, because the class carries no mark
 /// of it. The dict-literal form `{"a": int}` stays closed: it is this library's
 /// own spelling, and a schema written as a *shape* means that shape
-/// (`docs/dev/01-schema-ir.md`, "What a `TypedDict` denotes").
+/// (`docs/dev/schema-ir.md`, "What a `TypedDict` denotes").
 ///
 /// `ReadOnly` needs no arm here. It constrains writers and a value has none, and
 /// `get_type_hints` has already resolved it away.
@@ -1773,7 +1773,7 @@ fn fields_as_declared<'py>(
 /// means, and spelling it out is what lets each half relate on its own; the
 /// surface does not change, because `render` reads the pair back as the class
 /// name and the walk stops at the failing conjunct, which is what
-/// `docs/dev/01-schema-ir.md` records under "What a class with attributes is, on
+/// `docs/dev/schema-ir.md` records under "What a class with attributes is, on
 /// the surface".
 pub(super) fn build_object<'py>(
     ty: &Bound<'py, PyType>,

@@ -41,7 +41,7 @@ others builds, and not for one reason:
 - `Mapping[K, V]` and `Sequence[T]` are **refused**. The record and mapping
   node denotes dicts, and giving it a carrier so these build is a change the
   algebra does not admit, recorded with the test it fails
-  (the refused changes in `docs/dev/01-schema-ir.md`, in the repository).
+  (the refused changes in `docs/dev/schema-ir.md`, in the repository).
 - `Iterable[T]` cannot be checked: reading its elements consumes an iterator,
   and a check that consumed one would change the value it was asked about.
 - `Set[T]`, `deque[T]` and `OrderedDict[K, V]` are **unbuilt**: nothing refuses

@@ -1,7 +1,7 @@
 """Every design the architecture page refuses names the test that holds it.
 
 A refusal written down without a holder is a verdict, and a verdict is what the
-next proposal argues with. The section of `docs/dev/00-architecture.md` titled
+next proposal argues with. The section of `docs/dev/architecture.md` titled
 "Refused, and what each one stands on" gives each refused proposal the rule the
 tree keeps in its place and the figure or reason the rule stands on, and ends
 each entry with the tests that hold it: a test that fails if the proposal
@@ -34,7 +34,7 @@ from _tree import ROOT, WORKFLOW, load_script, runs
 # the module graph. It exercises no schema.
 pytestmark = pytest.mark.repository
 
-PAGE = ROOT / "docs" / "dev" / "00-architecture.md"
+PAGE = ROOT / "docs" / "dev" / "architecture.md"
 HEADING = "## Refused, and what each one stands on"
 
 lint = load_script("docs_lint")

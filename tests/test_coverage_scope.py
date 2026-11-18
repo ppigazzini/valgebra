@@ -64,7 +64,7 @@ SCOPES = {**LANES, "nightly-branch-coverage": "valgebra-core"}
 #: reach a coverage report at all.
 #:
 #: A file whose name ends in `tests.rs` is the same thing one module down.
-#: `docs/dev/08-testing.md` states the rule that puts it there -- a test module
+#: `docs/dev/testing.md` states the rule that puts it there -- a test module
 #: longer than a screen lives in a sibling file -- and `test_module_placement.py`
 #: holds the tree to it, so the tree has twenty-odd of them and every one is
 #: compiled into the crate for the same reason a corpus is. Counted as shipped
@@ -350,7 +350,7 @@ def test_the_page_counts_the_tests_the_gil_stands_down() -> None:
     coverage lane measures -- which is this file's subject -- and because the
     arms it names are the ones no floor in this file covers.
     """
-    page = (ROOT / "docs" / "dev" / "08-testing.md").read_text(encoding="utf-8")
+    page = (ROOT / "docs" / "dev" / "testing.md").read_text(encoding="utf-8")
     stated = _GIL_SKIPS.search(page)
     assert stated, "the testing page states no count of the tests the GIL skips"
 

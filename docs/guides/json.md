@@ -285,7 +285,7 @@ loses the array is a trade and not an improvement, so the reading in place is
 the one that never loses.
 
 **A walk over the parser's events** is refused
-(`docs/dev/04-walk.md`): a union, a meet, a complement and a
+(`docs/dev/walk.md`): a union, a meet, a complement and a
 refinement read their value again, which a pull parser has moved past, and a
 stream answers differently from the tree on documents the tests hold. The
 document shape is a tree the walk reads once and drops.

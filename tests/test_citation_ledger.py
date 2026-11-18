@@ -1,12 +1,12 @@
 """A result the tree cites is cited by label, at a number its paper prints.
 
-`docs/dev/10-theory.md` records which result each design decision rests on, so
+`docs/dev/theory.md` records which result each design decision rests on, so
 a reader can check the decision against a page of a paper rather than against a
 recollection. That only works while a citation resolves: "Lemma 6.5" is worth
 writing because somebody can open the paper at Lemma 6.5, and worth nothing once
 nobody can say which paper. So a citation is a label and a locator,
 `[FCB08, Lem. 6.5]`, the label a row of the page's table of works, and
-`docs/dev/12-writing.md` says when one is owed and where it goes.
+`docs/dev/writing.md` says when one is owed and where it goes.
 
 What this holds, over the files `SCOPE` names:
 
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.repository
 
-THEORY = ROOT / "docs" / "dev" / "10-theory.md"
+THEORY = ROOT / "docs" / "dev" / "theory.md"
 
 #: Where the shelf lives. Assembled from its pieces rather than written, for the
 #: reason `tests/test_commit_messages.py` assembles the same name: a tracked file
@@ -400,7 +400,7 @@ def test_the_scope_cites_by_label() -> None:
     """
     cited = _citations()
     assert len(cited) >= 20, cited
-    page = [c for c in cited if c.where.startswith("docs/dev/10-theory.md:")]
+    page = [c for c in cited if c.where.startswith("docs/dev/theory.md:")]
     assert any(c.locator.startswith("§") for c in page), page
     assert any(not c.locator.startswith("§") for c in page), page
 

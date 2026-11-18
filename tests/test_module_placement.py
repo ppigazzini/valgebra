@@ -1,6 +1,6 @@
 """A test module longer than a screen lives in a file of its own.
 
-`docs/dev/08-testing.md` states the rule and the reason: a module holding more
+`docs/dev/testing.md` states the rule and the reason: a module holding more
 assertions than code makes a reader looking for the subtype rules scroll past
 them to find the rules. The shape that fixes it is `#[cfg(test)] mod tests;`
 with the body in a sibling file -- a child module, reaching private items
@@ -42,7 +42,7 @@ pytestmark = pytest.mark.repository
 
 CRATES = ROOT / "crates"
 
-#: The longest inline test module the rule allows, in lines. `docs/dev/08-testing.md`
+#: The longest inline test module the rule allows, in lines. `docs/dev/testing.md`
 #: says "a screen"; this is that, rounded up past the modules that stay.
 BAR = 100
 
@@ -91,7 +91,7 @@ def test_no_inline_test_module_is_longer_than_a_screen() -> None:
     assert not oversized, (
         "inline test modules past the bar: "
         + ", ".join(f"{where} ({length} lines)" for length, where in oversized)
-        + f". The rule is {BAR} lines; docs/dev/08-testing.md says why. Declare "
+        + f". The rule is {BAR} lines; docs/dev/testing.md says why. Declare "
         "`#[cfg(test)] mod tests;` and move the body to a sibling file."
     )
 

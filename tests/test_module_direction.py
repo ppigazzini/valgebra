@@ -139,7 +139,7 @@ _VALUE_MODEL = re.compile(
 def test_no_kernel_names_a_fact_of_the_value_model() -> None:
     """A kernel is generic because it cannot see what its letters are.
 
-    A universe is a set below the top (`docs/dev/10-theory.md`), so no second
+    A universe is a set below the top (`docs/dev/theory.md`), so no second
     instance of these modules exists to prove them generic. This is what says
     they are: a fact about Python's values reaching one fails here.
     """
@@ -282,5 +282,5 @@ def test_the_membership_walk_never_consults_subtyping() -> None:
         + "\n".join(offenders)
         + "\nMembership is structural, and that is what keeps the naive "
         "interpretation available. A walk that asks about inclusion makes the "
-        "circularity argument in `docs/dev/10-theory.md` false."
+        "circularity argument in `docs/dev/theory.md` false."
     )

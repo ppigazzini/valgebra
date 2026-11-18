@@ -829,9 +829,9 @@ def test_the_profiled_shapes_are_measured_by_a_lane() -> None:
 #: The pages that give the gap between the two deciders as an order of
 #: magnitude, each of which a re-recorded pair of counts can make wrong.
 GAP_PAGES = (
-    "docs/dev/00-architecture.md",
-    "docs/dev/01-schema-ir.md",
-    "docs/dev/02-decision.md",
+    "docs/dev/architecture.md",
+    "docs/dev/schema-ir.md",
+    "docs/dev/decision.md",
     "docs/guides/performance.md",
     "docs/explanation/foundations.md",
 )

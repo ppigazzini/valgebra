@@ -641,7 +641,7 @@ its fields where an undeclared key refused it. A mapping is read by a scan, and
 its explaining pass starts at the first entry: a predicate on every entry up to
 the refused one runs a second time. A predicate on the clause an undeclared key
 falls under runs once to find whether the clause covers the entry and again to
-report it (`docs/dev/04-walk.md`). A dict schema
+report it (`docs/dev/walk.md`). A dict schema
 that is a branch of a union is read the second time only where no branch admits
 the value. Without
 `fail_fast`, `validate` also reads past the first failure, running the

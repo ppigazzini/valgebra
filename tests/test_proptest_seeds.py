@@ -4,7 +4,7 @@ proptest keeps the seed of a case that failed in `proptest-regressions/`, at the
 path of the source file whose `proptest!` block drew it, and replays every seed
 there before it draws anything new. The path is the whole link: nothing else
 says which tests a seed belongs to. A block that moves -- a test module put in a
-sibling file, which `docs/dev/08-testing.md` asks of a long one -- leaves its
+sibling file, which `docs/dev/testing.md` asks of a long one -- leaves its
 seeds at the old path, where no test opens them, and no run says so.
 
 So each seed file is read against the tree: the source file at its path exists

@@ -27,7 +27,7 @@ on:
       record_compare:
         description: >-
           Record the competitive ratios this run measures and upload them: one
-          run's reading of the lane, which docs/dev/07-tooling-ci.md says is a
+          run's reading of the lane, which docs/dev/tooling-ci.md says is a
           reading to set beside the others rather than a recording to commit.
         type: boolean
         default: false
@@ -1345,7 +1345,7 @@ jobs:
     # touching the most of the largest: a push that moves `main` over a release
     # window, sweeping nearly every core file whole, reads 108 minutes a shard.
     # So the ceiling is 220, twice the slowest -- the rule
-    # `docs/dev/07-tooling-ci.md` states for a sharded sweep, because a job
+    # `docs/dev/tooling-ci.md` states for a sharded sweep, because a job
     # that reaches its ceiling is canceled and a canceled job is red -- read
     # on the run that sweeps the most rather than on the one that comes most
     # often. The failure mode is a red lane rather than a slow one, and a
@@ -2149,7 +2149,7 @@ jobs:
     # a budget leaves is how many ways it is cut.
     #
     # The cut is read off the slowest shard on the slowest runner, and the
-    # ceiling is twice that reading, the rule `docs/dev/07-tooling-ci.md`
+    # ceiling is twice that reading, the rule `docs/dev/tooling-ci.md`
     # states. A suite that grows past that room takes more cuts. A cut costs
     # one more baseline build and no more total work. The alternative --
     # drawing the laws at fewer cases so the sweep fits -- is refused: the

@@ -310,14 +310,14 @@ def _outnumber_the_product_suite(tree: Path) -> None:
 
 #: Written after the page's first guiding claim, which carries no holding line
 #: of its own, so an `OWED:` there belongs to it and to nothing else.
-_AFTER_A_GUIDING_CLAIM = "exact there ([02-decision.md](02-decision.md)).\n"
+_AFTER_A_GUIDING_CLAIM = "exact there ([decision.md](decision.md)).\n"
 
 
 def _owe(tree: Path, line: str) -> None:
     """Add an `OWED:` line to the theory page's first guiding claim."""
     _edit(
         tree,
-        "docs/dev/10-theory.md",
+        "docs/dev/theory.md",
         _AFTER_A_GUIDING_CLAIM,
         f"{_AFTER_A_GUIDING_CLAIM}\n{line}\n",
     )
@@ -793,10 +793,10 @@ PLANTS = (
         # have: the shape a rename leaves behind, and the one the page cannot
         # detect on its own.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "HELD-BY: test_walk_matches_denotation",
             "HELD-BY: a_test_this_tree_does_not_have, test_walk_matches_denotation",
         ),
@@ -814,10 +814,10 @@ PLANTS = (
         # line's *form* is what a runner can hold, and a line nobody can read
         # would otherwise be malformed on the page and skipped in the lane.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             'SOURCE: \u00a713.2 "**The laws hold by construction**"',
             "SOURCE: the section on the lattice",
         ),
@@ -828,10 +828,10 @@ PLANTS = (
         # `OWED:` line: a sentence, which is the state every result starts in
         # and the one the ledger exists to refuse.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "### Obligations\n",
             "### Obligations\n\n**A planted obligation nothing holds.** Every"
             " arm returns before the budget is read."
@@ -843,10 +843,10 @@ PLANTS = (
         # A claim tagged with no id: no test can name it, so the parse refuses
         # the page, and a test says so rather than the module's collection.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "### Obligations\n",
             "### Obligations\n\n**A planted obligation nothing names.** Every"
             " arm returns before the budget is read. **[OBLIGATION]**\n",
@@ -1496,10 +1496,10 @@ PLANTS = (
         # every paper is still there and every label still resolves -- so only
         # the direction that reads the page alone does.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "# The theory\n",
             "# The theory\n\n"
             "A planted result cited as Theorem 9.9, under no label, so nothing "
@@ -1553,10 +1553,10 @@ PLANTS = (
         # A label the table has no row for: a citation of a work nobody can
         # look up, since the table is the one place an identifier is written.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "an observation\n[FCB08, §2.2], not a theorem",
             "an observation\n[FCB08, §2.2] [Xyz99, §1], not a theorem",
         ),
@@ -1567,10 +1567,10 @@ PLANTS = (
         # where the rule writes a section sign, which reads one way here and
         # another in the next file.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "[FCB08, §2.2], not a theorem",
             "[FCB08, Section 2.2], not a theorem",
         ),
@@ -1580,10 +1580,10 @@ PLANTS = (
         # A citation a reflow broke across two lines: the parse reads no
         # citation there, so its locator would escape every other check.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "[Cas23, (11)] reads each constraint",
             "[Cas23,\n(11)] reads each constraint",
         ),
@@ -1593,10 +1593,10 @@ PLANTS = (
         # A label with no place in the work: rustdoc reads `[Cas23]` as a link
         # it cannot resolve, and a reader learns the work and not where in it.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "[FCB08, §2.2], not a theorem",
             "[FCB08], not a theorem",
         ),
@@ -1607,10 +1607,10 @@ PLANTS = (
         # definition, which the site's renderer deletes, line and all, once a
         # reflow moves it to the start of a line.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "[FCB08, §2.2], not a theorem",
             "[FCB08, §2.2]: not a theorem",
         ),
@@ -1621,12 +1621,12 @@ PLANTS = (
         # design leans on without building, so an item under it rests on a
         # sentence no test holds.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
-            "exact there ([02-decision.md](02-decision.md)).\n",
-            "exact there ([02-decision.md](02-decision.md)).\n\n"
+            "docs/dev/theory.md",
+            "exact there ([decision.md](decision.md)).\n",
+            "exact there ([decision.md](decision.md)).\n\n"
             "IMPLEMENTED-BY: decision/readings.rs::Schema::region_set\n",
         ),
         trips=("test_an_implementing_line_follows_a_claim_about_code",),
@@ -1635,10 +1635,10 @@ PLANTS = (
         # A function renamed under its entry: the page names code that is gone,
         # and every other line still reads as an account of the tree.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "decision/records.rs::Labels::base_case, decision/records.rs::phi",
             "decision/records.rs::Labels::base_case, decision/records.rs::phi_gone",
         ),
@@ -1648,10 +1648,10 @@ PLANTS = (
         # An item that cites and is listed nowhere: code resting on a result
         # the page does not say it rests on.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "decision/records.rs::Labels::base_case, decision/records.rs::phi",
             "decision/records.rs::Labels::base_case",
         ),
@@ -1676,10 +1676,10 @@ PLANTS = (
         # result and names no code resting on it, which no entry is left to
         # report.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "\n\nIMPLEMENTED-BY: ir.rs::Spelling\n",
             "\n",
         ),
@@ -1691,10 +1691,10 @@ PLANTS = (
         # reading like a pointer. The `HELD-BY:` direction does not see it --
         # the tests it names all still exist -- so only the reverse one does.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "**[OBLIGATION: the-budget-declines]**",
             "**[OBLIGATION: the-budget-stops]**",
         ),
@@ -1927,10 +1927,10 @@ PLANTS = (
         # A refusal naming a holder by a name no test has, which leaves the
         # real holder named by nothing.
         "tests/test_refusals_ledger.py",
-        ("docs/dev/00-architecture.md",),
+        ("docs/dev/architecture.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/00-architecture.md",
+            "docs/dev/architecture.md",
             "Held by `test_the_walk_dispatches_by_match` in",
             "Held by `test_the_walk_dispatches_by_a_table` in",
         ),
@@ -2104,8 +2104,8 @@ PLANTS = (
         # reads no section citation there, and every rule over them passes on
         # none.
         "tests/test_citation_ledger.py",
-        ("docs/dev/10-theory.md",),
-        lambda tree: _replace_all(tree, "docs/dev/10-theory.md", "§", "section "),
+        ("docs/dev/theory.md",),
+        lambda tree: _replace_all(tree, "docs/dev/theory.md", "§", "section "),
         trips=("test_the_scope_cites_by_label",),
     ),
     Plant(
@@ -2681,10 +2681,10 @@ PLANTS = (
     Plant(
         # The by-hand recipes losing the shrink bound the lanes set.
         "tests/test_mutation_scope.py",
-        ("docs/dev/07-tooling-ci.md",),
+        ("docs/dev/tooling-ci.md",),
         lambda tree: _replace_all(
             tree,
-            "docs/dev/07-tooling-ci.md",
+            "docs/dev/tooling-ci.md",
             "export PROPTEST_MAX_SHRINK_TIME=1000\n",
             "",
         ),
@@ -3076,10 +3076,10 @@ PLANTS = (
     Plant(
         # The testing page's count of the tests the lock stands down, off by one.
         "tests/test_coverage_scope.py",
-        ("docs/dev/08-testing.md",),
+        ("docs/dev/testing.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/08-testing.md",
+            "docs/dev/testing.md",
             "cannot be the one that moves it. Three tests",
             "cannot be the one that moves it. Four tests",
         ),
@@ -3723,10 +3723,10 @@ PLANTS = (
         # The local recipe drawing its own seed, so a mutant only some draws
         # kill passes here and survives on the push.
         "tests/test_required_jobs.py",
-        ("docs/dev/07-tooling-ci.md",),
+        ("docs/dev/tooling-ci.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/07-tooling-ci.md",
+            "docs/dev/tooling-ci.md",
             "export PROPTEST_RNG_SEED=0\ncargo mutants --package valgebra-core",
             'export PROPTEST_RNG_SEED="$RANDOM"\ncargo mutants --package valgebra-core',
         ),
@@ -3784,10 +3784,10 @@ PLANTS = (
         # A question renamed on the page and not in the trait: the page names
         # one nothing asks and misses the one the core does.
         "tests/test_oracle_ledger.py",
-        ("docs/dev/02-decision.md",),
+        ("docs/dev/decision.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/02-decision.md",
+            "docs/dev/decision.md",
             "- `divides` — does one pooled step divide another",
             "- `divides_by` — does one pooled step divide another",
         ),
@@ -3799,10 +3799,10 @@ PLANTS = (
     Plant(
         # A question listed twice, which reads as complete in both directions.
         "tests/test_oracle_ledger.py",
-        ("docs/dev/02-decision.md",),
+        ("docs/dev/decision.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/02-decision.md",
+            "docs/dev/decision.md",
             (
                 "- `compare` — order two pooled refinement bounds."
                 " An operand the walk reads\n"
@@ -3845,10 +3845,10 @@ PLANTS = (
         # A refuting reading renamed on the page: the page names a function
         # nothing defines, and the one `unstructured` asks goes unlisted.
         "tests/test_oracle_ledger.py",
-        ("docs/dev/02-decision.md",),
+        ("docs/dev/decision.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/02-decision.md",
+            "docs/dev/decision.md",
             "- `shorter_than` — the supertype carries a length bound",
             "- `shorter_than_its_bound` — the supertype carries a length bound",
         ),
@@ -4272,10 +4272,10 @@ PLANTS = (
         # claim is read as more names for the one before, and its tag is a tag
         # the page carries and the parse does not.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "\n\n**Stone's representation theorem (1936).**",
             "\n**Stone's representation theorem (1936).**",
         ),
@@ -4284,7 +4284,7 @@ PLANTS = (
     Plant(
         # A debt addressed to a moment rather than a test name.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _owe(
             tree, "OWED: the next release -- whichever commit proves the lowering"
         ),
@@ -4293,7 +4293,7 @@ PLANTS = (
     Plant(
         # A claim added as owed without the recorded figure moving with it.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _owe(
             tree,
             "OWED: the_scalar_lowering_is_a_set_algebra -- the lowering has no "
@@ -4304,7 +4304,7 @@ PLANTS = (
     Plant(
         # A debt paid and left standing: the test it is owed already exists.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _owe(
             tree,
             "OWED: test_the_page_carries_tagged_claims -- the test lands with "
@@ -4315,10 +4315,10 @@ PLANTS = (
     Plant(
         # A held claim cut down to a single test.
         "tests/test_theory_ledger.py",
-        ("docs/dev/10-theory.md",),
+        ("docs/dev/theory.md",),
         lambda tree: _edit(
             tree,
-            "docs/dev/10-theory.md",
+            "docs/dev/theory.md",
             "HELD-BY: test_walk_matches_denotation, test_node_admits_its_denotation",
             "HELD-BY: test_walk_matches_denotation",
         ),

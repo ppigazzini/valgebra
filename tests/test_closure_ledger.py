@@ -8,7 +8,7 @@ the others already reach -- `Bool` is `Literal[True] | Literal[False]`,
 So the definition is the one `AGENTS.md` states, and it is held here: the node
 set is a **generating set plus named representatives**. A generator denotes a
 set no combination of the others reaches, and admitting one is the argument
-`docs/dev/01-schema-ir.md` describes. A representative denotes a set the
+`docs/dev/schema-ir.md` describes. A representative denotes a set the
 generators do reach, and earns its place by
 being the form the normal form names -- `A & ~A` has to fold to *something*, and
 `Nothing` is what it folds to. What is not allowed is a third kind: a variant

@@ -59,7 +59,7 @@ the structure is wrong. So:
 |---|---|
 | what a schema admits, in this build | a probe, a test |
 | what a node *denotes* | the doc comment in `ir.rs` |
-| whether a set is expressible at all | the node set, and [01-schema-ir.md](01-schema-ir.md)'s admission test |
+| whether a set is expressible at all | the node set, and [schema-ir.md](schema-ir.md)'s admission test |
 
 The failure this prevents has a shape: arguing from **behavior** or from **what
 the implementation computes internally** to **what the algebra denotes**. A
@@ -104,7 +104,7 @@ lint and its test, which `HISTORY_EXEMPT` in `scripts/docs_lint.py` names.
 
 A measurement is the exception, and only as a rule: where a number explains why
 the code has its shape — the walk mode's discriminant order in
-[06-type-design.md](06-type-design.md) — write it as the rule a reader applies
+[type-design.md](type-design.md) — write it as the rule a reader applies
 now, and let the number be the evidence.
 
 **One example beats three paragraphs**, and **pair every prohibition with an
@@ -122,7 +122,7 @@ an ignore comment in the block: a reader copies the block and not the reason,
 and an ignore written for one checker is noise to the other three.
 
 **Cut anything that does not help implement or verify.** Background a reader
-could get from the typing spec belongs in [11-references.md](11-references.md) as
+could get from the typing spec belongs in [references.md](references.md) as
 a link. Length is not thoroughness; it is where rot hides. This binds a generated
 page exactly as it binds a hand-written one: add no section that exists to look
 complete — a summary restating the section above it, a recap of what a gate
@@ -149,20 +149,20 @@ who broke it.
 | Page | Temperature |
 |---|---|
 | [`ARCHITECTURE.md`](../../ARCHITECTURE.md) | cold — a map with no claim of its own: a claim that lands there belongs on the page owning its zone |
-| [00-architecture.md](00-architecture.md) | hot — every production source file is a row of its zone table, so a file added or moved is an edit there |
-| [01-schema-ir.md](01-schema-ir.md) | hot — a node added here is an edit there |
-| [02-decision.md](02-decision.md) | hot — the decided fragment grows |
-| [03-frontend.md](03-frontend.md) | hot — every new annotation form lands here |
-| [04-walk.md](04-walk.md) | hot — where soundness is decided |
-| [05-errors.md](05-errors.md) | warm — the codes are API and move slowly |
-| [06-type-design.md](06-type-design.md) | warm — a type added without a row makes the page wrong |
-| [07-tooling-ci.md](07-tooling-ci.md) | hot — a gate added here is a page edit there |
-| [08-testing.md](08-testing.md) | warm |
-| [09-releasing.md](09-releasing.md) | warm — a change to the release workflow's inputs makes the page wrong |
-| [10-theory.md](10-theory.md) | warm — a theorem does not expire, and every `HELD-BY` name is held to a test that can be renamed |
-| [11-references.md](11-references.md) | cold |
+| [architecture.md](architecture.md) | hot — every production source file is a row of its zone table, so a file added or moved is an edit there |
+| [schema-ir.md](schema-ir.md) | hot — a node added here is an edit there |
+| [decision.md](decision.md) | hot — the decided fragment grows |
+| [frontend.md](frontend.md) | hot — every new annotation form lands here |
+| [walk.md](walk.md) | hot — where soundness is decided |
+| [errors.md](errors.md) | warm — the codes are API and move slowly |
+| [type-design.md](type-design.md) | warm — a type added without a row makes the page wrong |
+| [tooling-ci.md](tooling-ci.md) | hot — a gate added here is a page edit there |
+| [testing.md](testing.md) | warm |
+| [releasing.md](releasing.md) | warm — a change to the release workflow's inputs makes the page wrong |
+| [theory.md](theory.md) | warm — a theorem does not expire, and every `HELD-BY` name is held to a test that can be renamed |
+| [references.md](references.md) | cold |
 | this page | cold |
-| [13-glossary.md](13-glossary.md) | warm — every entry names an owner, and a rename dates it |
+| [glossary.md](glossary.md) | warm — every entry names an owner, and a rename dates it |
 
 Cold does not mean unowned. It means the claim outlives a release, so when it
 *is* wrong it has usually been wrong for a long time.
@@ -199,7 +199,7 @@ who has never seen it.
 
 **Cite a result by its label and its place.** `[Cas23, (22)]`,
 `[FCB08, Lem. 6.5]`, `[Cas23, §4.4, fn. 15]`: a label from the table on
-[10-theory.md](10-theory.md#works-cited-by-label), then a locator -- `(n)` for
+[theory.md](theory.md#works-cited-by-label), then a locator -- `(n)` for
 an equation or a rule tag as printed, `§`, `Def.`, `Thm.`, `Lem.`, `Prop.`,
 `Cor.`, `Rem.`, `Fig.`, `Alg.`, `App.` or `fn.`, and `p.` or `l.` after one of
 those. Neither stands alone: a bare `Lemma 4.7` leaves a reader to guess whose,

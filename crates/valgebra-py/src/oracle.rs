@@ -6,7 +6,7 @@
 //! bindings give it: whether a literal belongs to a set, whether two sets of
 //! constants share a value, how two refinement bounds order, whether a class is
 //! an enumeration and which values it lists. The section "What the core cannot
-//! decide alone" in `docs/dev/02-decision.md` is this module, and
+//! decide alone" in `docs/dev/decision.md` is this module, and
 //! `decision/oracle.rs` is the core's side of the same seam.
 //!
 //! It lives beside the validator rather than inside it because the theory's

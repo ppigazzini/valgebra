@@ -9,7 +9,7 @@
 //! decided; storage a reading needs for itself is allocated at the site that
 //! says why. One dispatcher serves every mode; where a reading has a reader per
 //! mode, the `decide` harness and `tests/test_equivalence.py` hold the two to
-//! one verdict (`docs/dev/04-walk.md`).
+//! one verdict (`docs/dev/walk.md`).
 //!
 //! The walk runs over a [`Value`](crate::input::Value), so the object path and
 //! the in-place JSON path share one traversal. The explain side only ever sees

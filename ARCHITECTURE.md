@@ -19,18 +19,18 @@ API is documented on the [docs site](https://ppigazzini.github.io/valgebra/).
 
 - The zones, the direction their dependencies run, how a value and a pair of
   schemas flow, the invariants, every bound and the refused designs:
-  [docs/dev/00-architecture.md](docs/dev/00-architecture.md).
+  [docs/dev/architecture.md](docs/dev/architecture.md).
 - What a node denotes: the `Schema` enum in
   [`crates/valgebra-core/src/ir.rs`](crates/valgebra-core/src/ir.rs), whose
   variant comments are where meaning is written, and
-  [docs/dev/01-schema-ir.md](docs/dev/01-schema-ir.md).
-- What is decidable: [docs/dev/02-decision.md](docs/dev/02-decision.md), and the
+  [docs/dev/schema-ir.md](docs/dev/schema-ir.md).
+- What is decidable: [docs/dev/decision.md](docs/dev/decision.md), and the
   published boundary in [docs/explanation/decidability.md](docs/explanation/decidability.md).
-- An annotation form: [docs/dev/03-frontend.md](docs/dev/03-frontend.md). What a
-  value matches: [docs/dev/04-walk.md](docs/dev/04-walk.md). An error or a code:
-  [docs/dev/05-errors.md](docs/dev/05-errors.md).
+- An annotation form: [docs/dev/frontend.md](docs/dev/frontend.md). What a
+  value matches: [docs/dev/walk.md](docs/dev/walk.md). An error or a code:
+  [docs/dev/errors.md](docs/dev/errors.md).
 - The gate, the lanes and a release: [CONTRIBUTING.md](CONTRIBUTING.md),
-  [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md),
-  [docs/dev/09-releasing.md](docs/dev/09-releasing.md).
+  [docs/dev/tooling-ci.md](docs/dev/tooling-ci.md),
+  [docs/dev/releasing.md](docs/dev/releasing.md).
 - The theory behind the algebra: [docs/explanation/foundations.md](docs/explanation/foundations.md).
 - The rules that bind agent and human contributors alike: [AGENTS.md](AGENTS.md).

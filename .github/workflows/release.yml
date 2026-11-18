@@ -636,7 +636,7 @@ jobs:
     # setting of the repository that admits `main` alone.
     if: ${{ inputs.publish_target != 'none' && github.ref == 'refs/heads/main' }}
     # The deployment environment that holds the trusted-publisher binding for
-    # the selected index; `docs/dev/09-releasing.md` gives the settings each
+    # the selected index; `docs/dev/releasing.md` gives the settings each
     # environment needs before the first release.
     environment:
       name: ${{ inputs.publish_target }}

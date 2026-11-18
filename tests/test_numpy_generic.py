@@ -1,6 +1,6 @@
 """numpy's own generic: the class met with a record of its two arguments.
 
-`docs/dev/03-frontend.md` says what the form denotes. The stand-in below is as much
+`docs/dev/frontend.md` says what the form denotes. The stand-in below is as much
 of numpy as the frontend reads, so these hold the reading on a lane with no numpy
 installed, and the last test holds it against numpy where it is.
 """

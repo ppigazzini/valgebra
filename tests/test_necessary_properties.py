@@ -7,7 +7,7 @@ so a necessary property of one input -- the review's own example is
 `-1 <= sin(x) <= 1` -- is not one.
 
 Named for metamorphic relations, the file would also collide with something
-real. The two metamorphic checks `docs/dev/10-theory.md` cites as load-bearing
+real. The two metamorphic checks `docs/dev/theory.md` cites as load-bearing
 are *not* in this file -- they are the JSON path against the object path, and
 fast mode against explain mode -- and a reader looking for those would find
 these.

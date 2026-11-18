@@ -30,7 +30,7 @@ from pathlib import Path
 
 #: The three outcomes a gate reports, each with its own code. A gate that could
 #: not run has proven nothing, so it shares a code with neither of the others;
-#: `docs/dev/07-tooling-ci.md` gives the table.
+#: `docs/dev/tooling-ci.md` gives the table.
 EXIT_OK = 0
 EXIT_FAIL = 1
 EXIT_CANNOT_RUN = 2

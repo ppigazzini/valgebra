@@ -1,6 +1,6 @@
 """A universe is a set: the algebra below the JSON values' top is Boolean again.
 
-`docs/dev/10-theory.md` claims that a value model embedding in Python's takes a
+`docs/dev/theory.md` claims that a value model embedding in Python's takes a
 set for its top and no parameter on the algebra. This holds that against real
 documents: the complement inside the universe is a meet with its top, a value
 outside the universe is outside every set below it, and the relations asked

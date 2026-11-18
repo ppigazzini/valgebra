@@ -236,7 +236,7 @@ def test_the_soak_still_has_a_time_budget() -> None:
 def test_the_soak_has_a_floor_beneath_its_budget() -> None:
     """A budget says when to stop; it does not say the run did anything.
 
-    `docs/dev/07-tooling-ci.md` already states the limit -- a run that finds
+    `docs/dev/tooling-ci.md` already states the limit -- a run that finds
     nothing means "nothing failed inside that budget", never "there is nothing
     to find". What the budget alone cannot tell apart is a soak that explored
     for six minutes from one whose target died on its first input: both end

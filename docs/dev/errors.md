@@ -90,14 +90,14 @@ the form the Python tuple takes.
 
 `Index` is a position in the **value being validated**, so it is not one of the
 validator's own index spaces and shares no type with them
-([06-type-design.md](06-type-design.md)).
+([type-design.md](type-design.md)).
 
 ## Aggregation is the caller's choice
 
 `validate` takes `fail_fast`. False aggregates a violation for each independent
 failure — every record field, sequence element and mapping entry — and true stops
 at the first. The walk carries that as a mode rather than a flag
-([04-walk.md](04-walk.md)): the caller's choice between every failure and the
+([walk.md](walk.md)): the caller's choice between every failure and the
 first holds for the whole call, and a sub-walk that reports nothing -- a union's
 branch, a complement's inner walk -- runs in the fast or settling mode beneath
 it.

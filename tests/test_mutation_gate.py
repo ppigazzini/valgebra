@@ -331,9 +331,9 @@ def test_an_accepted_survivor_for_a_tracked_file_passes(tmp_path: Path) -> None:
 def test_a_timeout_is_a_rig_fault_rather_than_a_survivor(tmp_path: Path) -> None:
     """A mutant whose experiment never finished is a claim about the runner.
 
-    `docs/dev/13-glossary.md` says a rig fault is "a run that produced no
+    `docs/dev/glossary.md` says a rig fault is "a run that produced no
     verdict -- a timeout ... Neither a pass nor a failure, and reported as
-    itself", and `07-tooling-ci.md` says the same of a mutant whose experiment
+    itself", and `tooling-ci.md` says the same of a mutant whose experiment
     cannot finish. The gate folded `timeout.txt` into the survivors, so an
     overloaded runner read as a hole in the tests -- and the two are repaired in
     opposite directions.

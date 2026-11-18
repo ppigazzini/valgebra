@@ -15,7 +15,7 @@ hold the schema frontend, the single membership walk, and the oracle the core
 asks about a Python class or constant; and `python/valgebra/` is the public
 surface.
 [ARCHITECTURE.md](ARCHITECTURE.md) maps the components onto the pages that own
-them, and [docs/dev/00-architecture.md](docs/dev/00-architecture.md) traces the
+them, and [docs/dev/architecture.md](docs/dev/architecture.md) traces the
 path a value takes from a typing annotation through the walk to a violation;
 read it before a non-trivial change.
 
@@ -28,7 +28,7 @@ is made of rather than how to use it. Change a zone, fix its page in the same
 commit.
 
 Whether a change is a recipe, a frontend form, a decider, a node or a companion is
-[where new work goes](docs/dev/00-architecture.md#where-new-work-goes). A change to the
+[where new work goes](docs/dev/architecture.md#where-new-work-goes). A change to the
 schema language flows the same way each time: extend the IR or
 the frontend, **write the node's denotation** (the set of Python values it
 accepts) in the same change, **cover its algebra laws** with property tests, then
@@ -165,7 +165,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | the commit each action runs | `.github/workflows/actions.lock` | `gh actions-lock --verify` |
 | the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --no-sync --group bench maturin build --release --pgo --out dist` |
 
-The first two mutation rows take a skip list; `docs/dev/07-tooling-ci.md` says
+The first two mutation rows take a skip list; `docs/dev/tooling-ci.md` says
 which and why. The third needs `VALGEBRA_SWEEP_VENV` naming a place outside the
 tree for its environments -- one per sweep worker, built from the lock file --
 and fails rather than skipping without one; that document carries the whole
@@ -189,7 +189,7 @@ source of truth that does not exist fails.
 
 Correctness is checked against the denotation, not against itself. The layers
 below are the ones a contributor runs into first;
-[docs/dev/08-testing.md](docs/dev/08-testing.md) owns the full table, with what
+[docs/dev/testing.md](docs/dev/testing.md) owns the full table, with what
 each layer is blind to beside it.
 
 - **Denotation oracle.** Each node's denotation is written as a reference
@@ -261,7 +261,7 @@ each release follows, and which leg may fail without blocking to the release's
 stage; `tests/test_required_jobs.py` holds that the job runs on every event and
 has a free-threaded leg; and `tests/test_release_matrix.py` holds the
 free-threaded legs and the PyPy legs to what the release ships.
-[docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md) says why each
+[docs/dev/tooling-ci.md](docs/dev/tooling-ci.md) says why each
 interpreter is a lane of its own.
 
 Scheduled lanes, on `github_ci` by a dispatch from the scheduled run on
@@ -296,14 +296,14 @@ merges where a wall-clock budget could not.
 
 These words carry weight in this repository and in its CI, and some of them
 collide with an unrelated sense used nearby. Say which one you mean:
-[docs/dev/13-glossary.md](docs/dev/13-glossary.md) defines them and owns the
+[docs/dev/glossary.md](docs/dev/glossary.md) defines them and owns the
 list of the ones that collide, and a second copy here would drift from it.
 
 Every gate script reports one of **three** outcomes, and the exit code says
 which -- 0 the property holds, 1 it does not, 2 the gate **could not run** -- so
 a caller can dispatch on it rather than parse the output. A gate that could not
 run has proven nothing, and must never read as one that passed.
-[docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md) owns the three codes and
+[docs/dev/tooling-ci.md](docs/dev/tooling-ci.md) owns the three codes and
 what makes each script exit 2.
 
 ## Working on changes

@@ -441,7 +441,7 @@ valgebra takes about half of pydantic's time here rather than a fraction:
 neither is spending its time in the check. A document's free-form sections are
 `dict[str, V]`, and covering their keys is read two ways -- in place for a
 narrow object, through a table of last values for a wide one
-(`docs/dev/04-walk.md`).
+(`docs/dev/walk.md`).
 
 The scalar, which sits near timer resolution, spreads 0.091 across the eighteen
 runs, the widest of the seven, sixteen of its runs within 0.010 and two reading
@@ -454,7 +454,7 @@ than leaving an absent entry to mean it: a spread on another build wider than
 any regression worth catching. The ratchet holds the JSON document and the other five shapes,
 armed from a window of the bench lane's readings rather than one run, since the
 lane reads one tree on several classes of machine further apart than a
-tolerance (`docs/dev/07-tooling-ci.md` has the window); the error report is
+tolerance (`docs/dev/tooling-ci.md` has the window); the error report is
 judged against its ceiling alone.
 
 A failing validation walks the value **twice** here -- once to decide, once to
@@ -462,7 +462,7 @@ say which field -- where pydantic-core walks it once and collects as it goes.
 That is a deliberate trade for the passing path, which is the common one and
 which walks once. The second walk does not repeat the first: it resumes where
 the deciding walk stopped, since a field that matched has no violation to report
-(`docs/dev/04-walk.md`). Resuming rather than restarting is worth
+(`docs/dev/walk.md`). Resuming rather than restarting is worth
 36.8% of that walk on the instruction gate, which
 `scripts/perf_gate.py --binding-explain` measures. What the report pays beyond
 the deciding walk is one walk of the fields *after* the failure, and the
@@ -521,10 +521,10 @@ beside or replaces; where that reading stays in the tree, it is the fallback,
 and where a test keeps it, the test holds the two to one answer.
 
 Each entry names the code that owns it. The developer pages in the repository
-carry the arguments in full: the walk (`docs/dev/04-walk.md`), the frontend
-(`docs/dev/03-frontend.md`), the relations (`docs/dev/02-decision.md`), the
-error model (`docs/dev/05-errors.md`) and the schema representation
-(`docs/dev/01-schema-ir.md`).
+carry the arguments in full: the walk (`docs/dev/walk.md`), the frontend
+(`docs/dev/frontend.md`), the relations (`docs/dev/decision.md`), the
+error model (`docs/dev/errors.md`) and the schema representation
+(`docs/dev/schema-ir.md`).
 
 ### Crossing into Rust
 
@@ -1095,7 +1095,7 @@ program that builds validators per request, and to no validation call.
   refused at its second element, 2.9% more. CPython 3.14 and 3.15 read the
   list in place from the start, where no snapshot pays. Reading only the
   elements the snapshot refused is not taken, since the walk of one may change
-  the others (`docs/dev/04-walk.md` in the repository).
+  the others (`docs/dev/walk.md` in the repository).
 - **A union explains no branch for a value it admits.** Only a refused
   value's report reads the branches that did not match, so a branch that fails
   at the union's own location -- a scalar, a literal, a container of another
@@ -1591,7 +1591,7 @@ environment rather than a gate, since the same commit re-measures several
 percent away on another machine: the gate reads one only where the base has no
 count to compare with -- a shape the base does not carry, or a re-recorded
 workload the base cannot build -- and a step the file records excuses the one
-comparison that crosses it (`docs/dev/07-tooling-ci.md`).
+comparison that crosses it (`docs/dev/tooling-ci.md`).
 
 The gate holds one workload per surface, because a gate only catches what it
 exercises. `crates/valgebra-core/examples/` holds the pure-Rust ones: the schema
@@ -1740,7 +1740,7 @@ instructions a call in `_int_malloc`, and 0.39% above it with the environment
 1,100 bytes larger. So a change is read against its base's revision built here,
 and charged in cycles only that way. A release's own wheel is read by count, for
 what it ships, and once published in cycles against the last release's, for what a
-user meets: step 9 of `docs/dev/09-releasing.md` names a move there and charges it
+user meets: step 9 of `docs/dev/releasing.md` names a move there and charges it
 to no change.
 
 **`symbols` names where, not why.** A release wheel is stripped, so it names

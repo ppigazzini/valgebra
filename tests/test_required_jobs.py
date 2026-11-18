@@ -515,7 +515,7 @@ SEED = "PROPTEST_RNG_SEED"
 RUN_ID = "${{ github.run_id }}"
 
 #: The page whose local sweep recipes reproduce the push lanes.
-TOOLING = ROOT / "docs" / "dev" / "07-tooling-ci.md"
+TOOLING = ROOT / "docs" / "dev" / "tooling-ci.md"
 
 
 def _seeds(jobs: dict) -> dict[str, str]:

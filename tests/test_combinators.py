@@ -386,7 +386,7 @@ def test_a_predicate_does_not_fold_against_its_own_complement() -> None:
 
     Pinned rather than left to the reader of the law, because "`A & ~A` is
     empty" is exactly what somebody reading `docs/guides/algebra.md` would add.
-    `docs/dev/01-schema-ir.md` carries the refusal.
+    `docs/dev/schema-ir.md` carries the refusal.
     """
     flip = itertools.count()
 

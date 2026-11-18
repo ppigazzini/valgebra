@@ -369,7 +369,7 @@ def test_the_page_carries_the_figure_each_product_has() -> None:
     not have to run anything -- and the day a name is added, the page is what
     fails rather than a reader's memory of it.
     """
-    page = (ROOT / "docs" / "dev" / "08-testing.md").read_text(encoding="utf-8")
+    page = (ROOT / "docs" / "dev" / "testing.md").read_text(encoding="utf-8")
     figures = {
         match["product"]: (int(match["cells"]), int(match["empty"]))
         for match in _FIGURE.finditer(page)
@@ -460,7 +460,7 @@ def test_the_lane_prints_a_figure_for_each_product() -> None:
 
     # And the page is the printed figure rather than a second reading of the
     # tree that happens to agree with it today.
-    page = (ROOT / "docs" / "dev" / "08-testing.md").read_text(encoding="utf-8")
+    page = (ROOT / "docs" / "dev" / "testing.md").read_text(encoding="utf-8")
     stated = {
         match["product"]: (
             int(match["cells"]),

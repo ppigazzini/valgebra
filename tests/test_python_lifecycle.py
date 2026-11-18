@@ -4,7 +4,7 @@ CPython publishes its calendar: one feature release every October (PEP 602),
 each with a schedule PEP that dates its first alpha, its first release
 candidate, its final release, and the month its security support ends. This
 project follows that calendar rather than a list somebody remembers to edit,
-and `docs/dev/09-releasing.md` states the rule. Held here against the date the
+and `docs/dev/releasing.md` states the rule. Held here against the date the
 suite runs on:
 
 * a release is **supported** from its first release candidate, when its ABI

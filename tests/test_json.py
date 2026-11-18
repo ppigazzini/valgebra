@@ -421,7 +421,7 @@ def test_invalid_utf8_in_an_unread_value_is_not_a_document(spec: object) -> None
     for a document with a byte that is not UTF-8 exactly as `validate_json`
     does, whether or not a field reads it. A reader that skips the unread value
     -- jiter's `next_skip` does not check UTF-8 -- would call the document a
-    member, which is what `docs/dev/04-walk.md` refuses a streaming check for.
+    member, which is what `docs/dev/walk.md` refuses a streaming check for.
     """
     v = Validator(spec)
     doc = b'{"a": 1, "x": "\xff"}'

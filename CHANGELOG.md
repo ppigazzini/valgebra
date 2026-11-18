@@ -1258,7 +1258,7 @@ free-threaded 3.14 and 3.15 a mapping counts 23% to 27% fewer and a list of reco
 
 - **The floor is Python 3.11.** CPython 3.10 reached the end of its security
   support in October 2026, and the first release after that drops it, as
-  `docs/dev/09-releasing.md` states: no wheel is built for it, and
+  `docs/dev/releasing.md` states: no wheel is built for it, and
   `requires-python` is `>=3.11`. Every release from 3.11 to 3.15 is supported,
   the free-threaded builds of 3.14 and 3.15 among them, and 3.16 runs as a
   forgiven prerelease lane. The readings `typing_extensions` gave a form only

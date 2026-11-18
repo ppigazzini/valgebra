@@ -67,7 +67,7 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// bound.
 /// Every other step asks a smaller pair or unfolds a reference onto the trail,
 /// where a pair that comes back is answered by hypothesis, so every path is
-/// finite. `docs/dev/02-decision.md` writes the argument out, and
+/// finite. `docs/dev/decision.md` writes the argument out, and
 /// `decision::goal_tests` holds its premise. The closure is exponential in the
 /// subterms, a meet per subset, so a query that terminates can still outlast
 /// any caller, and that is what this ceiling is for.
@@ -237,7 +237,7 @@ pub(crate) const MAX_DECISION_DEPTH: u32 = 512;
 /// The steps are fuel [JV20, §10.5], a bound no theorem derives, so which
 /// pairs a query decides turns on the path it takes: a query no bound stopped
 /// answers alike with more steps, and one a bound stopped may not
-/// (`docs/dev/10-theory.md`, "The decision is fuel").
+/// (`docs/dev/theory.md`, "The decision is fuel").
 pub(crate) struct Budget {
     steps: Cell<u32>,
     depth: Cell<u32>,
@@ -557,7 +557,7 @@ impl SeqShape {
 }
 
 /// Whether `schema` is `dict[anything, anything]`, the dict kind's top, which
-/// holds every dict (`docs/dev/01-schema-ir.md`, "A bare builtin container is
+/// holds every dict (`docs/dev/schema-ir.md`, "A bare builtin container is
 /// its kind"). The kind walk does not read it whole: it is the reading a dict
 /// key asks too, and no dict is a key. A list's and a set's tops are read by
 /// the other readings where this one would be asked.
@@ -3367,7 +3367,7 @@ const MEMBERS_HELD: usize = u64::BITS as usize;
 /// query rather than once a goal.
 ///
 /// Each answer rests on no open hypothesis, which is what a memo inside the
-/// coinductive procedure owes (`docs/dev/10-theory.md`, "A cache under
+/// coinductive procedure owes (`docs/dev/theory.md`, "A cache under
 /// coinduction is revertible or absent"): a reading takes the pool and the definitions and
 /// never the trail or the definitions being resolved, so no assumption a
 /// failed disjunct abandons is in what it answers.

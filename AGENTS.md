@@ -19,7 +19,7 @@ domain is unreachable without it. Convenience, a downstream user's wish, and
 "the code nearly does it already" are the same argument wearing three hats, and
 none of them is the test. `tests/test_closure_ledger.py` holds every variant to
 one of the columns, and every representative to the derivation it stands for.
-[docs/dev/01-schema-ir.md](docs/dev/01-schema-ir.md) states the test and the
+[docs/dev/schema-ir.md](docs/dev/schema-ir.md) states the test and the
 three arguments that look like they pass it and do not.
 
 
@@ -31,18 +31,18 @@ zone you are changing before changing it, and fix that page in the same commit.
 
 | Changing | Read |
 |---|---|
-| what a schema means | [docs/dev/01-schema-ir.md](docs/dev/01-schema-ir.md), [docs/dev/06-type-design.md](docs/dev/06-type-design.md) |
-| what is decidable | [docs/dev/02-decision.md](docs/dev/02-decision.md) |
-| an annotation form | [docs/dev/03-frontend.md](docs/dev/03-frontend.md) |
-| what a value matches | [docs/dev/04-walk.md](docs/dev/04-walk.md) |
-| an error or a code | [docs/dev/05-errors.md](docs/dev/05-errors.md) |
-| a gate or a lane | [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md), [docs/dev/08-testing.md](docs/dev/08-testing.md) |
-| whether new work is a recipe, a frontend form, a decider, a node or a companion | [docs/dev/00-architecture.md](docs/dev/00-architecture.md#where-new-work-goes) |
-| whether the algebra may gain a node | [docs/dev/01-schema-ir.md](docs/dev/01-schema-ir.md) |
-| code that implements a paper's result | [docs/dev/12-writing.md](docs/dev/12-writing.md#citing-a-paper), [docs/dev/10-theory.md](docs/dev/10-theory.md) |
-| any prose at all | [docs/dev/12-writing.md](docs/dev/12-writing.md) |
+| what a schema means | [docs/dev/schema-ir.md](docs/dev/schema-ir.md), [docs/dev/type-design.md](docs/dev/type-design.md) |
+| what is decidable | [docs/dev/decision.md](docs/dev/decision.md) |
+| an annotation form | [docs/dev/frontend.md](docs/dev/frontend.md) |
+| what a value matches | [docs/dev/walk.md](docs/dev/walk.md) |
+| an error or a code | [docs/dev/errors.md](docs/dev/errors.md) |
+| a gate or a lane | [docs/dev/tooling-ci.md](docs/dev/tooling-ci.md), [docs/dev/testing.md](docs/dev/testing.md) |
+| whether new work is a recipe, a frontend form, a decider, a node or a companion | [docs/dev/architecture.md](docs/dev/architecture.md#where-new-work-goes) |
+| whether the algebra may gain a node | [docs/dev/schema-ir.md](docs/dev/schema-ir.md) |
+| code that implements a paper's result | [docs/dev/writing.md](docs/dev/writing.md#citing-a-paper), [docs/dev/theory.md](docs/dev/theory.md) |
+| any prose at all | [docs/dev/writing.md](docs/dev/writing.md) |
 
-[docs/dev/13-glossary.md](docs/dev/13-glossary.md) defines the words this project
+[docs/dev/glossary.md](docs/dev/glossary.md) defines the words this project
 uses without stopping to define them, and collects the ones that collide with an
 unrelated sense used nearby, where both senses are live. It owns that list;
 counting it here would be a second copy that drifts.
@@ -172,8 +172,8 @@ what to do instead.
 
 - **A refusal is written down where the next proposal starts.** A reason that
   lives only in a review comment gets re-litigated by the next reader, who is
-  usually the same agent a week later. `docs/dev/01-schema-ir.md` holds the
-  refused algebra changes, `docs/dev/03-frontend.md` the refused frontend ones,
+  usually the same agent a week later. `docs/dev/schema-ir.md` holds the
+  refused algebra changes, `docs/dev/frontend.md` the refused frontend ones,
   each with the test it fails rather than a verdict.
 
 - **Analysis is not authorization.** A request to review, audit, measure or write
@@ -205,7 +205,7 @@ what to do instead.
   it. A reading that allocates for itself — the list snapshot, on the
   interpreters where an owned element costs more than the copy — names the
   allocation and its measurement at its site, and
-  [docs/dev/04-walk.md](docs/dev/04-walk.md) says which readings do. When a
+  [docs/dev/walk.md](docs/dev/walk.md) says which readings do. When a
   value must be returned after checking, use the explicit `ensure` (or `load`
   for JSON) mode. User predicates and custom types run as a documented
   Python-callback slow path — name it as such, never let it become a silent

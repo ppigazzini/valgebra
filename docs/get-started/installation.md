@@ -98,7 +98,7 @@ free-threaded interpreters, and imports and checks the releases between -- the
 and each PyPy wheel on its own series, not only on the one the push lane builds.
 The musllinux sets run in Alpine containers, the free-threaded wheels on uv's musl
 build of each release, since the Docker library publishes no free-threaded image
-(`docs/dev/09-releasing.md` in the repository).
+(`docs/dev/releasing.md` in the repository).
 
 One promise [What it cannot do](../explanation/boundaries.md#it-holds-what-its-schema-names-and-lets-go-of-it)
 makes holds differently there. A validator releases the

@@ -5,7 +5,7 @@ driven against a synthetic tree here -- no repository state is edited -- so the
 lint's own behavior is tested rather than assumed, and the index rule is driven
 in both of its directions.
 
-The rules it cannot check are named in `docs/dev/12-writing.md`, not here: a
+The rules it cannot check are named in `docs/dev/writing.md`, not here: a
 real symbol attributed to the wrong file, a list with the wrong count, and a
 behavior described as absent from a build that has it.
 """
@@ -522,7 +522,7 @@ def test_the_bounds_ledger_is_held_in_both_directions() -> None:
     # exercised here with a control: the row is edited on disk in a copy of the
     # page's text, not in the tree.
     assert lint.check_bounds_ledger() == []
-    page = (ROOT / "docs" / "dev" / "00-architecture.md").read_text(encoding="utf-8")
+    page = (ROOT / "docs" / "dev" / "architecture.md").read_text(encoding="utf-8")
     rows = lint.BOUND_ROW.findall(page)
     assert len(rows) >= 20, f"the table lists only {len(rows)} bounds"
     where, name, value = rows[0]
@@ -541,7 +541,7 @@ def _synthetic_ledgers(root: Path, how_many: int) -> None:
     marker = "LEDGER" + ":"
     for name in names:
         (tests / name).write_text(f'"""A ledger.\n\n{marker} {name}\n"""\n')
-    page = root / "docs" / "dev" / "08-testing.md"
+    page = root / "docs" / "dev" / "testing.md"
     page.parent.mkdir(parents=True, exist_ok=True)
     rows = "\n".join(f"| `tests/{name}` | holds something |" for name in names)
     page.write_text(f"# Testing\n\nThe ledgers:\n\n{rows}\n")
@@ -562,7 +562,7 @@ def test_a_ledger_named_in_prose_alone_has_no_row(
     """
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     _synthetic_ledgers(tmp_path, 4)
-    page = tmp_path / "docs" / "dev" / "08-testing.md"
+    page = tmp_path / "docs" / "dev" / "testing.md"
     marker = "LEDGER" + ":"
     (tmp_path / "tests" / "test_ledger_prose.py").write_text(
         f'"""A ledger.\n\n{marker} something\n"""\n'
@@ -593,7 +593,7 @@ def _synthetic_products(root: Path, marked: list[str], listed: list[str]) -> Non
         (tests / name).write_text(f'"""A product.\n\n{marker} something\n"""\n')
     for name in listed:
         (tests / name).touch()
-    page = root / "docs" / "dev" / "08-testing.md"
+    page = root / "docs" / "dev" / "testing.md"
     page.parent.mkdir(parents=True, exist_ok=True)
     rows = "\n".join(
         f"| every thing {index} | the tree | a test drives it | `tests/{name}` |"
@@ -646,7 +646,7 @@ def test_a_products_table_the_page_does_not_have_is_reported(
     """
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     _synthetic_products(tmp_path, ["test_one.py"], ["test_one.py"])
-    page = tmp_path / "docs" / "dev" / "08-testing.md"
+    page = tmp_path / "docs" / "dev" / "testing.md"
     page.write_text("# Testing\n\nNo table at all.\n")
     problems = lint.check_product_table()
     assert problems, "a page with no products table passed"
@@ -822,7 +822,7 @@ def test_a_file_in_no_zone_fails() -> None:
     production = ["crates/core/src/ir.rs", "crates/core/src/oracle.rs"]
     problems = lint.zone_problems(ZONES, production, HELD)
     assert problems == [
-        "docs/dev/00-architecture.md: crates/core/src/oracle.rs is in no zone"
+        "docs/dev/architecture.md: crates/core/src/oracle.rs is in no zone"
     ]
 
 
@@ -830,7 +830,7 @@ def test_a_zone_naming_what_the_tree_does_not_hold_fails() -> None:
     problems = lint.zone_problems(ZONES, [], HELD - {"crates/py/src/render.rs"})
     assert problems == [
         (
-            "docs/dev/00-architecture.md: a zone names crates/py/src/render.rs, "
+            "docs/dev/architecture.md: a zone names crates/py/src/render.rs, "
             "which the tree does not hold"
         )
     ]
@@ -838,7 +838,7 @@ def test_a_zone_naming_what_the_tree_does_not_hold_fails() -> None:
 
 def test_a_page_with_no_zone_table_is_reported() -> None:
     problems = lint.zone_problems("# Architecture\n\n## The direction\n", [], HELD)
-    assert problems == ["docs/dev/00-architecture.md: the zone table reads as empty"]
+    assert problems == ["docs/dev/architecture.md: the zone table reads as empty"]
 
 
 def test_a_test_module_declared_with_a_visibility_is_test_only(

@@ -381,7 +381,7 @@ def test_no_accepted_survivor_has_outlived_its_subject() -> None:
 
 # --- The sweep's environment, held between the lane and the recipe -----------
 
-TOOLING = ROOT / "docs" / "dev" / "07-tooling-ci.md"
+TOOLING = ROOT / "docs" / "dev" / "tooling-ci.md"
 
 #: A fenced block of the tooling page, with the language it is tagged.
 _FENCED = re.compile(r"^```(\w*)\n(.*?)^```", re.MULTILINE | re.DOTALL)

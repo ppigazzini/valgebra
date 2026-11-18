@@ -581,7 +581,7 @@ class _Kilograms:
 def test_metadata_another_library_writes_is_ignored(metadata: object) -> None:
     # Read as a schema, each would meet `str` with a set "x" is not in -- the
     # literal "user id", a record, the unit's instances, a list -- so a value
-    # of the base the annotation names would be refused. docs/dev/03-frontend.md
+    # of the base the annotation names would be refused. docs/dev/frontend.md
     # records the refusal; ignored, the schema is the base it annotates.
     schema = Validator(Annotated[str, metadata])
     assert schema.is_valid("x")
