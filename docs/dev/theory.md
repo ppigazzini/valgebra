@@ -17,7 +17,7 @@ followed by a `HELD-BY:` line naming the tests that fail when the sentence is
 false, or an `OWED:` line naming the tests it is owed and why they do not exist
 yet; a GUIDING or PLANNED tag carries an id and no holding line. A claim the code
 implements also gives an `IMPLEMENTED-BY:` line naming the items that implement
-it, as [writing.md](writing.md#citing-a-paper) says.
+it, as [citing a paper](writing.md#citing-a-paper) says.
 `tests/test_theory_ledger.py` holds both directions: a claim with neither line
 fails, a name that resolves to
 no test fails, an owed name that already resolves to one fails, and the count of
@@ -46,7 +46,7 @@ bibliography style builds from the authors and the year, which is how these
 works label one another, and this table is the one place a work's identifier
 is written. A number is the one the copy in the third column prints; a
 preprint and the published version can number a result apart.
-[writing.md](writing.md#citing-a-paper) says when to cite and where.
+[Citing a paper](writing.md#citing-a-paper) says when to cite and where.
 
 | Label | Work | Owns here | Read in | Identifier |
 |---|---|---|---|---|
@@ -69,7 +69,7 @@ preprint and the published version can number a result apart.
 Python values it admits; validation is membership in that set; subtyping is
 subset inclusion. **[LOAD-BEARING: denotational-semantics]** — every variant's doc comment in
 `crates/valgebra-core/src/ir.rs` states a set, and
-[schema-ir.md](schema-ir.md) is that frame written out.
+[the schema IR page](schema-ir.md) is that frame written out.
 
 HELD-BY: test_walk_matches_denotation, test_node_admits_its_denotation
 
@@ -112,7 +112,7 @@ reads every term as its meet with `u`, and `s ≤ t` in the restricted model is
 `u ∧ s ∧ ¬t = ∅`, one question of the model this tree already decides. So a value
 model whose values embed in Python's takes a set for its top and a frontend for
 its keywords, and no parameter on the algebra: JSON's values are what `json.loads`
-returns ([docs/explanation/universes.md](../explanation/universes.md)), and a number spelled two ways is two
+returns ([the universes page](../explanation/universes.md)), and a number spelled two ways is two
 Python values that every set the frontend builds admits together. TOML's are what
 `tomllib` returns, so one JSON Schema denotes two sets: `{"type": "integer"}` holds
 `1.0` over JSON's values and not over TOML's, where it is a float, and the two
@@ -126,7 +126,7 @@ HELD-BY: the_sets_below_a_universe_are_a_boolean_algebra, test_the_sets_below_a_
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING: stone-duality]** — the license for treating the scalar fragment
 as a bitset over disjoint regions, which is what makes emptiness and subtyping
-exact there ([decision.md](decision.md)).
+exact there ([the decision page](decision.md)).
 
 ## Semantic subtyping
 
@@ -192,7 +192,7 @@ On the expectation to hold of a rewriter, the paper offers an observation
 
 A rewriter missing rules is sound and incomplete. Reading that shape onto this
 tree's normal form is **valgebra's reasoning, not a result of the paper**, and it
-is why [decision.md](decision.md) states soundness as the contract and
+is why [the decision page](decision.md) states soundness as the contract and
 treats completeness as a measured, growing property rather than a promise.
 
 **Castagna, "Programming with Union, Intersection, and Negation Types"**
@@ -217,14 +217,14 @@ are closed under union, intersection and complement, so a sequence type is a
 first-class member of the algebra rather than an ad-hoc node.
 **[GUIDING: sequences-as-a-regular-language]** — `Schema::Seq`, carrying a
 `SeqShape`, is one node subsuming the homogeneous, fixed and prefix-plus-tail
-forms for exactly this reason ([schema-ir.md](schema-ir.md)).
+forms for exactly this reason ([the schema IR page](schema-ir.md)).
 
 It is guiding rather than load-bearing for the *IR's* sequences, and the gap is
 the point: the general form is a regular expression over element schemas, and
 the IR carries only the *linear* fragment — a fixed prefix and an optional
 repeated tail — which is every shape the schema language can spell; a repeated
 heterogeneous group has no syntax, which
-[explanation/decidability.md](../explanation/decidability.md) records. The closure the paper
+[the decidability page](../explanation/decidability.md) records. The closure the paper
 gives is at the schema level there, through union, intersection and complement
 over the sequence node, rather than inside the sequence body. The automaton
 construction over element sets is built one representation over, in
@@ -448,7 +448,7 @@ IMPLEMENTED-BY: ir.rs::Guarded::join, ir.rs::Schema::guards_children, ir.rs::Sch
 
 HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is_rejected, structural_constructors_absorb_the_guard, a_reference_under_only_combinators_is_unguarded, a_reference_the_definitions_resolve_is_read_at_its_fixpoint
 
-[schema-ir.md](schema-ir.md) records why the check's structural arms
+[The schema IR page](schema-ir.md) records why the check's structural arms
 compute nothing.
 
 **A reference denotes the definition it names.** `Ref(i)` and `defs[i]` are one
@@ -476,7 +476,7 @@ path has a third bound, the parser's own nesting limit, which sits between the
 unfolding bound and the descent bound: a document past the unfolding bound is
 refused by the walk, and one past the parser's is refused as unreadable before
 the walk sees it, so the descent bound is unreachable through a document;
-[guides/limits.md](../guides/limits.md) names the three regions. The conventional default, 128,
+[the limits page](../guides/limits.md) names the three regions. The conventional default, 128,
 follows `serde_json`. **[LOAD-BEARING: the-depth-bound-reports-itself]**
 
 SOURCE: §5 "converts any unbounded descent"
@@ -545,7 +545,7 @@ on its path (`OPEN_MEETS` in `decision/emptiness.rs`), as uninhabited, which is
 the inductive reading of the same fact over finite values.
 
 Coinduction also governs the *value* side: a value that contains itself is
-refused by identity rather than followed ([walk.md](walk.md)).
+refused by identity rather than followed ([the walk page](walk.md)).
 
 ## Gradual typing
 
@@ -559,7 +559,7 @@ There is no `Dynamic` node: `typing.Any` builds `Schema::Anything` carrying a
 [`Spelling`](../../crates/valgebra-core/src/ir.rs) that `render` reads to print
 and the sharing table reads to keep the two apart, and no law or relation
 reads, so every law and every relation sees the top
-([schema-ir.md](schema-ir.md#what-any-is)). The paper is kept here because
+([what `Any` is](schema-ir.md#what-any-is)). The paper is kept here because
 the reason it separates the two is the reason this project does not: it names
 the question a validator has no site for.
 
@@ -632,7 +632,7 @@ Over the shapes of the `--decision`, `--decision-refute` and `--decision-repeat`
 workloads of `scripts/perf_gate.py`, and over a record of thirty-two fields
 sharing one inner schema, the count is **zero**: the trail absorbs recursion and
 the per-rule caches absorb the shape where one goal is asked once per field
-([decision.md](decision.md#the-budget-and-what-exhausting-it-means)).
+([the budget, and what exhausting it means](decision.md#the-budget-and-what-exhausting-it-means)).
 
 Over the relation matrix it is **not**. A meet against a union repeats **four**
 goals per query — twice in that corpus, eight over it — because the union
@@ -672,7 +672,7 @@ HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_t
 
 It is built beside the structural procedure and is the second decider a caller
 reaches: the rules answer first and this answers where they decline
-([decision.md](decision.md)). Every kind carries a representation that
+([the decision page](decision.md)). Every kind carries a representation that
 separates its values — `Component::top` in
 [descr/mod.rs](../../crates/valgebra-core/src/descr/mod.rs) is the one place
 that says which, and it is the sentence to read rather than this one. `Coarse`,
@@ -791,7 +791,7 @@ start looking if one of them is wrong.
 **Claessen & Hughes, QuickCheck (2000)**, and the modern shrinking work behind
 hypothesis and proptest. **[LOAD-BEARING: property-testing]** — every algebra law is proved against
 membership by a property suite rather than asserted
-([testing.md](testing.md)).
+([the testing page](testing.md)).
 
 SOURCE: §13.8 "**Property-based testing.**"; §9 "Hypothesis adds integrated test-case shrinking"
 
@@ -1208,7 +1208,7 @@ next reader rediscovers as a bug.
 
 **The decision is structural, not the emptiness reduction applied uniformly.**
 The cost is a hole wherever an arm is missing, and the boundary is
-[explanation/decidability.md](../explanation/decidability.md); what a missing arm costs is a
+[the decidability page](../explanation/decidability.md); what a missing arm costs is a
 decline the descriptor answers, so every relation the completeness ledger
 records as decided by neither is one past a build or decision bound, each a
 strict row, and the two deciders are measured against each other over a
@@ -1551,7 +1551,7 @@ bound, one inside itself, one that moved while read, one whose predicate raised
 -- and a complement reads its inner walk in Kleene's strong logic, where that
 third answer stays the third: `complement(t)` refuses such a value with the
 stop's code rather than admitting it
-([walk.md](walk.md#a-stop-is-not-a-non-member)).
+([A stop is not a non-member](walk.md#a-stop-is-not-a-non-member)).
 **[DEVIATION: membership-has-a-third-answer]**
 
 IMPLEMENTED-BY: valgebra-py/src/check/walk.rs::member, valgebra-py/src/check/walk.rs::check_union, valgebra-py/src/check/walk.rs::settled_union, valgebra-py/src/check/walk.rs::check_complement
@@ -1645,5 +1645,5 @@ no paper here](#two-representations-with-no-paper-here).
 The departures are tagged rows in [the ledger above](#where-this-tree-departs-from-its-sources),
 each with the tests that hold its cost.
 
-Tooling and toolchain facts are [references.md](references.md), not this
+Tooling and toolchain facts are [the references page](references.md), not this
 page.

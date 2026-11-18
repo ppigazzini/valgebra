@@ -15,7 +15,11 @@ claims:
 * **A link from the site into the developer set.** ``mkdocs.yml`` excludes
   ``docs/dev/``, so a published page linking there resolves in the tree and
   answers 404 on the site, where ``mkdocs build --strict`` reports it only at
-  INFO. A published page names such a page by its path instead.
+  INFO. A published page links such a page by its GitHub address instead.
+* **A link whose text is a page's file name.** ``[decision.md](decision.md)``
+  says where the page is, which the target already says, and not what the
+  reader finds there: a link's text names the page's topic, or the heading its
+  anchor names.
 * **A relative path on the page an index serves.** PyPI renders ``README.md`` at
   the project's own URL, where ``docs/guides/json.md`` resolves to nothing, so that
   page names a page of the site or a file of the tree by its URL. Each such URL
@@ -277,7 +281,7 @@ def check_links(path: Path, text: str) -> list[str]:
         if _on_the_site(path) and _unpublished(page):
             problems.append(
                 f"link {target!r} leaves the site: `docs/dev/` is not published, "
-                "so name the page by its path in the repository"
+                "so link the page by its GitHub address"
             )
             continue
         if not anchor or page.suffix != ".md":
@@ -300,6 +304,24 @@ SITE_URL = "https://ppigazzini.github.io/valgebra/"
 TREE_URL = "https://github.com/ppigazzini/valgebra/blob/main/"
 #: What the site's build writes, which no page in the tree stands for.
 SITE_GENERATED = frozenset({"llms.txt", "llms-full.txt"})
+
+
+#: A link whose text is a file name or a path to a Markdown page.
+FILE_NAMED = re.compile(r"\[`?([\w./-]+\.md)`?\]\(")
+
+
+def check_link_text(text: str) -> list[str]:
+    """Refuse a link whose text is a page's file name rather than its topic."""
+    problems, in_fence = [], False
+    for line in text.splitlines():
+        if FENCE.match(line):
+            in_fence = not in_fence
+        elif not in_fence:
+            problems += [
+                f"link text {name!r} names a file; say what the page holds"
+                for name in FILE_NAMED.findall(line)
+            ]
+    return problems
 
 
 def check_index_page_links(text: str) -> list[str]:
@@ -1371,6 +1393,7 @@ def main(argv: list[str]) -> int:
         failures += [
             f"{rel}: {problem}"
             for problem in check_links(path, text)
+            + check_link_text(text)
             + (check_index_page_links(text) if rel.as_posix() == INDEX_PAGE else [])
             + check_named_paths(text, ignored)
             + check_internal_reference(text)

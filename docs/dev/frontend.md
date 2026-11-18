@@ -638,7 +638,7 @@ denotes dicts (`ir.rs`), so `dict[K, V]`, a record and a `TypedDict` refuse a
 `frozendict` value, and the bare `collections.abc.Mapping` atom admits it.
 `frozendict[K, V]` names a set of frozen dicts, a carrier the node set does not
 have, and is refused as an unknown origin rather than read as `dict[K, V]`; the
-algebra change it would take is refused in [schema-ir.md](schema-ir.md),
+algebra change it would take is refused in [the schema IR page](schema-ir.md),
 "Refused, and the test each one fails".
 `test_a_frozen_dict_is_a_mapping_and_not_a_dict` in
 `tests/test_frontend_forms.py` holds all three, on the interpreters that have
@@ -771,7 +771,7 @@ identified, and these two objects are identified first.
 What names no array is refused rather than built empty: a shape that is no tuple, an
 argument that is no `numpy.dtype[T]`, and an abstract scalar type, of which
 `numpy.dtype` makes no dtype. An element bound is not read: the element set is a
-generator of its own, refused on [schema-ir.md](schema-ir.md).
+generator of its own, refused on [the schema IR page](schema-ir.md).
 
 ## Recursion is tied by `recursive` or by an alias
 
@@ -963,7 +963,7 @@ the literal has, and `test_a_presence_qualifier_on_a_literal_field_is_refused`
 in `tests/test_records.py` holds both directions.
 
 **A node for the class alone, or for the class with its fields.** Neither
-passes the admission test of [schema-ir.md](schema-ir.md): the first is
+passes the admission test of [the schema IR page](schema-ir.md): the first is
 `Instance`, already a generator, and the second is a meet the algebra already
 reaches. `test_every_variant_is_a_generator_a_representative_or_a_marker` in
 `tests/test_closure_ledger.py` is the row a new variant fails until it has a
@@ -1019,6 +1019,6 @@ external judge.
 schema and value schema are both `Schema`, so `dict[K, V]` compiled with them
 swapped would typecheck and validate real values. The frontend spells each
 clause as the struct literal `MapClause { key, value }`, where a swap has to be
-written out at the call site; [type-design.md](type-design.md) records the
+written out at the call site; [the type design page](type-design.md) records the
 positional constructor the core keeps as the sharpest residual hazard in the
 tree.

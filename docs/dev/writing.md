@@ -59,7 +59,7 @@ the structure is wrong. So:
 |---|---|
 | what a schema admits, in this build | a probe, a test |
 | what a node *denotes* | the doc comment in `ir.rs` |
-| whether a set is expressible at all | the node set, and [schema-ir.md](schema-ir.md)'s admission test |
+| whether a set is expressible at all | the node set, and [the schema IR page](schema-ir.md)'s admission test |
 
 The failure this prevents has a shape: arguing from **behavior** or from **what
 the implementation computes internally** to **what the algebra denotes**. A
@@ -104,7 +104,7 @@ lint and its test, which `HISTORY_EXEMPT` in `scripts/docs_lint.py` names.
 
 A measurement is the exception, and only as a rule: where a number explains why
 the code has its shape — the walk mode's discriminant order in
-[type-design.md](type-design.md) — write it as the rule a reader applies
+[the type design page](type-design.md) — write it as the rule a reader applies
 now, and let the number be the evidence.
 
 **One example beats three paragraphs**, and **pair every prohibition with an
@@ -122,7 +122,7 @@ an ignore comment in the block: a reader copies the block and not the reason,
 and an ignore written for one checker is noise to the other three.
 
 **Cut anything that does not help implement or verify.** Background a reader
-could get from the typing spec belongs in [references.md](references.md) as
+could get from the typing spec belongs in [the references page](references.md) as
 a link. Length is not thoroughness; it is where rot hides. This binds a generated
 page exactly as it binds a hand-written one: add no section that exists to look
 complete — a summary restating the section above it, a recap of what a gate
@@ -136,6 +136,13 @@ index. The manifest's sections repeat the nav in its order, which
 nav needs no other edit. The developer set, which GitHub renders and nothing
 publishes, is listed by `docs/dev/README.md` in the order to read it.
 
+**A link says what the reader finds there.** Its text is the page's topic, or
+the heading its anchor names: "[the decision page](decision.md)",
+"[where new work goes](architecture.md#where-new-work-goes)", never the file
+name, which the target already carries. `scripts/docs_lint.py` refuses a page's
+file name as link text. A published page links a developer page by its GitHub
+address, and a file read off the tree, the README on PyPI, links the site.
+
 ## Hot and cold
 
 These pages do not age alike, and treating them the same is why they rot. A page
@@ -148,21 +155,21 @@ who broke it.
 
 | Page | Temperature |
 |---|---|
-| [`ARCHITECTURE.md`](../../ARCHITECTURE.md) | cold — a map with no claim of its own: a claim that lands there belongs on the page owning its zone |
-| [architecture.md](architecture.md) | hot — every production source file is a row of its zone table, so a file added or moved is an edit there |
-| [schema-ir.md](schema-ir.md) | hot — a node added here is an edit there |
-| [decision.md](decision.md) | hot — the decided fragment grows |
-| [frontend.md](frontend.md) | hot — every new annotation form lands here |
-| [walk.md](walk.md) | hot — where soundness is decided |
-| [errors.md](errors.md) | warm — the codes are API and move slowly |
-| [type-design.md](type-design.md) | warm — a type added without a row makes the page wrong |
-| [tooling-ci.md](tooling-ci.md) | hot — a gate added here is a page edit there |
-| [testing.md](testing.md) | warm |
-| [releasing.md](releasing.md) | warm — a change to the release workflow's inputs makes the page wrong |
-| [theory.md](theory.md) | warm — a theorem does not expire, and every `HELD-BY` name is held to a test that can be renamed |
-| [references.md](references.md) | cold |
+| [The architecture map](../../ARCHITECTURE.md) | cold — a map with no claim of its own: a claim that lands there belongs on the page owning its zone |
+| [The architecture page](architecture.md) | hot — every production source file is a row of its zone table, so a file added or moved is an edit there |
+| [The schema IR page](schema-ir.md) | hot — a node added here is an edit there |
+| [The decision page](decision.md) | hot — the decided fragment grows |
+| [The frontend page](frontend.md) | hot — every new annotation form lands here |
+| [The walk page](walk.md) | hot — where soundness is decided |
+| [The errors page](errors.md) | warm — the codes are API and move slowly |
+| [The type design page](type-design.md) | warm — a type added without a row makes the page wrong |
+| [The tooling and CI page](tooling-ci.md) | hot — a gate added here is a page edit there |
+| [The testing page](testing.md) | warm |
+| [The releasing page](releasing.md) | warm — a change to the release workflow's inputs makes the page wrong |
+| [The theory page](theory.md) | warm — a theorem does not expire, and every `HELD-BY` name is held to a test that can be renamed |
+| [The references page](references.md) | cold |
 | this page | cold |
-| [glossary.md](glossary.md) | warm — every entry names an owner, and a rename dates it |
+| [The glossary](glossary.md) | warm — every entry names an owner, and a rename dates it |
 
 Cold does not mean unowned. It means the claim outlives a release, so when it
 *is* wrong it has usually been wrong for a long time.
@@ -199,7 +206,7 @@ who has never seen it.
 
 **Cite a result by its label and its place.** `[Cas23, (22)]`,
 `[FCB08, Lem. 6.5]`, `[Cas23, §4.4, fn. 15]`: a label from the table on
-[theory.md](theory.md#works-cited-by-label), then a locator -- `(n)` for
+[works cited by label](theory.md#works-cited-by-label), then a locator -- `(n)` for
 an equation or a rule tag as printed, `§`, `Def.`, `Thm.`, `Lem.`, `Prop.`,
 `Cor.`, `Rem.`, `Fig.`, `Alg.`, `App.` or `fn.`, and `p.` or `l.` after one of
 those. Neither stands alone: a bare `Lemma 4.7` leaves a reader to guess whose,

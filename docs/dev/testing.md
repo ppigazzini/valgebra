@@ -812,7 +812,7 @@ regions landing on doc-comment lines, blank lines and `use` items -- lines no
 program executes -- where a fresh `CARGO_TARGET_DIR` reads the same file at 99%.
 Each lane runs `cargo llvm-cov clean --workspace` before it measures
 (`.github/workflows/ci.yml`), and a figure taken by hand is taken in a fresh
-`CARGO_TARGET_DIR`; [tooling-ci.md](tooling-ci.md) names the tell.
+`CARGO_TARGET_DIR`; [the tooling and CI page](tooling-ci.md) names the tell.
 
 A difference of that size in a **total** is indistinguishable from a real hole
 of the same size, and neither figure alone settles which it is. What settles it

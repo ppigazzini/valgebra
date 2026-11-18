@@ -6,13 +6,13 @@ states that structure, and closes with what these types do **not** promise.
 
 ## The premise: a type is a proof that travels
 
-Both crates forbid `unsafe` ([architecture.md](architecture.md)), so the
+Both crates forbid `unsafe` ([the architecture page](architecture.md)), so the
 type system is not a safety net over an escape hatch. When the code knows
 something, the place to put it is where the compiler can see it: a doc comment
 saying "this index is always in the pool" is a proof that has evaporated, and a
 `ConstIx` is the same proof still there at every call site.
 
-The papers this rests on are in [theory.md](theory.md).
+The papers this rests on are in [the theory page](theory.md).
 
 ## What it buys
 
@@ -71,7 +71,7 @@ which is why `get` is the one way out of an index type. The frontend
 mints through the mirror-image four (`intern_const`, `intern_class`,
 `intern_operand`, `intern_predicate`), so an index acquires its meaning at the
 line that decides what the object is being pooled *as*
-([frontend.md](frontend.md)).
+([the frontend page](frontend.md)).
 
 `ClassIx` addresses `Schema::Instance`, the only node holding a
 class: an attribute record carries fields and no carrier, and a class with
@@ -151,7 +151,7 @@ Three consequences follow, and they are why this is a type rather than a comment
 - **It reaches the caller.** `Validator.relation_to` maps the three to
   `"subset"`, `"not_subset"` and `"undecided"`, which is what lets a test assert
   that a pair is *declined* rather than merely not proved
-  ([decision.md](decision.md)).
+  ([the decision page](decision.md)).
 
 The public `is_subtype_of` still answers `True`/`False`, because that is the
 contract a caller is held to. The three-valued type is what makes the distinction

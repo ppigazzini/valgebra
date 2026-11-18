@@ -29,7 +29,7 @@ because both hand back something a caller reads — `load` the value itself, and
 a `Value::Json` is never explained: the explaining arms of the JSON walk are
 unreachable by construction, and a document reaches the same codes with the same
 `loc` a Python value reaches, which is what
-[guides/error-model.md](../guides/error-model.md) promises. The in-place path exists for
+[the error model page](../guides/error-model.md) promises. The in-place path exists for
 the question whose answer is no object, the one that answers a `bool`. It builds
 the object `json.loads` would give only for a node that compares the value with
 a Python object -- a literal, an instance or object check, a refinement's
@@ -67,7 +67,7 @@ the first three replace would admit a combination -- fail-fast without
 explaining -- that means nothing, and the type leaves it unnameable. The
 discriminants are ordered so both predicates the walk asks per node are a single
 comparison, and a test pins both over every variant — that order is load-bearing
-and measured, not cosmetic ([type-design.md](type-design.md)).
+and measured, not cosmetic ([the type design page](type-design.md)).
 
 ## The comparison-raises policy
 
@@ -359,7 +359,7 @@ value all fall through to the linear scan, which stays the one source of truth
 for behavior. A **report** does depend on one: a record the index holds a plan
 for is read by its keys, and one it holds none for by its entries, which
 decides how far a deciding pass gets and so which branch of a union of records
-is explained ([guides/error-model.md](../guides/error-model.md)). So the traversal that
+is explained ([the error model page](../guides/error-model.md)). So the traversal that
 builds the index descends into every node a record can sit under.
 
 **The constant itself is found by its address.** A literal a program spells in
@@ -615,7 +615,7 @@ pay for its own allocation under a global lock, above the second walking it
 costs more cache than the counts it avoids, and the transient stops at two
 mebibytes. The free-threaded build takes the copy at every width up to the
 second, since the calls it saves per element outweigh the allocation. Both are
-in the bounds table of [architecture.md](architecture.md), and neither
+in the bounds table of [the architecture page](architecture.md), and neither
 changes an answer.
 
 The band is a rule about length, measured on distinct integers, and the walk
@@ -1366,4 +1366,4 @@ pinned by a case.
 that.** Its adequacy is measured by mutation, over the value corpus in
 `crates/valgebra-py/src/check/walk/interpreter.rs`, compiled under the
 `interpreter-tests` feature that embeds the interpreter;
-[testing.md](testing.md) owns what that measures and what it skips.
+[the testing page](testing.md) owns what that measures and what it skips.

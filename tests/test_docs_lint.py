@@ -86,6 +86,13 @@ def test_the_page_an_index_serves_links_by_url(
         assert lint.check_index_page_links(f"[it]({dead})\n"), dead
 
 
+def test_a_link_says_what_the_page_holds() -> None:
+    assert lint.check_link_text("see [decision.md](decision.md#bounds)\n")
+    assert lint.check_link_text("see [`docs/dev/writing.md`](docs/dev/writing.md)\n")
+    assert not lint.check_link_text("see [the decision page](decision.md)\n")
+    assert not lint.check_link_text("```\n[decision.md](decision.md)\n```\n")
+
+
 def test_a_url_is_not_a_link_to_resolve(tmp_path: Path) -> None:
     # The rule is about paths in this tree. An external URL and a mailto are
     # outside it, and treating them as paths would make the check fire on every

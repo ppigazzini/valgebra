@@ -3,7 +3,7 @@
 What this project is checked against. A claim in this set is expected to be
 traceable to something here or to the live tree.
 
-Papers are [theory.md](theory.md). This page is implementations and
+Papers are [the theory page](theory.md). This page is implementations and
 toolchain.
 
 ## Reference implementations
@@ -59,7 +59,7 @@ The distinction this page keeps: a **fact** is verified from a reference; a
 - **The Rust Reference** — <https://doc.rust-lang.org/reference/>. Particularly
   type layout, which is what makes `#[repr(transparent)]` a property of the type
   rather than a hope, and the overflow rules
-  ([type-design.md](type-design.md)).
+  ([the type design page](type-design.md)).
 - **The Cargo book, on profiles** —
   <https://doc.rust-lang.org/cargo/reference/profiles.html>.
 - **Rust API Guidelines** — <https://rust-lang.github.io/api-guidelines/>.
@@ -68,7 +68,7 @@ The distinction this page keeps: a **fact** is verified from a reference; a
 
 ## Type design
 
-The value-domain design rests on these; [type-design.md](type-design.md)
+The value-domain design rests on these; [the type design page](type-design.md)
 is where they are applied.
 
 - **matklad, "Newtype Index Pattern"** —

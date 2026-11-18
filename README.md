@@ -403,14 +403,14 @@ uv run --no-sync maturin develop --uv  # build the Rust extension into the venv
 ## Project
 
 - **Versioning** follows [SemVer](https://semver.org/); changes are recorded in
-  [CHANGELOG.md](https://github.com/ppigazzini/valgebra/blob/main/CHANGELOG.md). Releases are dispatch-driven and published to PyPI
+  [the changelog](https://github.com/ppigazzini/valgebra/blob/main/CHANGELOG.md). Releases are dispatch-driven and published to PyPI
   through trusted publishing — no tag push publishes.
-- **Contributing**: [CONTRIBUTING.md](https://github.com/ppigazzini/valgebra/blob/main/CONTRIBUTING.md) and [AGENTS.md](https://github.com/ppigazzini/valgebra/blob/main/AGENTS.md)
+- **Contributing**: [the contributing guide](https://github.com/ppigazzini/valgebra/blob/main/CONTRIBUTING.md) and [the agent instructions](https://github.com/ppigazzini/valgebra/blob/main/AGENTS.md)
   cover the build-health gate and the project's rules;
-  [ARCHITECTURE.md](https://github.com/ppigazzini/valgebra/blob/main/ARCHITECTURE.md) maps the components.
+  [the architecture map](https://github.com/ppigazzini/valgebra/blob/main/ARCHITECTURE.md) places the components.
 - **Security**: the load-bearing property is *soundness of acceptance* — an
   accepted value really belongs to the schema's set, and a relation proved
-  holds. Report issues privately per [SECURITY.md](https://github.com/ppigazzini/valgebra/blob/main/SECURITY.md). valgebra is
+  holds. Report issues privately per [the security policy](https://github.com/ppigazzini/valgebra/blob/main/SECURITY.md). valgebra is
   pre-alpha and unaudited.
 
 ## License

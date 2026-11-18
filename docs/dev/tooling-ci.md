@@ -1131,7 +1131,7 @@ separate artifact a caller installs, and a leg that runs only at night is a
 wheel nothing exercised until somebody reported it. `ci.yml` owns the matrix.
 The release in development is a leg beside them, forgiven by name from its
 first alpha to its first candidate, as
-[releasing.md](releasing.md#which-interpreters-a-release-supports) states.
+[which interpreters a release supports](releasing.md#which-interpreters-a-release-supports) states.
 `tests/test_python_lifecycle.py` holds the releases it carries to the schedule
 each follows, and the floor `requires-python` claims to the oldest of them;
 `test_every_supported_interpreter_runs_on_every_event` in
@@ -1192,13 +1192,13 @@ wheel that builds and does not load would otherwise wait for the release smoke.
 
 **PyPy builds, links, and runs the suite.** The release matrix publishes a wheel
 for each series PyPy 8.0 implements, on manylinux (`release.yml` owns the rows, and
-[releasing.md](releasing.md#the-wheels-a-release-builds) says why those), and
+[the wheels a release builds](releasing.md#the-wheels-a-release-builds) says why those), and
 a push that does not link against PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object
 CPython exports, so an extension naming one links on CPython and fails at
 `import` on PyPy. The release smoke runs the product suite on every wheel set
 it ships, the PyPy ones included and the musllinux sets in Alpine containers
-([releasing.md](releasing.md)) -- but a release is where a break is dearest
+([the releasing page](releasing.md)) -- but a release is where a break is dearest
 to find, so the push runs one first, a leg for each PyPy series a wheel is built
 for, and `tests/test_release_matrix.py` holds the legs to the series both ways.
 Each leg of the `pypy`
@@ -1230,7 +1230,7 @@ release** build, because the frame size decides whether the deep-nesting cases
 overflow the native stack budget `cpyext` sizes from the recursion limit: a
 debug build's frames are large enough, and so are a profile-guided build's,
 which is why the PyPy wheels the release ships are plain builds too and the
-release smoke runs the suite on them ([releasing.md](releasing.md)). That
+release smoke runs the suite on them ([the releasing page](releasing.md)). That
 is a property of the build profile and not of the code.
 
 Three cases the suite carries cannot be decided there and say so rather than
@@ -1436,7 +1436,7 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
   adequacy figure of any size says nothing about a rule that was never there,
   which is the one defect the sweeps are most often assumed to cover.
 - **`scripts/docs_lint.py` cannot tell you a sentence is false.**
-  [writing.md](writing.md) names the classes it cannot reach.
+  [the writing page](writing.md) names the classes it cannot reach.
 - **A fuzz run that finds nothing means "nothing failed inside that budget"**,
   never "there is nothing to find". That is why it is not a merge gate. The
   budget carries a floor for the half of that a lane *can* tell apart: a soak

@@ -310,7 +310,7 @@ def _outnumber_the_product_suite(tree: Path) -> None:
 
 #: Written after the page's first guiding claim, which carries no holding line
 #: of its own, so an `OWED:` there belongs to it and to nothing else.
-_AFTER_A_GUIDING_CLAIM = "exact there ([decision.md](decision.md)).\n"
+_AFTER_A_GUIDING_CLAIM = "exact there ([the decision page](decision.md)).\n"
 
 
 def _owe(tree: Path, line: str) -> None:
@@ -1625,8 +1625,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "docs/dev/theory.md",
-            "exact there ([decision.md](decision.md)).\n",
-            "exact there ([decision.md](decision.md)).\n\n"
+            "exact there ([the decision page](decision.md)).\n",
+            "exact there ([the decision page](decision.md)).\n\n"
             "IMPLEMENTED-BY: decision/readings.rs::Schema::region_set\n",
         ),
         trips=("test_an_implementing_line_follows_a_claim_about_code",),

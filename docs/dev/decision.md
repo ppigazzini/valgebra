@@ -38,7 +38,7 @@ rule that already answers (under "The bounds, each measured"), which is what a
 relation the rules *refute* stops paying. `tests/test_completeness_probe.py`
 asks both of every pair of one corpus and holds the pairs they answer apart --
 each a fixpoint the rules' coinductive hypothesis proves and one unfolding does
-not -- to a count that may only shrink. [schema-ir.md](schema-ir.md)
+not -- to a count that may only shrink. [The schema IR page](schema-ir.md)
 records the order under "Which representation decides".
 
 **How the two deciders compose.** Each answers in three values, and the whole
@@ -291,7 +291,7 @@ to naming a value its universe contains.
 ## What the descriptor is made of
 
 The shape is three layers deep, and reading it in that order is what makes the
-bounds in [architecture.md](architecture.md) legible: each one belongs to
+bounds in [the architecture page](architecture.md) legible: each one belongs to
 exactly one layer.
 
 **A descriptor is twelve slots.** `Descr` in
@@ -420,7 +420,7 @@ their common refinement, and a constraint over a cell holding few keys is pinned
 to them as one over a finite part is (`over_a_split` in `descr/maps.rs`). The rules
 read such a key as one they cannot place, a proof or nothing. A key holding any
 other part of a kind -- a narrower tuple, a class, the complement of a literal --
-refuses, because no split holds it; [explanation/decidability.md](../explanation/decidability.md)
+refuses, because no split holds it; [the decidability page](../explanation/decidability.md)
 lists what that leaves to the rules. A want indexed past the partition -- no lowering builds one, so it is an
 invariant broken -- is no element of the model, and an atom carrying it is
 proved nothing: its emptiness declines, and its complement keeps the want, so
@@ -639,7 +639,7 @@ subtyping **is** set inclusion between two region sets, and nothing else.
 That is a correctness decision as much as a clarity one: the one-character
 difference between a right and a wrong operator sat inside folds no test could
 distinguish it in, and concentrating them into five methods put each in a place a
-test reaches. [type-design.md](type-design.md) records what that moved.
+test reaches. [The type design page](type-design.md) records what that moved.
 
 Six scalar regions and one non-scalar remainder partition the universe. The
 remainder is what keeps emptiness sound: the meet of all six scalar complements
@@ -687,12 +687,12 @@ fuzz target builds by hand.
 ## What the core cannot decide alone
 
 A class hierarchy and a concrete value are Python facts, and `valgebra-core`
-cannot see Python ([architecture.md](architecture.md)). The `LeafRelations`
+cannot see Python ([the architecture page](architecture.md)). The `LeafRelations`
 trait is how it asks, `oracle.rs` is where the core asks it, and
 `crates/valgebra-py/src/oracle.rs` is the answer the bindings give — the two
 sides of one seam, each in a module named for it, the binding's side with a
 corpus of its own driving every question below
-(`oracle/interpreter.rs`, [testing.md](testing.md)). The questions:
+(`oracle/interpreter.rs`, [the testing page](testing.md)). The questions:
 
 - `leaf_subtype` — is this literal a member of that set, is this class a subclass
   of that one, is `None`, the one value of its kind, a member of it;
@@ -821,7 +821,7 @@ non-member, a predicate interrupted while `Literal[5]` is probed would answer
 
 **An answer reads Python at the type the trust base grants it for.** Each
 question above stands on a reading the trust base
-([explanation/soundness.md](../explanation/soundness.md)) grants for one case -- an exact
+([the soundness page](../explanation/soundness.md)) grants for one case -- an exact
 builtin's `==` and order, an enumeration as `EnumMeta` builds it, a class as
 Python lays it out when it makes it -- and an object of a neighboring case is
 declined rather than read as that one: a builtin subclass with an `__eq__` or
@@ -1163,7 +1163,7 @@ it means", below), and a build is held to three more: the schema nodes it will
 read, the nesting it will descend, and the units of multiplying work it may
 spend. The build's three are named together as `descr::lower::Bounds`, every
 bound is a row in the table of every bound in the tree
-([architecture.md](architecture.md)), and
+([the architecture page](architecture.md)), and
 `crates/valgebra-core/benches/core.rs` carries the workload each of the build's
 numbers was set from -- a bound whose figure lives only in a comment cannot be
 re-derived on another machine, and cannot fail when the shape it guards against
@@ -1295,7 +1295,7 @@ either. The tables are each interpreter's, for one row and 0 answers over the dr
 **A mapping of one word under a length of two, refused.** `Annotated[dict[Annotated[str,
 Regex("a")], int], MinLen(2)]` holds `{Apart("a"): 1, Apart("a"): 2}` for a `str` subclass whose `==`
 is identity, and declines. Under the assumption on a `str` key
-([explanation/soundness.md](../explanation/soundness.md)) it is empty, and a proof would stand against a value the
+([the soundness page](../explanation/soundness.md)) it is empty, and a proof would stand against a value the
 walk accepts, for a schema no one writes on purpose. The assumption pays for proofs between a
 record and a mapping, and this is neither.
 
@@ -1355,7 +1355,7 @@ that length.
 drawn Boolean terms of two levels, from 922 before the rules read its lengths and a meet of
 its refinements as one, so a length component would decide some of those. A map type holds no such thing [Cas23, §4.4]; each
 map atom would hold one, every operation over atoms would meet it, and the frozen mapping
-refused in [schema-ir.md](schema-ir.md) read +2% to +7% for a part of the same cost.
+refused in [the schema IR page](schema-ir.md) read +2% to +7% for a part of the same cost.
 No caller has reported the shape past a fuzz harness, and it is not prototyped.
 
 **A nested meet distributed under a narrowed one, refused.** Narrowing a meet at the top
@@ -1373,7 +1373,7 @@ one row and 0 answers over the 72,000 seeds of the recursive families.
 `complement(T1).relation_to(tuple[T1])` proves. It moves that one row and no answer over the
 drawn families, though 1,499 declines of an earlier campaign hold such a definition: they
 decline for what the rest of those pairs ask, and the second unfolding a refutation needs
-stays the limit [explanation/decidability.md](../explanation/decidability.md) states.
+stays the limit [the decidability page](../explanation/decidability.md) states.
 
 **A mapping keyed by a class or a shape reads no single entry, refused.**
 `dict[K, str]` below `{}` holds `{K(): ""}`, which the supertype refuses, and declines. Its
@@ -1452,7 +1452,7 @@ structural fragment. A deeply nested Boolean combination can therefore demand
 work exponential in its depth unless a goal already decided can be recognized
 when it comes back — and recognizing one cheaply needs *identity*, not structure.
 The IR gives that: two subtrees built alike are one allocation
-([schema-ir.md](schema-ir.md)), so a goal is named by a pair of pointers
+([the schema IR page](schema-ir.md)), so a goal is named by a pair of pointers
 and a memo over goals has the cheap key it wants. What a memo lacks is its
 soundness argument, and that is not about keys: an answer reached under
 the coinductive hypothesis the trail carries is not an answer without it, so
@@ -1763,7 +1763,7 @@ schemas were built alike.
 **So the counter bounds cost, not termination.** `C` is exponential in the
 subterms -- a meet per subset -- and a query that terminates can still outlast
 any caller. `DECISION_BUDGET` caps the steps one query spends, past it the
-answer is undecided, and [architecture.md](architecture.md) names that
+answer is undecided, and [the architecture page](architecture.md) names that
 kind of bound.
 
 **A meet that may hold no kind is below every set, read before its members.**
@@ -1872,7 +1872,7 @@ rules.
 
 What to say about the ceiling is what it is measured to reach.
 `DECISION_BUDGET` is the ceiling and is a row of the bounds table
-([architecture.md](architecture.md)). What a shape costs is pinned as a
+([the architecture page](architecture.md)). What a shape costs is pinned as a
 property rather than as prose, and two shapes are pinned, both in
 `decision/tests.rs`: `a_table_is_decided_without_the_work_growing_with_it`
 reads `subtype_steps` over two wide literal tables and holds that the work does
@@ -1920,7 +1920,7 @@ adversarial one, if one exists, would.
 a mutation that removes the bound leaves them an exponential search, which
 outlasts any timeout the sweep sets. They are marked in their own source and the
 ledger holds the marks to the sweep's skip list;
-[tooling-ci.md](tooling-ci.md) owns that rule.
+[the tooling and CI page](tooling-ci.md) owns that rule.
 
 ## Construction is not a decision procedure
 
@@ -2158,7 +2158,7 @@ fuzzer's spelling, a refinement carrying no constraint, and
 
 **A field's name is read as a word of a clause narrowed by a language**
 (`holds_the_name_as_a_word`), in the last asking, under the assumption
-[`docs/explanation/soundness.md`](../explanation/soundness.md) states of a `str` key. The sets answer this of one
+[the soundness page](../explanation/soundness.md) states of a `str` key. The sets answer this of one
 mapping whole, and a reference in the way stopped them, so the rule asks them of the one
 name and the one key. It moved 0 answers over the drawn families, since none draws a record
 below a recursion over narrowed keys, which is what `properties` beside `patternProperties`
@@ -2171,7 +2171,7 @@ languages declined in 95 ms against 3.9 ms, and stopped there it takes 7.6 ms.
 on, and only where every member is a refinement of that base, so a meet beside anything
 else pays one comparison. `refinement_verdict` reads a union's refined branch the same
 way, with what narrows the union. Neither folds a term, and
-[schema-ir.md](schema-ir.md) says why the constructor does not.
+[the schema IR page](schema-ir.md) says why the constructor does not.
 
 **A meet of a kind with members of that kind is read as those members**
 (`the_rest_of_a_meet_within_a_kind`), after the refinements' reading in the same
@@ -2316,7 +2316,7 @@ it has a comment. Prefer one rule that asks the question.
 
 ## The limit
 
-[docs/explanation/decidability.md](../explanation/decidability.md) owns the published fragment and
+[The decidability page](../explanation/decidability.md) owns the published fragment and
 `tests/test_completeness_ledger.py` the relations it decides. A relation that
 regresses fails there outright; the ledger's strict expected-failure marks are
 the relations that hold and neither decider decides, each with the bound that

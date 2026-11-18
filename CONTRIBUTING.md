@@ -3,7 +3,7 @@
 Thanks for your interest. valgebra is a Rust-core Python validation library;
 this guide covers local setup and the checks every change must pass. The
 project's design rules and non-negotiable invariants live in
-[AGENTS.md](AGENTS.md) — read that first.
+[the agent instructions](AGENTS.md) — read that first.
 
 ## Orientation
 
@@ -14,8 +14,8 @@ the set representation in `descr/`; the PyO3 bindings (`crates/valgebra-py/`)
 hold the schema frontend, the single membership walk, and the oracle the core
 asks about a Python class or constant; and `python/valgebra/` is the public
 surface.
-[ARCHITECTURE.md](ARCHITECTURE.md) maps the components onto the pages that own
-them, and [docs/dev/architecture.md](docs/dev/architecture.md) traces the
+[The architecture map](ARCHITECTURE.md) maps the components onto the pages that own
+them, and [the architecture page](docs/dev/architecture.md) traces the
 path a value takes from a typing annotation through the walk to a violation;
 read it before a non-trivial change.
 
@@ -189,7 +189,7 @@ source of truth that does not exist fails.
 
 Correctness is checked against the denotation, not against itself. The layers
 below are the ones a contributor runs into first;
-[docs/dev/testing.md](docs/dev/testing.md) owns the full table, with what
+[the testing page](docs/dev/testing.md) owns the full table, with what
 each layer is blind to beside it.
 
 - **Denotation oracle.** Each node's denotation is written as a reference
@@ -261,7 +261,7 @@ each release follows, and which leg may fail without blocking to the release's
 stage; `tests/test_required_jobs.py` holds that the job runs on every event and
 has a free-threaded leg; and `tests/test_release_matrix.py` holds the
 free-threaded legs and the PyPy legs to what the release ships.
-[docs/dev/tooling-ci.md](docs/dev/tooling-ci.md) says why each
+[The tooling and CI page](docs/dev/tooling-ci.md) says why each
 interpreter is a lane of its own.
 
 Scheduled lanes, on `github_ci` by a dispatch from the scheduled run on
@@ -296,14 +296,14 @@ merges where a wall-clock budget could not.
 
 These words carry weight in this repository and in its CI, and some of them
 collide with an unrelated sense used nearby. Say which one you mean:
-[docs/dev/glossary.md](docs/dev/glossary.md) defines them and owns the
+[The glossary](docs/dev/glossary.md) defines them and owns the
 list of the ones that collide, and a second copy here would drift from it.
 
 Every gate script reports one of **three** outcomes, and the exit code says
 which -- 0 the property holds, 1 it does not, 2 the gate **could not run** -- so
 a caller can dispatch on it rather than parse the output. A gate that could not
 run has proven nothing, and must never read as one that passed.
-[docs/dev/tooling-ci.md](docs/dev/tooling-ci.md) owns the three codes and
+[The tooling and CI page](docs/dev/tooling-ci.md) owns the three codes and
 what makes each script exit 2.
 
 ## Working on changes
@@ -330,7 +330,7 @@ what makes each script exit 2.
     every `v*` tag is held to being an ancestor of the branch, beside the
     commits the tracked files cite.
 
-See [AGENTS.md](AGENTS.md) for the full rules and the rationale behind them.
+See [the agent instructions](AGENTS.md) for the full rules and the rationale behind them.
 
 ## Commit messages
 

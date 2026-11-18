@@ -43,7 +43,7 @@ well, which is what keeps the typing spec's distinction between `Literal[1]`,
 `Literal[True]` and `Literal[1.0]`. For the spec's own `Literal` types that is
 the one value `c`; for a float zero or a `Decimal` it is every value `==` joins
 to `c` within the type, which
-[theory.md](theory.md) states as a deviation with what it costs a
+[the theory page](theory.md) states as a deviation with what it costs a
 proof. The same-type test runs **before** `==`, so a value of another
 type never reaches the comparison — which is why a raising `__eq__` is only
 observable from an object of the pooled constant's own type. The set
@@ -136,7 +136,7 @@ than a formality: valgebra exposes its algebra through standard Python typing
 syntax, so a set that syntax can express and valgebra cannot is a completeness
 gap, while a set only a bespoke combinator could name is not. Whoever owns the
 algebra decides where that line sits; a page here records the decision, and
-[theory.md](theory.md) already shows the form such a decision takes — the
+[the theory page](theory.md) already shows the form such a decision takes — the
 map clauses may overlap where the paper's may not, written down as the
 deviation `clauses-may-overlap`.
 
@@ -169,7 +169,7 @@ denotes dicts and has no carrier field, so supplying one changes the
 constructor. Beyond the admission test, two costs specific to this one:
 
 - The model `KeyedMap` is built from is recorded in
-  [theory.md](theory.md) as a *quasi K-step function* — named fields
+  [the theory page](theory.md) as a *quasi K-step function* — named fields
   plus a default per key type. No carrier appears in that description, and
   **none appears in the source either**, which the title makes worth saying
   out loud. Castagna's "struct" is an *access style*, not a
@@ -211,7 +211,7 @@ it, measured on its own first; `collections.abc.Mapping` and
 **A spelling for the carrier-free attribute record.** A `Protocol` is that
 spelling: the node is in the closure — `AttrRecord` denotes exactly "any object
 whose `.a` is an `int`" — and the frontend builds a protocol as the record of
-its members with no class beside it ([frontend.md](frontend.md), "What a
+its members with no class beside it ([the frontend page](frontend.md), "What a
 class declares"). A protocol adds no node and no combinator: the annotation
 form the typing spec gives for "an object with these attributes" is the
 spelling, which is the surface rule.
@@ -223,7 +223,7 @@ its instances alone, since the frontend reads the class's name as the class met
 with its declaration. The spelling adds no node. It is a combinator rather than an
 annotation form because the typing form for "the instances of `C`" is `C`
 itself, which the declaration reading takes, and the alternatives to a
-combinator are refused in [frontend.md](frontend.md), "Refused, and the
+combinator are refused in [the frontend page](frontend.md), "Refused, and the
 test each one fails".
 
 **A class-with-record node, so that a meet of two attribute-carrying classes
@@ -268,7 +268,7 @@ takes out values a clause claims
 **A node, a kind or a parameter for another value universe.** Refused where its
 values embed in Python's. JSON's are what `json.loads` returns, so every JSON set
 is a set of Python values below the JSON values' own top
-([docs/explanation/universes.md](../explanation/universes.md)), reached by the nodes as they stand, and case 1
+([the universes page](../explanation/universes.md)), reached by the nodes as they stand, and case 1
 of the admission test is what it fails: write it as a combination and add
 nothing. `1` and `1.0` being one JSON number is no node either: every set a JSON
 frontend builds admits both. A fact that decides less than it denotes, as the
@@ -375,7 +375,7 @@ of the string. The cost is completeness on a schema nobody can decide anyway, an
 `tests/test_combinators.py` pins the witness so the fold cannot be added back by
 someone reading only the law. An attribute record, a literal, a bound, a length
 and a step fold because Python's rules ask each of them for one answer about a
-value. The trust base assumes it ([explanation/soundness.md](../explanation/soundness.md)), and
+value. The trust base assumes it ([the soundness page](../explanation/soundness.md)), and
 five known-unsound tests pin what a value breaking it is answered.
 
 **A method that reduces a schema.** Refused. Construction settles the lattice
@@ -436,7 +436,7 @@ Two things the compiler does not force, and both are held by a test:
 Five payloads are integers addressing something the validator holds, and four of
 them address the **same** constants pool: a literal's constant, a class, a
 comparison operand, a user predicate. Each has its own type, and
-[type-design.md](type-design.md) owns why and what a crossing would cost.
+[the type design page](type-design.md) owns why and what a crossing would cost.
 
 `Constraint::MinLen`, `Constraint::MaxLen` and `Constraint::Regex` sit in the
 same enum and are **not** pool indices at all — they carry the length or the
@@ -520,7 +520,7 @@ complement the bottom (`has_complementary_pair_within` in
 not among them**: `A | (A & B)` and `A` are one set and two terms. Absorption is
 one case of `A | B` folding to `A` wherever `A` contains `B`, and a containment
 is what the decision procedures answer rather than what a constructor folds
-([decision.md](decision.md) draws the line). A `recursive` whose body
+([the decision page](decision.md) draws the line). A `recursive` whose body
 never names the fixpoint is that body, `μt. A` being `A` where `t` does not occur
 in `A`, rather than a definition no reference reaches. And the clause list
 `open` and `close` rewrite names each key schema once, two clauses over one key
@@ -578,7 +578,7 @@ the second's definitions by the same pairing (`place_definitions` in
 `crates/valgebra-py/src/build.rs`), so a definition the first already holds is
 that definition rather than a copy the folds would read as another term. It is one of the binding's swept surfaces, and it decides `==` and
 nothing else -- `is_equivalent` is the decision procedure, a different question
-with a different answer, and [guides/algebra.md](../guides/algebra.md) is about why.
+with a different answer, and [the algebra page](../guides/algebra.md) is about why.
 A union's or a meet's members, a map's clauses and a refinement's constraints
 are matched as the sets they are. Members are matched in place up to the first
 one out of place, and each after it among the other side's members that hash
@@ -621,7 +621,7 @@ handle (`Schema::unfolded`).
 The cost is that `repr`, `==` and the reported error follow the schema as
 *built*, not as written: `intersection(int, complement(int))` is `nothing` and
 reports `no_match`. That is recorded in
-[guides/error-model.md](../guides/error-model.md), where a reader meets it.
+[the error model page](../guides/error-model.md), where a reader meets it.
 
 ## What a length is
 
@@ -767,7 +767,7 @@ rejects the value itself has settled it, and a member that fails inside the
 value leaves the others meaningful. That second rule is not specific to classes
 — it is the one a refinement already applies between a base and its constraints,
 which is why `Annotated[int, Gt(0)]` does not report a bound on a string — and
-it is recorded in [guides/error-model.md](../guides/error-model.md). The error snapshot
+it is recorded in [the error model page](../guides/error-model.md). The error snapshot
 pins both.
 
 ## How a class reaches the core
@@ -824,7 +824,7 @@ decision procedure declines. Whether it may be *asked* is a cost question, and
 the cost is measured on the shapes the two disagree about.
 
 The wins are cheap and the costs are exponential in nesting depth, both measured
-by `cargo bench --bench core`; [decision.md](decision.md) names the rows
+by `cargo bench --bench core`; [the decision page](decision.md) names the rows
 and what they say. Bounding the depth does not bound the cost, because breadth
 multiplies too: a union of four records at depth three, minus a union of its
 siblings, spends **345
@@ -840,7 +840,7 @@ holds, with every checksum unchanged.
 
 That last number is the shape of the problem. `MAX_LINES`, `MAX_ATOMS` and
 `MAX_STATES` -- rows in the table of every bound in the tree
-([architecture.md](architecture.md)) -- bound the descriptor a build may
+([the architecture page](architecture.md)) -- bound the descriptor a build may
 **produce**, and say nothing about the work a build may **do**. Held by them
 alone, refusing costs as much as succeeding, and a caller cannot buy safety by
 being asked to accept less: the cost is not a bound set too high, but a quantity
@@ -939,7 +939,7 @@ predicate and no class whose metaclass answers `isinstance`.
 The **structural rules** decide by shape, and reach what the descriptor cannot
 build: every recursive schema is theirs alone. Where both reach, building a
 descriptor costs about three orders of magnitude more than a rule that already
-answers, which [decision.md](decision.md) measures under "The bounds,
+answers, which [the decision page](decision.md) measures under "The bounds,
 each measured"; a shape the rules settle in nanoseconds is not worth a set
 representation. So the rules answer first, and the descriptor answers where
 they decline.
@@ -956,7 +956,7 @@ describes the decision says so in that order.
 answering a common one far more cheaply.** A rule that only repeats what the
 descriptor decides is dead weight the mutation sweep cannot see through the
 public relations, and it goes. Each rule that stays is named on
-[decision.md](decision.md) with which of the two reasons it has.
+[the decision page](decision.md) with which of the two reasons it has.
 
 **Every bound is measured.** A numeric bound in the decision -- the nodes a
 lowering reads, the nesting it descends, the work a build spends, the steps the
@@ -989,7 +989,7 @@ as such: two spellings of one set can open into two, and close into two -- a
 meet of two open records and the open record of their fields are one set, and
 closing them gives an empty meet and a record. What the laws hold is that
 closing commutes with absorption and that a second application gives the set
-the first did ([theory.md](theory.md)).
+the first did ([the theory page](theory.md)).
 
 `ensure` is `validate(x); return x` and is kept for what it reads as, typed as
 the identity it is. That is a judgment about the surface rather than about the
@@ -1005,7 +1005,7 @@ reason. `in` is kept for the reason `|` is: it is Python's own
 spelling of the one question the product answers, membership, as `|` is
 Python's spelling of a union, where `&` and `~` would spell combinators the
 language has no operator for. A validator does not pickle either, and the
-refusal says what to send instead ([docs/explanation/boundaries.md](../explanation/boundaries.md)).
+refusal says what to send instead ([the boundaries page](../explanation/boundaries.md)).
 
 ## The limit
 
@@ -1023,7 +1023,7 @@ What sharing gives beyond the copy is identity where a node is built twice:
 need. What is missing is the memo itself, and the reason is the trail a
 coinductive decision carries rather than a missing key — a result reached under
 an open hypothesis may not be kept once the hypothesis is discharged. The rules
-carry a work budget instead ([decision.md](decision.md)).
+carry a work budget instead ([the decision page](decision.md)).
 
 A transform over the tree answers with the handle it was given when it changed
 nothing: opening a schema with no record in it, closing one already closed, or
