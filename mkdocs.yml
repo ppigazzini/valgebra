@@ -67,6 +67,21 @@ nav:
 exclude_docs: |
   dev/
 
+# Every check the builder makes on a link and on the nav, raised to a warning so
+# that --strict fails the build on it: a page or an anchor a link names that does
+# not exist, a page under docs/ that no nav entry lists, and a link MkDocs cannot
+# read as one to a page.
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
 markdown_extensions:
   - admonition
   - pymdownx.details

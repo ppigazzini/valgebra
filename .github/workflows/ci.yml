@@ -897,7 +897,9 @@ jobs:
       - run: uv sync --locked --group docs
       # mkdocstrings imports the package to read its docstrings.
       - run: uv run --no-sync maturin develop --uv
-      # --strict fails the build on a broken link or an unresolved reference.
+      # --strict fails the build on a broken link, an anchor no heading renders,
+      # a page off the nav, or an unresolved reference: mkdocs.yml's `validation`
+      # raises each of the builder's link and nav checks to a warning.
       # The mechanical half of documentation rot. Read the script's own docstring
       # for the rules; a comment restating them here goes stale with the first
       # rule added. It cannot tell you a sentence is false.
