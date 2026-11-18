@@ -7,9 +7,9 @@ description: What subtyping, equivalence, and emptiness decide exactly versus co
 valgebra compares schemas as sets: `is_subtype_of` is set inclusion, `is_equivalent` is
 mutual inclusion, and `is_empty` reports an unsatisfiable schema. The relation is
 `s <= t` exactly when `s` and `not t` share no value, so every comparison reduces
-to an emptiness test (see [foundations](13-foundations.md)).
+to an emptiness test (see [foundations](foundations.md)).
 
-Every answer is **sound** relative to the [trust base](14-soundness.md#what-this-argument-assumes).
+Every answer is **sound** relative to the [trust base](soundness.md#what-this-argument-assumes).
 A `True` from `is_subtype_of`/`is_equivalent`, or a `True` from `is_empty`, is
 correct for every value inside it: one that answers Python's questions as a
 function of itself, whose `__class__` is its type, and, for an enumeration's
@@ -65,7 +65,7 @@ answers `"undecided"`.
   relation to a schema is the membership of each value: `"not_subset"` on a
   value outside, `"subset"` where every value is inside, and `"undecided"` where
   the walk of a value stopped -- at the depth bound, say -- and none is outside,
-  since a stop is no verdict ([soundness](14-soundness.md)). A schema holding a
+  since a stop is no verdict ([soundness](soundness.md)). A schema holding a
   predicate, a class or an attribute is not read this way, since its code may
   answer two calls differently, and neither is a constant whose class `==`
   widens past itself. It is the shape a translation from JSON Schema writes for
@@ -163,7 +163,7 @@ answers `"undecided"`.
 - **An enumeration against the union of its members**, when every instance of
   the class really is one of them -- made through the class, which
   `object.__new__` steps past
-  ([the trust base](14-soundness.md#what-this-argument-assumes)): an `Enum`
+  ([the trust base](soundness.md#what-this-argument-assumes)): an `Enum`
   that is not a `Flag`, carrying at least one member, whose members compare by
   identity, with `Enum`'s `_missing_` and `EnumMeta`'s `__iter__` and
   `__call__`. Then `Color` and
@@ -956,7 +956,7 @@ the shape. What is left below is what the descriptor cannot hold.
   refinement of their keys, so `dict[Annotated[str, Regex("x-.*")], str]` is
   decided against `dict[str, str]`, a record naming `x-a` and another clause's
   keys, as a key narrowed by no pattern is. A word is one key to these, which
-  [the soundness page assumes](14-soundness.md#what-this-argument-assumes) of a
+  [the soundness page assumes](soundness.md#what-this-argument-assumes) of a
   `str` key whose hash and `==` are its text's. A key holding any other *part* of a
   kind has no part to land in
   -- a tuple or a frozenset of narrower elements; a class; the complement of
@@ -1623,7 +1623,7 @@ budget of its own, and the first answer stands wherever it decides, so the
 second asking adds answers and takes none away. The budget counts steps, not
 time: a step linear in a leaf it reads is one step, so a relation over a large
 leaf takes time in proportion to it
-([limits](10-limits.md#what-the-bounds-do-not-bound)). This preserves soundness:
+([limits](../guides/limits.md#what-the-bounds-do-not-bound)). This preserves soundness:
 a bail-out is never a wrong `True`. A relation the two schemas settle as written
 -- a schema against itself, a schema against a union that holds it, a meet
 against one of its own members -- is answered whatever the budget has left.
@@ -1706,7 +1706,7 @@ the literal's walk admits it, so `Literal[Decimal("1.5")]` is `not_subset` of
 `Literal["A"]`; a constant the walk refuses, or raises on, proves nothing.
 A proof does not ask: `Literal[c]` is below `Literal[d]` where `c == d` and the
 two are of one exact type, which holds only of an equality that is transitive, as
-[the trust base](14-soundness.md#what-this-argument-assumes) says.
+[the trust base](soundness.md#what-this-argument-assumes) says.
 
 What is left under the budget is the Boolean tower: a deeply nested combination
 of unions, meets and complements, where subtyping distributes over both sides

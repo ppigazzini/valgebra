@@ -10,7 +10,7 @@ rejected cleanly; on a thread with the stack its platform gives one, it never
 overflows the native stack, and a Python `RecursionError` comes only from the
 value's own code: a `__repr__`, an `__eq__` or a predicate that recurses past
 the interpreter's limit raises one, and it propagates as every fatal signal does
-([when a comparison raises](08-error-model.md#when-a-comparison-raises)). On
+([when a comparison raises](error-model.md#when-a-comparison-raises)). On
 PyPy under a lowered recursion limit the explaining walk's own rendering can
 raise one too (the value-walk depth entry below). The
 bounds cap sizes, not time: [what the bounds do not
@@ -31,9 +31,9 @@ written by the developer and is trusted.
   reached again while its own fields are being built, under the type arguments
   it is applied to and with no `type` alias opened since, because its field type
   names the class and the build never bottoms out; model it with
-  [`recursive`](06-recursion.md) instead. An alias opened since ties the cycle
+  [`recursive`](recursion.md) instead. An alias opened since ties the cycle
   where the fields reach it again
-  ([recursion](06-recursion.md#why-classes-need-it)).
+  ([recursion](recursion.md#why-classes-need-it)).
 - **Schema construction size.** Every way of growing a schema — the `Validator`
   constructor, the `|` operator, `union`, `intersection`, `complement`,
   `recursive`, and the record transforms — is bounded at construction, so no sequence of
@@ -68,7 +68,7 @@ written by the developer and is trusted.
       rather than read until memory ends.
 
   A real schema stays far under all three. Structural recursion belongs in
-  [`recursive`](06-recursion.md), whose back edge does not count toward the depth.
+  [`recursive`](recursion.md), whose back edge does not count toward the depth.
 
   The three numbers are importable, so code that sizes a schema against them
   reads them rather than repeating them.
@@ -211,7 +211,7 @@ decision steps. None caps time, and four costs grow inside them:
   `complement` reads included. A
   definition that reaches a predicate, or a class whose metaclass is not
   `type`, is not kept: the walk calls that code at each occurrence it reaches
-  ([refinements](05-refinements.md)), so each level of the value is walked once
+  ([refinements](refinements.md)), so each level of the value is walked once
   per such member, and the time doubles with the depth. Keep the predicate
   outside the definition, or write the branches so one value enters one of
   them. A value nested past the bounds is reached by each path to it with its

@@ -227,7 +227,7 @@ class RaisingDictLen(dict):
 @pytest.mark.skipif(
     sys.implementation.name != "cpython",
     reason="PyPy's cpyext calls the override to show the value to an extension, "
-    "and its raise ends the process (docs/00-installation.md)",
+    "and its raise ends the process (docs/get-started/installation.md)",
 )
 def test_a_subclass_whose_len_raises_is_read_by_its_storage() -> None:
     """The storage holds the entries, and an override that raises is not asked.

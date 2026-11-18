@@ -34,8 +34,8 @@ that defines it -- so a rename dates the entry.
 
 | Term | Means |
 |---|---|
-| **sound** | a `true` is a proof. Every relation here is sound over values that answer comparisons as their builtin does, and a `false` means "not proven" rather than "false"; `docs/14-soundness.md` pins the one case a lying comparison breaks |
-| **complete** | every true relation is decided. valgebra is complete on a published fragment and conservative elsewhere; `docs/15-decidability.md` states the line |
+| **sound** | a `true` is a proof. Every relation here is sound over values that answer comparisons as their builtin does, and a `false` means "not proven" rather than "false"; `docs/explanation/soundness.md` pins the one case a lying comparison breaks |
+| **complete** | every true relation is decided. valgebra is complete on a published fragment and conservative elsewhere; `docs/explanation/decidability.md` states the line |
 | **conservative** | the answer a procedure gives when it cannot decide: the one that claims less ([02-decision.md](02-decision.md)) |
 | **opaque** | a schema whose region is unknown, so the scalar rules do not apply. Any combination containing one is opaque: `Regions::Unknown` in `crates/valgebra-core/src/kind.rs`, which absorbs both lattice operations |
 | **the rules** | `crates/valgebra-core/src/decision.rs` and `decision/`, the structural recursion over the schema tree. Asked first: where it and the descriptor both reach, it costs about three orders of magnitude less, and it alone reaches a recursive schema, a predicate or a hooked class; where it declines the descriptor is asked |

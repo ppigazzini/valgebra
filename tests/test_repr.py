@@ -21,7 +21,7 @@ from valgebra import (
 
 #: What the renderer prints where it gives up: past its depth bound, and for the
 #: transient self-reference a compiled validator never holds. Spelled here so the
-#: tests below read it from one place, as `docs/16-api.md` names it in one place.
+#: tests below read it from one place, as `docs/reference/api.md` names it in one place.
 TRUNCATED = "<...>"
 
 

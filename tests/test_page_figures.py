@@ -106,16 +106,16 @@ def test_a_whole_run_reports_every_section_it_reads(tmp_path: Path) -> None:
     lines = figures.report(tmp_path / "results")
     text = "\n".join(lines)
     for heading in (
-        "docs/11-performance.md, Baseline matrix",
-        "docs/11-performance.md, The cheapest door",
-        "docs/11-performance.md, Results",
-        "docs/11-performance.md, One of those margins",
-        "docs/11-performance.md, The closest races",
-        "docs/11-performance.md, Core micro-benchmarks",
-        "docs/11-performance.md, Crossing into Rust",
-        "docs/11-performance.md, Building a validator",
-        "docs/07-json.md, Performance: median of ten runs",
-        "docs/07-json.md, Performance: where the document's time goes",
+        "docs/guides/performance.md, Baseline matrix",
+        "docs/guides/performance.md, The cheapest door",
+        "docs/guides/performance.md, Results",
+        "docs/guides/performance.md, One of those margins",
+        "docs/guides/performance.md, The closest races",
+        "docs/guides/performance.md, Core micro-benchmarks",
+        "docs/guides/performance.md, Crossing into Rust",
+        "docs/guides/performance.md, Building a validator",
+        "docs/guides/json.md, Performance: median of ten runs",
+        "docs/guides/json.md, Performance: where the document's time goes",
     ):
         assert heading in text, heading
     assert "the walk 13.0 us" in text
@@ -202,7 +202,7 @@ def test_the_page_states_the_repeats_the_script_takes() -> None:
     takes them; a count changed in one and not the other makes the page describe
     a run nobody took.
     """
-    page = (ROOT / "docs" / "11-performance.md").read_text(encoding="utf-8")
+    page = (ROOT / "docs" / "guides" / "performance.md").read_text(encoding="utf-8")
     words = {6: "six", 7: "seven", 10: "ten", 12: "twelve", 18: "eighteen"}
     gate = figures.GATE_RUNS
     assert gate["3.12"] == gate["3.14"]

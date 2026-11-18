@@ -12,7 +12,7 @@ a written argument backed by adversarial tests, not a machine-checked proof; the
 ## The claim
 
 Write `⟦S⟧` for the set of Python values a schema `S` denotes (its
-[denotation](13-foundations.md)). valgebra rests on three soundness statements:
+[denotation](foundations.md)). valgebra rests on three soundness statements:
 
 1. **Membership is exact.** For every schema `S` and value `x`, the walk accepts
    `x` if and only if `x ∈ ⟦S⟧`. The "only if" half is *soundness of acceptance*
@@ -63,7 +63,7 @@ AttrRecord(f)    every field's attribute is      (attribute record; no
 
 `Any` admits every value, exactly as the top does, and it *is* the top: one
 node, one denotation, with the spelling kept for `repr` alone (see [`Any` is the
-top, spelled](13-foundations.md#any-is-the-top-spelled)). The row above covers
+top, spelled](foundations.md#any-is-the-top-spelled)). The row above covers
 both.
 
 For the Boolean nodes the equivalence is the definition of the set operation, so
@@ -91,11 +91,11 @@ walk:
 - an object-identity guard rejects a value that contains itself
   (`recursion_loop`) rather than looping, and
 - a depth bound rejects a value nested past the limit (`recursion_limit`) rather
-  than overflowing the stack (see [resource limits](10-limits.md)).
+  than overflowing the stack (see [resource limits](../guides/limits.md)).
 
 On the inhabitants — the finite values — the guarded unfolding accepts exactly
 the members, which is why a coinductive *comparison* at the greatest fixpoint
-never contradicts a membership verdict (see [recursion](06-recursion.md)).
+never contradicts a membership verdict (see [recursion](../guides/recursion.md)).
 
 **A stop is not a verdict.** Each guard ends the walk without deciding
 membership, as a predicate that raises (`predicate_error`), a container
@@ -109,7 +109,7 @@ finished and refused*, and a stopped walk did not. So the walk computes
 `x ∈ ⟦S⟧` on every value it finishes, and a value on which it decides nothing,
 only stopping, is refused by a schema and its complement alike: a part that
 refuses, or a branch that admits, decides the walk whatever a part beside it
-stopped on ([the error model](08-error-model.md#unions-report-the-closest-branch)).
+stopped on ([the error model](../guides/error-model.md#unions-report-the-closest-branch)).
 A relation reads a walk the same way where it puts a value to one -- a
 literal's constant, an enumeration's members, `None`, the texts of a pattern
 too large to build: a value the walk stopped on is neither in the set nor out
@@ -168,7 +168,7 @@ subtyping.
 
 The conservatism is the price: when no rule fires, the oracle declines and the
 set representation cannot settle the pair, the answer is `False` — "not proven",
-not "disproven". This is why the [decidability boundary](15-decidability.md)
+not "disproven". This is why the [decidability boundary](decidability.md)
 maps where `False` is exact and where it is conservative, and why the docs say
 *closed algebra, conservative decision*.
 
@@ -369,7 +369,7 @@ The soundness is relative to a small, explicit trust base:
   beside one no name is assumed missing, and a name with no `__dict__` or slot
   to hold it is the hook's answer. It moves no `True`: a proof is a proof, and the assumption is only
   ever read to believe a refutation.
-  [The decidability page](15-decidability.md) states it with the rows it moves.
+  [The decidability page](decidability.md) states it with the rows it moves.
 - **The JSON parser (jiter) agrees with `json.loads` where both accept.** On a
   document both parsers build a value from, they build the same value, which is
   what makes the JSON path's denotation the object path's.
@@ -382,7 +382,7 @@ The soundness is relative to a small, explicit trust base:
   `bytes` a byte-order mark, a UTF-16 or UTF-32 encoding or bytes that are not
   UTF-8. Each is reported as `json_invalid` before a schema sees it, so the JSON path admits
   a subset of what the object path does and never a different value
-  ([the JSON path](07-json.md) states both with the queries that show them).
+  ([the JSON path](../guides/json.md) states both with the queries that show them).
 - **The regular-expression parser reads a class as the set it writes.** A
   pattern's class is the set of characters its items name, read by the
   `regex-syntax` crate for the walk and for the relations alike.
@@ -456,7 +456,7 @@ The soundness is relative to a small, explicit trust base:
   has no membership answer. A change the walk can see — a container whose size
   moves, or a second reading that disagrees with the first — is reported as
   `mutated_during_validation` rather than answered
-  ([the error model](08-error-model.md)); a change it cannot see, such as a
+  ([the error model](../guides/error-model.md)); a change it cannot see, such as a
   field rewritten in place after the walk passed it, leaves an answer about the
   value as it was.
 - **The suites check necessary properties, which is weaker than an oracle.** A

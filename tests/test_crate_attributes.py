@@ -1,7 +1,7 @@
 """The crate roots carry the attributes the pages take on trust.
 
 A page may rest on a property of the source rather than on a value the library
-answers about. `docs/14-soundness.md` rests on one: the crates contain no
+answers about. `docs/explanation/soundness.md` rests on one: the crates contain no
 `unsafe`, so the soundness argument carries no memory-safety obligation beyond
 the compiler's. Nothing about a schema shows that, and no amount of driving
 values would -- an `unsafe` block added tomorrow answers every question here

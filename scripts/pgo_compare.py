@@ -34,7 +34,7 @@ Each wheel is timed in its own environment, and the two readings are compared:
 
 The comparison reports what the profile buys and what it costs. It does not
 decide: whether the release matrix keeps `pgo: true` is a decision about which
-shapes the project serves, and `docs/11-performance.md` is where that decision
+shapes the project serves, and `docs/guides/performance.md` is where that decision
 and its reason are written. So it answers in two of the gates' three codes: 0
 for a reading and 2 for none. The middle one says "this ran and the answer is
 no", and no answer here has that shape.
@@ -206,7 +206,7 @@ def report(plain: Reading, profiled: Reading) -> int:
         "\nA shape inside its band moved by less than this machine does between "
         "runs of one build. What the release matrix does with the ones outside "
         "it is a decision about the shapes the project serves, and "
-        "docs/11-performance.md carries that decision with its reason."
+        "docs/guides/performance.md carries that decision with its reason."
     )
     return EXIT_OK
 

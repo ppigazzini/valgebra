@@ -604,7 +604,7 @@ Five origins are read as containers — `list`, `set`, `frozenset`, `dict` and
 `collections.abc` generic other than `Callable` is **refused**, not read:
 `Sequence[int]` names a protocol whose instances a check cannot enumerate
 without consuming them, and the bare abstract class is available as an
-`isinstance` atom instead ([the API page](../16-api.md) records the refusal).
+`isinstance` atom instead ([the API page](../reference/api.md) records the refusal).
 `Callable[...]`, from either module, is read as the bare `Callable` atom: a
 callable's parameter and return types cannot be read at runtime, so the
 arguments are dropped and the schema asks only `isinstance(x, Callable)`.

@@ -48,7 +48,7 @@ fn schema() -> impl Strategy<Value = Schema> {
 ///
 /// The attribute record, the bound, the length and the step are drawn beside
 /// the literal because the trust base reads each as a set, a value's answer to
-/// it being a fact about the value (`docs/14-soundness.md`), and construction
+/// it being a fact about the value (`docs/explanation/soundness.md`), and construction
 /// folds each with its complement on that ground alone.
 fn set_schema() -> impl Strategy<Value = Schema> {
     let atom = prop_oneof![

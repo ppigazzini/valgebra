@@ -1,6 +1,6 @@
 """Put the compiled extension's docstrings on the API reference.
 
-`docs/16-api.md` is generated from the package by mkdocstrings, which reads
+`docs/reference/api.md` is generated from the package by mkdocstrings, which reads
 the package through griffe. griffe reads the built extension by importing it,
 and it reads an object whose `__module__` is not the module it was found in as
 an import of that object -- an alias to where it says it lives. `Validator`
@@ -29,7 +29,7 @@ evidence the page has content:
     python scripts/docs_stubs.py --check    # after `mkdocs build --strict`
 
 The check imports the package and looks for the first line of each documented
-object's docstring in `site/16-api/index.html`, so a phrase edited in Rust is
+object's docstring in `site/reference/api/index.html`, so a phrase edited in Rust is
 looked for as edited rather than as remembered here.
 """
 
@@ -54,7 +54,7 @@ from _lib import ROOT, arguments  # noqa: E402
 
 PACKAGE = "valgebra"
 COMPILED = "_valgebra"
-PAGE = ROOT / "site" / "16-api" / "index.html"
+PAGE = ROOT / "site" / "reference" / "api" / "index.html"
 #: The objects the page generates a section for, and whose docstrings it must
 #: therefore carry.
 GENERATED = (

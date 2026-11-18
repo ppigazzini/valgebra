@@ -170,6 +170,6 @@ def test_the_worker_imports_the_standard_library_and_valgebra_alone() -> None:
 
 
 def test_the_performance_page_shows_each_reading() -> None:
-    page = (ROOT / "docs" / "11-performance.md").read_text(encoding="utf-8")
+    page = (ROOT / "docs" / "guides" / "performance.md").read_text(encoding="utf-8")
     for step in ("env", "count", "cycles", "symbols"):
         assert f"scripts/perf_inspect.py {step} " in page, step

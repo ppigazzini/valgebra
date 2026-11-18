@@ -531,7 +531,7 @@ fn values_listed(member: &Schema) -> Option<&[Schema]> {
 /// members. A table of a thousand codes against another is a million steps
 /// there and ten thousand comparisons here, which is the difference between the
 /// product the budget binds and a sum it does not
-/// (`docs/15-decidability.md`).
+/// (`docs/explanation/decidability.md`).
 ///
 /// The refutation is the oracle's to give. Two constants at two indices are two
 /// *values* only where the bindings can compare them, and a constant that does

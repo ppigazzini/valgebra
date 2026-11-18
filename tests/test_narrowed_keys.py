@@ -1,9 +1,10 @@
 """A map key narrowed to the words of a regular language.
 
-`docs/15-decidability.md` says a `str` narrowed by a pattern or a length is held by
-a split of the map's `str` keys, so a relation about such a map is decided and a
-key takes one answer however the clauses overlap. These hold that against the walk:
-every answer is checked over dicts drawn from the keys the languages tell apart.
+`docs/explanation/decidability.md` says a `str` narrowed by a pattern or a length
+is held by a split of the map's `str` keys, so a relation about such a map is
+decided and a key takes one answer however the clauses overlap. These hold that
+against the walk: every answer is checked over dicts drawn from the keys the
+languages tell apart.
 """
 
 from __future__ import annotations

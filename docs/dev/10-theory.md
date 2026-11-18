@@ -112,7 +112,7 @@ reads every term as its meet with `u`, and `s ≤ t` in the restricted model is
 `u ∧ s ∧ ¬t = ∅`, one question of the model this tree already decides. So a value
 model whose values embed in Python's takes a set for its top and a frontend for
 its keywords, and no parameter on the algebra: JSON's values are what `json.loads`
-returns ([docs/20-universes.md](../20-universes.md)), and a number spelled two ways is two
+returns ([docs/explanation/universes.md](../explanation/universes.md)), and a number spelled two ways is two
 Python values that every set the frontend builds admits together. TOML's are what
 `tomllib` returns, so one JSON Schema denotes two sets: `{"type": "integer"}` holds
 `1.0` over JSON's values and not over TOML's, where it is a float, and the two
@@ -224,7 +224,7 @@ the point: the general form is a regular expression over element schemas, and
 the IR carries only the *linear* fragment — a fixed prefix and an optional
 repeated tail — which is every shape the schema language can spell; a repeated
 heterogeneous group has no syntax, which
-[15-decidability.md](../15-decidability.md) records. The closure the paper
+[explanation/decidability.md](../explanation/decidability.md) records. The closure the paper
 gives is at the schema level there, through union, intersection and complement
 over the sequence node, rather than inside the sequence body. The automaton
 construction over element sets is built one representation over, in
@@ -476,7 +476,7 @@ path has a third bound, the parser's own nesting limit, which sits between the
 unfolding bound and the descent bound: a document past the unfolding bound is
 refused by the walk, and one past the parser's is refused as unreadable before
 the walk sees it, so the descent bound is unreachable through a document;
-[10-limits.md](../10-limits.md) names the three regions. The conventional default, 128,
+[guides/limits.md](../guides/limits.md) names the three regions. The conventional default, 128,
 follows `serde_json`. **[LOAD-BEARING: the-depth-bound-reports-itself]**
 
 SOURCE: §5 "converts any unbounded descent"
@@ -818,7 +818,7 @@ outputs, so a necessary property of a single input is not one — the review's
 example is that `-1 ≤ sin(x) ≤ 1` is necessary and is not an MR. Cite the review
 for the criterion.
 
-The review also bounds what `docs/14-soundness.md` may rest on these suites: MRs
+The review also bounds what `docs/explanation/soundness.md` may rest on these suites: MRs
 are *necessary* properties, so even a complete set of them "might still not be
 equivalent to a test oracle". That page's trust base records it.
 
@@ -1208,7 +1208,7 @@ next reader rediscovers as a bug.
 
 **The decision is structural, not the emptiness reduction applied uniformly.**
 The cost is a hole wherever an arm is missing, and the boundary is
-[15-decidability.md](../15-decidability.md); what a missing arm costs is a
+[explanation/decidability.md](../explanation/decidability.md); what a missing arm costs is a
 decline the descriptor answers, so every relation the completeness ledger
 records as decided by neither is one past a build or decision bound, each a
 strict row, and the two deciders are measured against each other over a

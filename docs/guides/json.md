@@ -148,7 +148,7 @@ assert is_float.is_valid_json("1e400")
 
 The values a document parses to are a set like any other, so you can write it, ask
 inside it, and have one number however it is written. [Several value
-universes](20-universes.md#the-json-values) does that, and reads TOML's the same way.
+universes](../explanation/universes.md#the-json-values) does that, and reads TOML's the same way.
 
 ## Malformed JSON
 
@@ -210,7 +210,7 @@ refusal, reported by the walk's own depth guard.
 
 A document is parsed in Rust, and a parse that memory cannot be found for ends
 the process rather than raising `MemoryError`: bound a document's size before
-handing it over ([limits](10-limits.md#what-the-bounds-do-not-bound)).
+handing it over ([limits](limits.md#what-the-bounds-do-not-bound)).
 
 `is_valid_json` parses with jiter and validates the parsed JSON value **in
 place**: no intermediate Python objects are built for the structure it walks, so
@@ -219,7 +219,7 @@ against a Python object — a literal, a refinement predicate, or an instance or
 attribute check — is the documented step back into Python (detailed below). The
 same walk runs over either input source — a Python object or a JSON value — so
 the two paths stay equivalent. On the benchmark machine (AMD Ryzen 7 PRO 7840U,
-WSL2, CPython 3.15.2 built as the [performance page](11-performance.md)
+WSL2, CPython 3.15.2 built as the [performance page](performance.md)
 records, the jiter the lockfile pins, the PGO release wheel — the same profile the release
 ships), per-call median on a passing document:
 
@@ -240,7 +240,7 @@ uv run --no-sync --group bench pytest benches/bench_json.py
 
 `scripts/page_figures.py` re-reads this table and the one below with the
 performance page's figures, and the [performance page's
-method](11-performance.md#method) says how to run it.
+method](performance.md#method) says how to run it.
 
 Avoiding materialization helps where the document is large or scalar-heavy: the
 10,000-element array is six times faster than parse-then-validate, and

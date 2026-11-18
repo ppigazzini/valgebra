@@ -203,7 +203,7 @@ that `validate` raises.
 `is_valid_json` walks the parsed document in place, and `validate_json` and
 `load` walk the Python value the parser builds, so a document gets the decision
 and the errors `json.loads` of it would, except where the JSON grammar is
-stricter (`docs/07-json.md`).
+stricter (`docs/guides/json.md`).
 
 The constants pool is one `Vec<Py<PyAny>>` holding four kinds of object — a
 literal's constant, a class, a comparison operand, a user predicate — addressed
@@ -223,7 +223,7 @@ asked of both); the rules alone reach a recursive schema, a predicate or a
 hooked class. A question about a class, a constant or a comparison operand is
 asked back through `LeafRelations`, which `crates/valgebra-py/src/oracle.rs`
 implements. [02-decision.md](02-decision.md) owns the detail and
-`docs/15-decidability.md` the published boundary.
+`docs/explanation/decidability.md` the published boundary.
 
 ## The invariants every zone keeps
 
@@ -290,7 +290,7 @@ A dyadic step asks for a table and 3 of the 243 `multipleOf` in JSONSchemaBench 
 
 **A value universe is a recipe.** What a format holds is a set of Python values, so it is a set to
 write and a meet to ask inside, with no crate, trait or package
-([20-universes.md](../20-universes.md)). So there is no `valgebra-json`: its universe is a recipe
+([explanation/universes.md](../explanation/universes.md)). So there is no `valgebra-json`: its universe is a recipe
 and its reader is `input.rs`. There is no `valgebra-numpy` either, since numpy's generic is a typing
 form and an array's other readings are a `Protocol`.
 
@@ -350,7 +350,7 @@ and `tests/test_adversarial_bounds.py` runs the deepest walks and relations on a
 thread of that size, which the release smoke runs on every wheel it loads. A
 plain or unoptimized build fits another figure and is a build nothing ships; a
 thread a host starts smaller can overflow before the bound refuses, which
-`docs/10-limits.md` tells a caller.
+`docs/guides/limits.md` tells a caller.
 
 A row kinded **not a bound** is possible. The scan that holds this table to the
 tree reads every file-scope integer constant in a crate's source whose value is a

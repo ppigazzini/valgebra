@@ -155,7 +155,7 @@ assert toml_integer.relation_to(json_integer) == "subset"
 
 An array is an instance of a class, so a universe of arrays needs nothing new either:
 `np.ndarray[S, np.dtype[T]]` is the class met with a record of its `shape` and its
-dtype. [What a validator cannot do](17-boundaries.md#it-reads-an-array-through-what-the-array-exposes)
+dtype. [What a validator cannot do](boundaries.md#it-reads-an-array-through-what-the-array-exposes)
 says what that reads, and how the same spelling reads JAX's and PyTorch's. No element
 is read, and a set over the elements is a predicate.
 

@@ -403,7 +403,7 @@ fn is_stdlib_class(ty: &Bound<'_, PyType>, module: &'static str, name: &str) -> 
 /// What the interpreter's module imports in turn is the interpreter's too:
 /// `decimal` binds `_decimal`'s class, and a program replacing that
 /// accelerator, or a class the module binds, changes the interpreter
-/// (`docs/14-soundness.md`).
+/// (`docs/explanation/soundness.md`).
 ///
 /// Read once for each module object and kept under its name, so a
 /// `sys.modules` entry replaced is read again, and the names being those of
@@ -741,7 +741,7 @@ impl PoolRelations<'_, '_> {
     /// **A walk that stopped decides nothing**, so the probe answers in three
     /// values. The walk refuses a value it stopped on -- a predicate that raised,
     /// the depth bound -- and refuses it from the set's complement as well
-    /// (`docs/14-soundness.md`), so a bare refusal is no value outside the set:
+    /// (`docs/explanation/soundness.md`), so a bare refusal is no value outside the set:
     /// read as one, a literal is refuted below `T | ~T`. A refusal is read as a
     /// complement reads its inner walk ([`WalkMode::Settle`]), where a stop is
     /// the third value; an admission needs no such reading, no stop admitting

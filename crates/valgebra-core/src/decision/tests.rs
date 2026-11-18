@@ -8081,7 +8081,7 @@ fn a_record_below_a_union_of_records_is_the_rules_answer() {
 /// level asks a goal per field, so the work grows with the corners: six
 /// fields against their sixty-four decide, seven against their hundred and
 /// twenty-eight spend the budget, which is where six tuple components decide
-/// and seven decline (`docs/15-decidability.md`). A decline is sound, so the
+/// and seven decline (`docs/explanation/decidability.md`). A decline is sound, so the
 /// number is what this holds.
 #[test]
 fn a_record_split_stops_where_the_decision_budget_does() {

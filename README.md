@@ -19,7 +19,7 @@ convention.
 > [!WARNING]
 > **Pre-alpha.** Published to PyPI; the API works, and every `0.0.x` release
 > may break it, saying where in its notes
-> ([versioning](https://ppigazzini.github.io/valgebra/12-changelog/#versioning-and-what-counts-as-a-break)).
+> ([versioning](https://ppigazzini.github.io/valgebra/changelog/#versioning-and-what-counts-as-a-break)).
 
 ## Schemas are sets; the operators are *or*, *and*, *not*
 
@@ -80,7 +80,7 @@ assert intersection(int, complement(int)).is_empty()  # provably no value
   membership relation*, not asserted. A walk that stops — at the depth bound,
   on a value holding itself, at a predicate that raised — decides nothing, and
   where nothing else decided, a schema and its complement both refuse the value
-  ([the laws](https://ppigazzini.github.io/valgebra/04-algebra/#the-laws-hold)).
+  ([the laws](https://ppigazzini.github.io/valgebra/guides/algebra/#the-laws-hold)).
 - **Minimal: a derived pattern does not ship.** valgebra bundles no
   `conditional`, no `at_least_one`, no `one_of`. Those are **derived** by
   composition (see [below](#everything-else-is-derived)). A named wrapper for a
@@ -88,7 +88,7 @@ assert intersection(int, complement(int)).is_empty()  # provably no value
 - **Schemas are comparable values.** `is_subtype_of` (inclusion),
   `is_equivalent` (mutual inclusion), and `is_empty` (unsatisfiable) form a
   **sound** decision procedure: a `True` is correct for every value that answers
-  Python's questions consistently ([the trust base](https://ppigazzini.github.io/valgebra/14-soundness/#what-this-argument-assumes)),
+  Python's questions consistently ([the trust base](https://ppigazzini.github.io/valgebra/explanation/soundness/#what-this-argument-assumes)),
   and the procedure decides a wide fragment completely and stays conservative
   beyond it. Keep `is_equivalent` (semantic) distinct from `==` (the schema's
   normal form).
@@ -156,7 +156,7 @@ assert non_negative_if_int.is_valid("not an int")  # not an int: admitted
 The same handful of operators derives first-matching-case dispatch, key
 cardinality ("at least one of these keys", "exactly one", "not both"),
 length-bounded lists, and conditional records. The recipes — each runnable and
-explained — live in the **[Boolean algebra guide](https://ppigazzini.github.io/valgebra/04-algebra/#composition-recipes)**.
+explained — live in the **[Boolean algebra guide](https://ppigazzini.github.io/valgebra/guides/algebra/#composition-recipes)**.
 
 ## Recursive schemas and JSON
 
@@ -164,7 +164,7 @@ Recursive (`recursive`) schemas describe trees and JSON-like data, and JSON inpu
 is parsed in Rust and checked by the same walk: `is_valid_json` reads the parsed
 tree in place, with no Python objects for its structure, while `validate_json`
 and `load` build the Python value, since a report summarizes it and `load`
-returns it ([JSON input](https://ppigazzini.github.io/valgebra/07-json/)):
+returns it ([JSON input](https://ppigazzini.github.io/valgebra/guides/json/)):
 
 ```python
 from valgebra import Validator
@@ -182,7 +182,7 @@ by `json.loads` and again by the check.
 What a format holds is a set of Python values, so it is a set you can write, and
 asking about its values is a meet with it. JSON's values, TOML's, and arrays by their
 `shape` and `dtype` take no node, mode or keyword, and the relations hold inside them
-as they do outside ([Several value universes](https://ppigazzini.github.io/valgebra/20-universes/)):
+as they do outside ([Several value universes](https://ppigazzini.github.io/valgebra/explanation/universes/)):
 
 ```python
 from valgebra import complement, intersection, recursive, union
@@ -210,8 +210,8 @@ closed, a subsystem's contract is the *intersection* of its parts' contracts, an
 exclusion is a *complement*, and a migration is "old schema *or* new" — contracts
 refactor like code instead of decaying into opaque predicate functions.
 
-Start at the [tutorial](https://ppigazzini.github.io/valgebra/01-tutorial/); the [recipes](https://ppigazzini.github.io/valgebra/19-recipes/)
-do three of those tasks end to end, and the [algebra guide](https://ppigazzini.github.io/valgebra/04-algebra/)
+Start at the [tutorial](https://ppigazzini.github.io/valgebra/get-started/tutorial/); the [recipes](https://ppigazzini.github.io/valgebra/get-started/recipes/)
+do three of those tasks end to end, and the [algebra guide](https://ppigazzini.github.io/valgebra/guides/algebra/)
 covers composition.
 
 ### As a harness over a codebase that has none
@@ -265,7 +265,7 @@ assert Validator(bool | int).is_equivalent(int)
 assert Validator(TimeoutError).is_subtype_of(OSError)
 ```
 
-**[Inspecting a codebase](https://ppigazzini.github.io/valgebra/09-inspection/)** is the full set of recipes, with
+**[Inspecting a codebase](https://ppigazzini.github.io/valgebra/guides/inspection/)** is the full set of recipes, with
 what each cannot see.
 
 Neither mode requires the other. A codebase can adopt valgebra as a runtime
@@ -355,7 +355,7 @@ container is read under that container's lock — so the numbers live on one pag
 with the harness, the machine and the versions beside them rather than being
 quoted here. The comparison is not
 apples-to-apples and is gated against regression in CI; see the
-[performance page](https://ppigazzini.github.io/valgebra/11-performance/) for the method, the matrix, and the limits.
+[performance page](https://ppigazzini.github.io/valgebra/guides/performance/) for the method, the matrix, and the limits.
 
 ## Install
 
@@ -382,8 +382,8 @@ uv run --no-sync maturin develop --uv  # build the Rust extension into the venv
 
 - **Schemas are sets; validation is membership.** Subtyping is set inclusion and
   equivalence is mutual inclusion — sound, deciding a wide fragment and staying
-  deliberately conservative beyond it ([foundations](https://ppigazzini.github.io/valgebra/13-foundations/),
-  [decidability](https://ppigazzini.github.io/valgebra/15-decidability/), [soundness argument](https://ppigazzini.github.io/valgebra/14-soundness/)).
+  deliberately conservative beyond it ([foundations](https://ppigazzini.github.io/valgebra/explanation/foundations/),
+  [decidability](https://ppigazzini.github.io/valgebra/explanation/decidability/), [soundness argument](https://ppigazzini.github.io/valgebra/explanation/soundness/)).
 - **A closed, minimal algebra.** `union`, `intersection` and `complement` close
   over every schema, and the node set is a generating set plus the
   representatives its normal form names, each held to its column by

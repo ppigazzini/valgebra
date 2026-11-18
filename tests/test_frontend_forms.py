@@ -289,7 +289,7 @@ def test_an_annotation_python_cannot_evaluate_raises_what_evaluating_it_raises()
     """A name the class's module does not define raises `NameError` at build.
 
     The class's annotations are resolved when the validator is built, as
-    `docs/16-api.md` says, so a name imported only under `TYPE_CHECKING` -- the
+    `docs/reference/api.md` says, so a name imported only under `TYPE_CHECKING` -- the
     name here, which is never defined -- is Python's error and not a refusal.
     """
 

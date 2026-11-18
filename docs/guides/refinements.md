@@ -31,7 +31,7 @@ assert not adult.is_valid(5)
 ```
 
 Refinements built from bound and length markers also take part in the
-[decision procedure](15-decidability.md): a refinement is a subtype of its base and
+[decision procedure](../explanation/decidability.md): a refinement is a subtype of its base and
 of a looser refinement, and a bound conjunction that cannot be satisfied is
 detected as empty.
 
@@ -259,7 +259,7 @@ alternation of two halves. A pattern matches the text of a string, and a string
 holding a lone surrogate -- which `json.loads` makes of an escaped `"\ud800"` --
 has no such text, so it is outside every `Regex` refinement, and `str` is never
 below a pattern over it however much text the pattern matches
-([what the soundness argument assumes](14-soundness.md#what-this-argument-assumes)).
+([what the soundness argument assumes](../explanation/soundness.md#what-this-argument-assumes)).
 A compiled
 `re.Pattern` works as metadata too:
 
@@ -289,7 +289,7 @@ the pattern, which is how this engine spells them. `Regex` itself takes its
 pattern as a `str` and raises `TypeError` for anything else when it is made.
 It pickles and copies as the pattern it holds, so a schema carrying one can be
 sent to another process and built there, as
-[a validator cannot be](17-boundaries.md#a-validator-does-not-pickle).
+[a validator cannot be](../explanation/boundaries.md#a-validator-does-not-pickle).
 
 ### The dialect is Rust's, not `re`'s
 
@@ -759,11 +759,11 @@ assert not final.is_valid(0)
 ```
 
 Passed as a schema on its own, a callable is **refused**. Read as the
-[fallback literal](03-schema-language.md#anything-unrecognized-is-a-literal)
+[fallback literal](schema-language.md#anything-unrecognized-is-a-literal)
 reads an object, it would denote the one function object, and
 `intersection(Record, kind_is_known)` would be a schema admitting nothing that
 nothing reports: `is_empty` answering `False` is "no, or not yet proven" (see
-the [decidability boundary](15-decidability.md#the-contract)), and the meet of a
+the [decidability boundary](../explanation/decidability.md#the-contract)), and the meet of a
 record with a function object's literal is one it does not decide. The refusal names the two
 spellings that were meant, the refinement as `Annotated` and the constant as
 `Literal`:

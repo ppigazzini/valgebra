@@ -41,11 +41,11 @@ of the keys it claims. Where those are whole kinds -- `dict[str, int]` -- the
 relations decide the result like any other map. Where they are literals --
 `dict[Literal["a"], int]` -- the complement is part of `str`, which the set
 representation has no part for, and a relation about the result may answer
-`"undecided"` ([decidability](15-decidability.md)). Membership is exact either
+`"undecided"` ([decidability](../explanation/decidability.md)). Membership is exact either
 way.
 
 A fixed-length list is the native `[A, B]` literal (see the [schema
-language](03-schema-language.md)).
+language](../guides/schema-language.md)).
 
 ## Refinement markers
 
@@ -65,7 +65,7 @@ the dunder behind a type slot and that is what introspection would show.
 | --- | --- | --- |
 | `obj in validator` | `__contains__` | Membership: the operator form of `is_valid`, so a check reads as the set test it is. Python spells membership `in` as it spells a union `\|`, which is why both are operators and intersection and complement are not. |
 | `a \| b` | `__or__`, `__ror__` | The union of the two schemas. `\|` is the operator typing already uses for a union; intersection and complement have no typing operator and stay named calls. The reflected form is what makes `None \| validator` work. |
-| `a == b` | `__eq__` | Equality of the **normal form**: the schema trees, recursive definitions, and pooled constants all match, after the lattice laws construction settles — so a difference of member order, of a repeat, or of an identity is not one, and neither is the order the `recursive` definitions were met in: a reference is read through to the definition it names ([the algebra page](04-algebra.md#subtyping-equivalence-and-emptiness)). Ask `is_equivalent` for the semantic question — whether two schemas denote the same set, which needs a containment rather than a law. |
+| `a == b` | `__eq__` | Equality of the **normal form**: the schema trees, recursive definitions, and pooled constants all match, after the lattice laws construction settles — so a difference of member order, of a repeat, or of an identity is not one, and neither is the order the `recursive` definitions were met in: a reference is read through to the definition it names ([the algebra page](../guides/algebra.md#subtyping-equivalence-and-emptiness)). Ask `is_equivalent` for the semantic question — whether two schemas denote the same set, which needs a containment rather than a law. |
 | `hash(validator)` | `__hash__` | Consistent with `==`, so a validator is a dict key or a set member. It digests the schema shape, each definition a reference names, and each pooled constant's own hash, so `Literal[1]` and `Literal[2]` hash apart; a constant with no hash contributes nothing, so an unhashable constant cannot break it. Computed once and kept, as a `frozenset` keeps its hash. |
 | `repr(validator)` | `__repr__` | A rendering of the schema as an expression that builds it. |
 
@@ -132,7 +132,7 @@ length: a render is as long as the schema unfolded, and a chain of definitions
 each naming the last twice prints the last once per path to it -- sixteen
 links of a hundred nodes print megabytes. A REPL, a debugger, `logging` with
 `%r` and pytest's assertion rewriting all ask for it. Do not parse a repr: it
-is for a person to read, and [inspection](09-inspection.md) says how to ask a
+is for a person to read, and [inspection](../guides/inspection.md) says how to ask a
 schema questions instead.
 
 ## Lattice bounds
@@ -150,14 +150,14 @@ schema questions instead.
 `nothing` is also where the third answer about emptiness is asked for:
 `is_empty` is a predicate and reports the proof, while
 `relation_to(nothing)` reports which of proof, refutation and decline the
-procedure reached ([the boundary](15-decidability.md)).
+procedure reached ([the boundary](../explanation/decidability.md)).
 
 Both are ordinary validators: they compose with the combinators, compare with
 `is_subtype_of`, and are what the constructors fold to — `intersection(int,
-complement(int))` **is** `nothing` ([the algebra](04-algebra.md)). `Any` is the
+complement(int))` **is** `nothing` ([the algebra](../guides/algebra.md)). `Any` is the
 same set and the same schema as `anything`, differing
 only in what `repr` gives back; see
-[`Any` versus `anything`](04-algebra.md#any-versus-anything).
+[`Any` versus `anything`](../guides/algebra.md#any-versus-anything).
 
 ```python
 from valgebra import Validator, anything, complement, intersection, nothing, union
@@ -181,7 +181,7 @@ of three, and which one says what went wrong. A class whose annotation Python
 cannot evaluate raises what evaluating it raises, before any of them: a
 `NameError` for a name its module does not define when the validator is built,
 such as an import moved under `if TYPE_CHECKING:` ([static
-checking](18-static-checking.md)).
+checking](../guides/static-checking.md)).
 
 | Raised | When | Example |
 | --- | --- | --- |
@@ -202,7 +202,7 @@ is one bound, `MAX_SCHEMA_DEPTH`, on a schema a sequence of calls built and on
 one an annotation spells -- the frontend descends one level past it, so the
 message names the bound and the schema past it is refused rather than
 half-built -- and `MAX_SCHEMA_DEPTH` is importable so code that sizes a schema
-reads it rather than repeating it. The [resource limits](10-limits.md) guide covers all three
+reads it rather than repeating it. The [resource limits](../guides/limits.md) guide covers all three
 sizes.
 
 ```python
@@ -258,7 +258,7 @@ instance, so they are written here rather than generated.
 | `expected` | `str` | A short label of the set the first item expected, such as `int`. |
 | `value` | `str` | A repr-style summary of the first item's offending value. |
 
-The [error model](08-error-model.md) guide gives the path format and the
+The [error model](../guides/error-model.md) guide gives the path format and the
 properties a code carries, and the files that declare the codes;
 `tests/test_error_matrix.py` drives every code a report can carry, because a
 list written out beside the walk drifts from it.
@@ -284,7 +284,7 @@ assert raised
 
 Three module constants give the bounds every schema-growing call is checked
 against, so a caller sizing a schema reads the number rather than repeating it.
-[Resource limits](10-limits.md) says what each one bounds and why.
+[Resource limits](../guides/limits.md) says what each one bounds and why.
 
 | name | value | bounds |
 | --- | --- | --- |

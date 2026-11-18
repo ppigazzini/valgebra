@@ -1,6 +1,6 @@
 """Every constraint is put to every kind, and either narrows it or is refused.
 
-`docs/05-refinements.md` states the rule in one sentence: "A constraint must
+`docs/guides/refinements.md` states the rule in one sentence: "A constraint must
 also be one the base can answer [...] A constraint no value of the base can
 answer is therefore refused too". That sentence is about a **product** -- the
 markers the page lists, by the kinds a base's values have -- and a sentence

@@ -522,8 +522,8 @@ ledger that holds it in both directions:
 | every refusal the frontend writes | the error constructors in `build*.rs` | a test matches the message the constructor writes | `tests/test_frontend_refusals.py` |
 | every code a report can carry, in both modes and on both paths | the same walk | the code is driven at that mode and on that path | `tests/test_error_matrix.py`, held by `tests/test_use_case_ledger.py` |
 | every ordered pair of schema variants | the `Schema` enum in `ir.rs`, one representative each | the pair is proved, refuted with a value the walk checks, or declined with a reason | `tests/test_relation_ledger.py` |
-| every form the schema-language pages tabulate | the tables in `03-schema-language.md` and `05-refinements.md` | the form is accepted with its `repr` and a member, or refused with the refusals ledger's pattern | `tests/test_form_ledger.py` |
-| every entry of the published decidability boundary | the three lists in `15-decidability.md` | a decided entry is driven to its answer, a conservative one to `undecided`, an undecidable one to its refusal or its atom | `tests/test_boundary_ledger.py` |
+| every form the schema-language pages tabulate | the tables in `guides/schema-language.md` and `guides/refinements.md` | the form is accepted with its `repr` and a member, or refused with the refusals ledger's pattern | `tests/test_form_ledger.py` |
+| every entry of the published decidability boundary | the three lists in `explanation/decidability.md` | a decided entry is driven to its answer, a conservative one to `undecided`, an undecidable one to its refusal or its atom | `tests/test_boundary_ledger.py` |
 | every constraint, against every kind a base's values have | `Constraint` in `ir.rs` and `Kind` in `kind.rs` | the constraint narrows the base, with a value it holds of and one it does not, or the build is refused with the words naming what the base cannot answer | `tests/test_constraint_matrix.py` |
 | every outcome a method's docstring names | the binding's `Raises:` blocks | the call sits inside a `pytest.raises` for it, read from the syntax tree | `tests/test_surface_outcomes.py` |
 | every code under every location shape | the error-model page's location grammar, over the code table | the code is driven at that shape in both modes with the path segment asserted | `tests/test_error_matrix.py` |
@@ -714,7 +714,7 @@ witness each refutation stands on, and the enumerated universes.
 **The stack a walk needs is the shipped build's, not a development build's.**
 `maturin develop` builds without optimization, and there a walk to the depth
 bound needs 1.5 to 1.9 MiB of native stack on Linux, against the 1 MiB thread
-[the limits page](../10-limits.md) promises for the wheels. A test that runs a
+[the limits page](../guides/limits.md) promises for the wheels. A test that runs a
 deep walk on a thread of its own overflows that thread on a development build.
 The suite runs on the main thread, which has 8 MiB on Linux and macOS; the
 Windows rows build at `opt-level=1`, where every walk to the bound in the suite

@@ -483,7 +483,7 @@ pub(crate) fn install_lazy_attributes(py: Python<'_>) -> PyResult<()> {
 /// `BaseException.__reduce__` carries the instance dictionary, and the failures
 /// live there as a Rust object that does not travel. Forcing the six turns the
 /// error into the plain data the model documents -- which is what crosses a
-/// process boundary, and what `docs/08-error-model.md` promises pickling gives.
+/// process boundary, and what `docs/guides/error-model.md` promises pickling gives.
 ///
 /// The state handed on is a copy of the dictionary without the failures, and
 /// the error itself keeps them. Deleting them from the error is a write a

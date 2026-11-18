@@ -204,7 +204,7 @@ Recursion is bounded so it always terminates cleanly:
 - A value nested **past a fixed depth** fails with `recursion_limit` rather than
   overflowing the native stack: 128 levels of unfolding, and 384 levels of
   descent in total, which is the bound a deep definition body reaches first
-  ([limits](10-limits.md)). Under `recursive(lambda t: union(int, [t]))`, 127
+  ([limits](limits.md)). Under `recursive(lambda t: union(int, [t]))`, 127
   lists nested around an `int` are a member and 128 are not: the `int` at the
   bottom is the 128th unfolding.
 - A **non-contractive** body — one whose recursive reference is not under a
@@ -222,7 +222,7 @@ assert not recursive(lambda s: union(int, [s])).is_valid(cyclic)  # recursion_lo
 ## Recursion in the decision procedure
 
 Recursive schemas also take part in [subtyping, equivalence, and
-emptiness](15-decidability.md). Equirecursive schemas compare at their greatest
+emptiness](../explanation/decidability.md). Equirecursive schemas compare at their greatest
 fixpoint — a coinductive comparison that assumes a goal already being proven on
 the current path — so a recursive schema is a subtype of itself and two
 structurally identical recursive schemas are equivalent, and a recursive schema

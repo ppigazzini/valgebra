@@ -151,7 +151,7 @@ def _has_text(value: object) -> TypeGuard[str]:
     A pattern is matched against the *text* of a string, and a string carrying
     a lone surrogate has none: the code point encodes no character, so no
     pattern matches it however much the pattern admits
-    (``docs/15-decidability.md``). Stated here by asking Python to encode it,
+    (``docs/explanation/decidability.md``). Stated here by asking Python to encode it,
     which is the same question by a different route.
 
     A type guard rather than a `bool`: what it answers is that the value is a

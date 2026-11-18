@@ -427,7 +427,7 @@ def test_a_code_a_document_can_carry_is_reported_on_every_json_path(code: str) -
     assert Validator(case.spec).is_valid_json(document) is False
 
 
-#: The location grammar `docs/08-error-model.md` states, one shape per row: how
+#: The location grammar `docs/guides/error-model.md` states, one shape per row: how
 #: a failing value is placed under a key or an index, and the segment the path
 #: carries for it. A string key is itself; an integer key is itself as an
 #: integer, whatever its size, and a boolean key with it, since `d[True]` and

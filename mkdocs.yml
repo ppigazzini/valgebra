@@ -33,32 +33,32 @@ theme:
         name: Switch to light mode
 
 nav:
-  - Home: README.md
+  - Home: index.md
   - Getting started:
-      - Installation: 00-installation.md
-      - Tutorial: 01-tutorial.md
-      - Quickstart: 02-quickstart.md
-      - Recipes: 19-recipes.md
+      - Installation: get-started/installation.md
+      - Tutorial: get-started/tutorial.md
+      - Quickstart: get-started/quickstart.md
+      - Recipes: get-started/recipes.md
   - Guides:
-      - Schema language: 03-schema-language.md
-      - The Boolean algebra: 04-algebra.md
-      - Refinements: 05-refinements.md
-      - Recursive schemas: 06-recursion.md
-      - JSON input: 07-json.md
-      - Error model: 08-error-model.md
-      - Inspecting a codebase: 09-inspection.md
-      - Resource limits: 10-limits.md
-      - Performance: 11-performance.md
-      - Static checkers: 18-static-checking.md
-  - Release notes: 12-changelog.md
+      - Schema language: guides/schema-language.md
+      - The Boolean algebra: guides/algebra.md
+      - Refinements: guides/refinements.md
+      - Recursive schemas: guides/recursion.md
+      - JSON input: guides/json.md
+      - Error model: guides/error-model.md
+      - Inspecting a codebase: guides/inspection.md
+      - Resource limits: guides/limits.md
+      - Performance: guides/performance.md
+      - Static checkers: guides/static-checking.md
+  - Release notes: changelog.md
   - Explanation:
-      - Foundations: 13-foundations.md
-      - Soundness argument: 14-soundness.md
-      - Decidability boundary: 15-decidability.md
-      - What it cannot do: 17-boundaries.md
-      - Several value universes: 20-universes.md
+      - Foundations: explanation/foundations.md
+      - Soundness argument: explanation/soundness.md
+      - Decidability boundary: explanation/decidability.md
+      - What it cannot do: explanation/boundaries.md
+      - Several value universes: explanation/universes.md
   - Reference:
-      - API reference: 16-api.md
+      - API reference: reference/api.md
 
 # The developer set lives beside the user docs and is NOT published: it describes
 # the codebase for a contributor and an agent reading it cold, which is a
@@ -100,6 +100,34 @@ markdown_extensions:
 
 plugins:
   - search
+  # A page the site has served at another address answers there still: a page
+  # that sends the reader on to where it lives now, with the anchor the link
+  # named where the browser runs scripts. An entry stays as long as the site
+  # does, since links to the old address do, the README of every release on
+  # PyPI among them.
+  - redirects:
+      redirect_maps:
+        00-installation.md: get-started/installation.md
+        01-tutorial.md: get-started/tutorial.md
+        02-quickstart.md: get-started/quickstart.md
+        19-recipes.md: get-started/recipes.md
+        03-schema-language.md: guides/schema-language.md
+        04-algebra.md: guides/algebra.md
+        05-refinements.md: guides/refinements.md
+        06-recursion.md: guides/recursion.md
+        07-json.md: guides/json.md
+        08-error-model.md: guides/error-model.md
+        09-inspection.md: guides/inspection.md
+        10-limits.md: guides/limits.md
+        11-performance.md: guides/performance.md
+        18-static-checking.md: guides/static-checking.md
+        12-changelog.md: changelog.md
+        13-foundations.md: explanation/foundations.md
+        14-soundness.md: explanation/soundness.md
+        15-decidability.md: explanation/decidability.md
+        17-boundaries.md: explanation/boundaries.md
+        20-universes.md: explanation/universes.md
+        16-api.md: reference/api.md
   - mkdocstrings:
       handlers:
         python:
@@ -136,29 +164,29 @@ plugins:
       full_output: llms-full.txt
       sections:
         Getting started:
-          - README.md: What valgebra is, how it is positioned, and where to start.
-          - 00-installation.md: Install the package and its build toolchain.
-          - 01-tutorial.md: Guided learning path from a scalar schema to an inspected failure.
-          - 02-quickstart.md: Condensed feature tour for readers who know the domain.
-          - 19-recipes.md: Tasks done end to end -- a response in a test, a value whose type a checker does not know, a schema against its last version, stored data against a new schema, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, a message routed by its shape.
+          - index.md: What valgebra is, how it is positioned, and where to start.
+          - get-started/installation.md: Install the package and its build toolchain.
+          - get-started/tutorial.md: Guided learning path from a scalar schema to an inspected failure.
+          - get-started/quickstart.md: Condensed feature tour for readers who know the domain.
+          - get-started/recipes.md: Tasks done end to end -- a response in a test, a value whose type a checker does not know, a schema against its last version, stored data against a new schema, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, a message routed by its shape.
         Guides:
-          - 03-schema-language.md: Every schema form with its denotation as a set of Python values.
-          - 04-algebra.md: The Boolean lattice (union, intersection, complement), the normal form construction builds, and the recipes derived from them.
-          - 05-refinements.md: Constraints and predicate refinements over a base schema.
-          - 06-recursion.md: The recursive fixpoint for self-referential schemas.
-          - 07-json.md: Parsing and validating JSON on the Rust path.
-          - 08-error-model.md: Exception type, error codes, and the violation path format.
-          - 09-inspection.md: Using valgebra to interrogate a codebase that has no schemas of its own.
-          - 10-limits.md: Resource limits and the bounds the validator enforces.
-          - 11-performance.md: Measured benchmarks, datasets, and compared versions.
-          - 18-static-checking.md: What ty, mypy and pyright read from a schema, the spellings they refuse, and the ruff settings a project that validates its own classes needs.
+          - guides/schema-language.md: Every schema form with its denotation as a set of Python values.
+          - guides/algebra.md: The Boolean lattice (union, intersection, complement), the normal form construction builds, and the recipes derived from them.
+          - guides/refinements.md: Constraints and predicate refinements over a base schema.
+          - guides/recursion.md: The recursive fixpoint for self-referential schemas.
+          - guides/json.md: Parsing and validating JSON on the Rust path.
+          - guides/error-model.md: Exception type, error codes, and the violation path format.
+          - guides/inspection.md: Using valgebra to interrogate a codebase that has no schemas of its own.
+          - guides/limits.md: Resource limits and the bounds the validator enforces.
+          - guides/performance.md: Measured benchmarks, datasets, and compared versions.
+          - guides/static-checking.md: What ty, mypy and pyright read from a schema, the spellings they refuse, and the ruff settings a project that validates its own classes needs.
         Release notes:
-          - 12-changelog.md: Every released version, what it changed, and what to do on upgrade.
+          - changelog.md: Every released version, what it changed, and what to do on upgrade.
         Explanation:
-          - 13-foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
-          - 14-soundness.md: Why membership checking is sound on its own terms.
-          - 15-decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
-          - 17-boundaries.md: What a runtime validator cannot do, and why each boundary is where it is.
-          - 20-universes.md: JSON's and TOML's values, and arrays, as sets below the top, in one algebra with no vocabulary of their own.
+          - explanation/foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
+          - explanation/soundness.md: Why membership checking is sound on its own terms.
+          - explanation/decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
+          - explanation/boundaries.md: What a runtime validator cannot do, and why each boundary is where it is.
+          - explanation/universes.md: JSON's and TOML's values, and arrays, as sets below the top, in one algebra with no vocabulary of their own.
         API reference:
-          - 16-api.md: The full public surface, generated from the package docstrings.
+          - reference/api.md: The full public surface, generated from the package docstrings.

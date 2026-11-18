@@ -55,7 +55,7 @@ contents.
 Where the value really is a `dict` or a `list`, the builtin form denotes the set
 you want: `dict[K, V]` for `Mapping[K, V]`, `list[T]` for `Sequence[T]`. Where it
 is not — a `UserDict`, a `deque` — no form here denotes it, and a
-[predicate refinement](05-refinements.md) over the class is the available
+[predicate refinement](refinements.md) over the class is the available
 expression.
 
 ## Scalars
@@ -96,7 +96,7 @@ so write `complex | float | int` for that set.
 Both are the **top** of the lattice (`anything`): every value. They build the
 same schema, and the only difference is the one `repr` gives back: `Any` prints
 as `Any`, and `object` as `anything` ([the
-algebra](04-algebra.md#any-versus-anything)).
+algebra](algebra.md#any-versus-anything)).
 
 ```python
 from typing import Any
@@ -113,7 +113,7 @@ assert repr(Validator(Any)) == "Any"
 
 Both are the **bottom** of the lattice (`nothing`): the empty set, which no
 value belongs to. They build the schema `nothing` is, and print as `nothing`
-([lattice bounds](16-api.md#lattice-bounds)). Both are in `typing` on every
+([lattice bounds](../reference/api.md#lattice-bounds)). Both are in `typing` on every
 supported release.
 
 ## Collections
@@ -251,7 +251,7 @@ assert not Validator(Literal[1]).is_valid(1.0)
 `bool` value, an enum member, `None` -- and a static checker refuses anything
 else there. Any other constant, a `float` or an instance, is written bare:
 `Validator(1.0)` is the schema `Literal[1.0]` names, and a checker accepts it
-([static checkers](18-static-checking.md)). A tuple is one exception: a bare
+([static checkers](static-checking.md)). A tuple is one exception: a bare
 tuple, a named tuple's value included, is refused as a tuple literal, which
 `(int, str)` would read as a shape and a constant alike, and the constant
 `(1, 2)` is written `tuple[Literal[1], Literal[2]]`. A set and a frozen set are
@@ -337,7 +337,7 @@ admits nothing, and nothing says so. The typing spec's grammar for a type has
 no production for a function either. Each meaning has its spelling, and the
 refusal names both: as `Annotated` metadata the callable is a predicate
 narrowing a base (see
-[refinements](05-refinements.md#a-bare-callable-is-metadata-only)), and in a
+[refinements](refinements.md#a-bare-callable-is-metadata-only)), and in a
 `Literal` it is the object itself. A class is callable too, and is read as the
 class it is.
 
@@ -425,7 +425,7 @@ with a matching value, and a closed record admits no key outside the declared
 names. The typing spelling is a `TypedDict`, open as the typing spec defines one
 or closed with `closed=True` (PEP 728; in `typing` from 3.15 and in
 `typing_extensions` before). A static checker reads it as its own type, so
-`is_valid` narrows to it ([static checkers](18-static-checking.md)). `close()`
+`is_valid` narrows to it ([static checkers](static-checking.md)). `close()`
 does not close one: its openness is the clause `str: anything` its reading
 carries, a region that clause claims, and `close` shuts only the keys no clause
 claims (below). The closed record is `closed=True`.
@@ -512,7 +512,7 @@ assert not Validator(Query).is_valid({})  # required
 It is one of the forms whose `repr` does not read back as Python: it renders as
 `{<required: 'page?'>: int, str: anything}`, the mark that says the key named
 `page?` is required, where `{'page?': int}` would read back as the optional key
-`page` ([boundaries](17-boundaries.md), and [stable repr](#stable-repr) below).
+`page` ([boundaries](../explanation/boundaries.md), and [stable repr](#stable-repr) below).
 
 Open the record with `open` (undeclared keys admitted) or re-close it with
 `close`:
@@ -598,7 +598,7 @@ anything}`, and two clauses carrying one value are one clause over the union of
 their keys, so opening `dict[str, anything]` gives a single clause over every key -- and that
 has to be so too: where the keys claimed hold a literal, the long spelling is
 keyed by the literal's complement, a shape [the set representation
-declines](15-decidability.md). The one join `close` leaves out is the one that
+declines](../explanation/decidability.md). The one join `close` leaves out is the one that
 would write the top clause, which closes to `{}`: `{anything: int, int: anything,
 complement(int): anything}` claims every key in its first clause, and closes to
 itself. Neither fold is recoverable, so closing afterwards
@@ -895,7 +895,7 @@ assert Validator({"name": str, str: int}).open().is_equivalent(partly_open)
 ```
 
 A complement of whole kinds stays in the [decided
-fragment](15-decidability.md): the set representation reads `complement(str)`
+fragment](../explanation/decidability.md): the set representation reads `complement(str)`
 as every other kind. A complement of a literal holds part of a kind, which it
 declines, so relations about such a map fall back to the rules. Membership is
 unaffected either way — the walk reads the value.
@@ -912,8 +912,8 @@ unaffected either way — the walk reads the value.
 | `Enum` | the members of the enumeration |
 | `Protocol` | the values carrying every member it declares, each holding what the member declares ([below](#a-protocol-is-the-record-of-its-members)) |
 | `NewType` | the set of the supertype it wraps |
-| PEP 695 `type` alias | the set of the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
-| a generic alias applied, `Pair[int]` | the set of its body with the arguments in place of its parameters, a missing one taking its default ([recursion](06-recursion.md#a-generic-alias-applied)) |
+| PEP 695 `type` alias | the set of the aliased type, and ties the fixpoint where the alias names itself ([recursion](recursion.md)) |
+| a generic alias applied, `Pair[int]` | the set of its body with the arguments in place of its parameters, a missing one taking its default ([recursion](recursion.md#a-generic-alias-applied)) |
 | a generic `TypedDict`, dataclass or `NamedTuple` applied, `Box[int]` | the class's set with the arguments in place of its parameters in every field, a parameter left out taking its default ([below](#a-generic-class-applied)) |
 
 ```python
@@ -1114,7 +1114,7 @@ assert not Validator(Named).is_valid("Ada")  # a str carries no `name`
 Each member is checked for what it holds, so a `name` that is present and
 not a string is refused, where `isinstance` against the protocol would admit
 it. A method is read as `Callable[...]` is, as callable with its parameters and
-return unchecked ([what a validator cannot do](17-boundaries.md#it-cannot-look-inside-a-callable)).
+return unchecked ([what a validator cannot do](../explanation/boundaries.md#it-cannot-look-inside-a-callable)).
 An instance of a class that names the protocol among its bases belongs only
 where it carries the members.
 
@@ -1164,8 +1164,8 @@ no such footgun.
     A class whose own type appears in a field (a tree node, a linked list) is
     recursive and cannot compile directly unless the field names it through a
     `type` alias, which ties the fixpoint
-    ([recursion](06-recursion.md#why-classes-need-it)); otherwise express it
-    with [`recursive`](06-recursion.md), which ties the fixpoint explicitly.
+    ([recursion](recursion.md#why-classes-need-it)); otherwise express it
+    with [`recursive`](recursion.md), which ties the fixpoint explicitly.
 
 !!! note "Bare classes, callables, and the runtime boundary"
     A class the tables above do not read by its declaration is an `isinstance`
@@ -1210,7 +1210,7 @@ itself -- has this one. For any other class it is what `Validator` builds. A
 ## Refinements
 
 `Annotated[T, ...markers]` denotes the values of `T` that satisfy every marker —
-bounds, lengths, multiples, patterns and predicates. See the [refinements guide](05-refinements.md).
+bounds, lengths, multiples, patterns and predicates. See the [refinements guide](refinements.md).
 
 ## Stable repr
 
@@ -1242,7 +1242,7 @@ assert Validator({"name": str, anything: anything}) == opened
 ```
 
 It is a **rendering**, not a serialization. A few forms cannot be written as an
-expression and do not read back, and [the API page](16-api.md) owns the list,
+expression and do not read back, and [the API page](../reference/api.md) owns the list,
 each with the reason. A schema deeper than the renderer's own bound prints
 `<...>`, a mark chosen to be a syntax error, so a render that lost something
 cannot be read back as a schema that kept it. A required key whose name ends in
@@ -1251,5 +1251,5 @@ cannot be read back as a schema that kept it. A required key whose name ends in
 reason: `{<required: 'a?'>: int, str: anything}`. A class prints as its name
 only where the name builds what the schema holds, so a class met with a shape or
 a record it does not declare prints as the meet it is. Do not parse a repr to
-recover structure — see [inspection](09-inspection.md) for asking a schema
+recover structure — see [inspection](inspection.md) for asking a schema
 questions instead.

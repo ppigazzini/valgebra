@@ -378,7 +378,7 @@ raises an ordinary exception reads as unequal, as adding nothing to the hash,
 and as `<unrepresentable>`, and one raising a fatal signal raises it out of
 `==`, `hash` or `repr`. Python's allocator refusing an object valgebra itself
 builds raises `MemoryError` too
-([limits](10-limits.md#what-the-bounds-do-not-bound)).
+([limits](limits.md#what-the-bounds-do-not-bound)).
 
 ## The model is built when it is asked for
 
@@ -576,13 +576,13 @@ The list is bounded at 64 labels (`UNION_LABEL_LIMIT` in
 `crates/valgebra-py/src/check/walk.rs`) and ends in `...` beyond that, so a
 union wide enough to be a generated table reports a readable prefix. A branch
 that is itself a union contributes its own members, so the label count and the
-branch count are not the same number. See [resource limits](10-limits.md).
+branch count are not the same number. See [resource limits](limits.md).
 
 **`expected` describes the schema as built, not a canonical name for the set.**
 `int | str` and `~(~int & ~str)` denote one set and read differently, `one
 of: int, str` and `not (not int and not str)`, in the same way `repr` renders
 the schema that was built. Read
-`expected` to see what was asked for; use [`is_equivalent`](04-algebra.md) to ask
+`expected` to see what was asked for; use [`is_equivalent`](algebra.md) to ask
 whether two schemas mean the same thing.
 
 *As built* rather than *as written*, because the constructors fold: `complement`

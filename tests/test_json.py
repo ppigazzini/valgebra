@@ -235,7 +235,7 @@ def test_the_two_documents_the_grammar_refuses_and_the_module_accepts() -> None:
     the value `json.loads` builds. That holds on every document both accept,
     and the grammar is the stricter of the two: a non-standard float token and
     an escape naming a lone surrogate are documents Python's module parses and
-    this parser refuses ([the JSON path](../docs/07-json.md)).
+    this parser refuses ([the JSON path](../docs/guides/json.md)).
 
     Refusing is the sound direction -- the JSON path admits a subset of what
     the object path does, never a different value -- so each is reported as

@@ -344,7 +344,7 @@ impl Default for WalkState {
 /// stack any thread `CPython` creates has. 512 levels needed 1.5 MiB, and 255
 /// would have refused `int | list[T]` from 85 unfoldings. An unoptimized build
 /// spends more again and fits no such figure, which is a build nothing ships.
-/// A thread given less than 1 MiB can overflow first; `docs/10-limits.md` says
+/// A thread given less than 1 MiB can overflow first; `docs/guides/limits.md` says
 /// so.
 pub(crate) const MAX_WALK_DEPTH: usize = 3 * MAX_RECURSION_DEPTH;
 

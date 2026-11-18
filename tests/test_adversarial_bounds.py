@@ -800,7 +800,7 @@ def test_deeply_nested_json_is_rejected_cleanly() -> None:
 def test_the_parser_and_the_walk_bound_a_document_in_that_order() -> None:
     """Which bound a deep document reaches, and which one it reaches first.
 
-    `docs/10-limits.md` says the code names which bound was reached:
+    `docs/guides/limits.md` says the code names which bound was reached:
     `recursion_limit` while the parser could still read the document,
     `json_invalid` once it could not. That is a claim about the *order* of two
     bounds in different crates -- the walk's unfolding bound and jiter's own

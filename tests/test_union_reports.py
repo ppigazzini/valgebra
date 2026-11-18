@@ -1,6 +1,6 @@
 """What a union says when no branch admits the value.
 
-Two rules, both from `docs/08-error-model.md`. A union reports the **closest**
+Two rules, both from `docs/guides/error-model.md`. A union reports the **closest**
 branch -- the one that descended furthest -- and where no branch descends at all
 it reports one summary naming the branches. And that summary names each branch
 "as each would name itself alone", which is the sentence the rows here hold.

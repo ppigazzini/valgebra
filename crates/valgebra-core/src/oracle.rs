@@ -440,7 +440,7 @@ pub(crate) fn complemented_members(
 /// not a law about this.
 ///
 /// An atom with no callback is a set **under the trust base**
-/// (`docs/14-soundness.md`): an attribute is a reading of the value, and a
+/// (`docs/explanation/soundness.md`): an attribute is a reading of the value, and a
 /// constant's `==`, a bound's comparison, a length and a step's `%` are answers
 /// Python's rules make facts about the value. A value whose method answers two
 /// calls differently is outside the sets a law here is about, and the five

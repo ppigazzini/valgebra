@@ -758,7 +758,7 @@ with `scripts/pgo_compare.py`, prints the table into the run summary, and
 uploads the two readings. It runs on both interpreters the bench jobs use,
 because the shapes a profile serves best are the per-element ones and a global
 lock is what those pay. The release matrix's `pgo: true` is decided on that
-reading, and `docs/11-performance.md` carries the decision with its reason.
+reading, and `docs/guides/performance.md` carries the decision with its reason.
 
 **The lane names the interpreter these are read on**, which is CPython 3.15,
 and it is written in `ci.yml` rather than left to the runner image: a ratio
@@ -1469,7 +1469,7 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
   percent in the extension: a drop of a PyO3 error inlined into a loop has its
   thread-local address taken ahead of the loop, on every value. Count it
   against a `--profile profiling` build of the extension itself, as
-  [the performance page](../11-performance.md) does, and read the function's
+  [the performance page](../guides/performance.md) does, and read the function's
   disassembly for a call to `__tls_get_addr` on its accepting path.
 - **A soundness property has nothing to say about a `False`.** A law shaped
   `if a.is_subtype_of(&b) { ..check.. }` never examines the answers that are

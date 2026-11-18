@@ -172,7 +172,7 @@ CORPUS: list[Any] = [
 THE_CLASS_ORDER_IS_OPEN = (
     "a class deriving from no builtin narrows no kind, and a class deriving "
     "from both it and the kind may be written after the question is asked, so "
-    "neither direction is refutable -- `docs/15-decidability.md`'s open-world "
+    "neither direction is refutable -- `docs/explanation/decidability.md`'s open-world "
     "assumption"
 )
 

@@ -50,7 +50,7 @@ assert (int | Validator(str)).is_equivalent(union(int, str))
 ```
 
 A static checker reads only the first order: mypy and pyright type a class on
-the left of `|` as a `types.UnionType` ([static checkers](18-static-checking.md)).
+the left of `|` as a `types.UnionType` ([static checkers](static-checking.md)).
 
 ## The laws hold
 
@@ -70,7 +70,7 @@ and a value on which the walk of `S` decides nothing, only stopping, is refused
 by `S` and by `complement(S)` alike, since a complement admits only what its
 inner walk decided is outside; a part that refuses decides, so `complement(list[S])`
 admits a list holding a value outside `S` beside one the walk stopped on
-([the error model](08-error-model.md#unions-report-the-closest-branch)). The laws
+([the error model](error-model.md#unions-report-the-closest-branch)). The laws
 hold of the sets, and of the walk on every value it finishes. On a stopped value
 the spelling shows: for a recursive `S`, `union(S, complement(S))` folds to
 `anything` and admits a list nested past the bound, while the same union written
@@ -78,7 +78,7 @@ with a second spelling of `S` refuses it.
 
 The model — schemas as value-sets, subtyping as set inclusion, full union,
 intersection, and complement — is *semantic subtyping*. The
-[foundations](13-foundations.md) page records the theory and its references, and
+[foundations](../explanation/foundations.md) page records the theory and its references, and
 names the two readings that answer a relation — the rules and the sets — and
 where they stay conservative.
 
@@ -348,7 +348,7 @@ assert Validator(Point).relation_to(tuple[int, int]) == "subset"
 ```
 
 Which relations answer `"undecided"` is the conservative boundary
-[the decidability page](15-decidability.md) describes. A `"not_subset"` is a
+[the decidability page](../explanation/decidability.md) describes. A `"not_subset"` is a
 statement about a value: some member of the subject is outside the other schema.
 Where the subject is a class, that rests on the class holding an instance, which
 is the one assumption that page records.
@@ -431,13 +431,13 @@ assert Validator(Annotated[int, at.Ge(0), at.Le(100)]).is_subtype_of(
 ```
 
 Written as *shapes*, which are closed. The same records spelled as `TypedDict`s
-relate the other way round: a `TypedDict` is [open](03-schema-language.md#a-typeddict-is-open-a-dict-literal-is-closed),
+relate the other way round: a `TypedDict` is [open](schema-language.md#a-typeddict-is-open-a-dict-literal-is-closed),
 so the one that names no `note` admits a dict whose `note` is an `int` — which
 the one that names `note: str` does not.
 
 Assert the **positive** direction only. A `True` from `is_subtype_of`,
 `is_equivalent` or `is_empty` is a proof; a `False` is "no, or not yet proven"
-(the [decidability boundary](15-decidability.md#the-contract) says which is
+(the [decidability boundary](../explanation/decidability.md#the-contract) says which is
 which). So `assert not a.is_subtype_of(b)` passes both when the relation is false
 and when it merely is not decided, and `assert not schema.is_empty()` is not a
 check that the schema admits anything — a schema that admits nothing can answer
@@ -463,7 +463,7 @@ assert union(bool, int) != Validator(int)  # different shape
 
 The other side of a comparison is any schema spec or compiled validator. These
 decisions are **sound** relative to [the trust
-base](14-soundness.md#what-this-argument-assumes): a `True` holds of every value
+base](../explanation/soundness.md#what-this-argument-assumes): a `True` holds of every value
 that base admits, and a `False` (or a "not empty") is either a genuine
 non-relation or a relation valgebra does not yet prove. They decide a wide fragment — the scalar Boolean
 algebra, class and literal inclusion, refinements with bound and length
@@ -473,7 +473,7 @@ mapping, mixed maps where the supertype's extra field is optional and the
 subtype's catch-all covers it, and a record against a union of records it splits
 across), inclusion in a complement where the two schemas
 share no value, and recursion -- and [the decidability
-boundary](15-decidability.md) lists the pairs inside it that decline: a key
+boundary](../explanation/decidability.md) lists the pairs inside it that decline: a key
 holding part of a kind, a record against a mapping keyed by literals, and
 recursion past the relation's depth bound. Where a rule declines, the relation is asked again
 of the *sets* the two schemas denote, which decides what no rule about shapes
@@ -482,11 +482,11 @@ language inside another, a kind against its own literals, one step dividing
 another — under a
 bound on what building those sets may cost. The two readings, and the guard that
 decides when a negative answer is a refutation rather than a decline, are named
-in [the foundations](13-foundations.md). What is past that bound, and what no
+in [the foundations](../explanation/foundations.md). What is past that bound, and what no
 finite set representation holds, is where they stay conservative. The
-[decidability boundary](15-decidability.md) lists exactly what is decided, what is
+[decidability boundary](../explanation/decidability.md) lists exactly what is decided, what is
 conservative, and what is undecidable at runtime; see the
-[foundations](13-foundations.md) for the theory.
+[foundations](../explanation/foundations.md) for the theory.
 
 ## `Any` versus `anything`
 
@@ -515,4 +515,4 @@ does this value belong — and to it `Any` answers yes for every value, which is
 what the walk does. Writing `Any` still says something to a reader, and the
 schema keeps it: it is a spelling, not a set, so two schemas that differ
 only in it are equal and nothing decides anything by it
-([the boundary](15-decidability.md)).
+([the boundary](../explanation/decidability.md)).

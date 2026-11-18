@@ -476,7 +476,7 @@ def test_every_refusal_names_what_to_write_instead() -> None:
     Every message here is two halves -- what was found, and what to write --
     and the second half is the one a reworded message loses first. Read as a
     length rather than as a wording, because which words carry it is the
-    reviewer's question and `docs/03-schema-language.md` is where that answer
+    reviewer's question and `docs/guides/schema-language.md` is where that answer
     is written.
     """
     for name, annotation, raises, _ in REFUSALS:

@@ -10,8 +10,8 @@ this library decided not to be. Knowing which is which tells you whether to wait
 for it, work around it, or use another tool — so each says which it is.
 
 The neighboring pages cover two nearby questions: [resource
-limits](10-limits.md) is what a *value* cannot make the validator do, and the
-[decidability boundary](15-decidability.md) is what the comparison operators
+limits](../guides/limits.md) is what a *value* cannot make the validator do, and the
+[decidability boundary](decidability.md) is what the comparison operators
 cannot yet prove. This page is about the shape of the product.
 
 ## It does not convert
@@ -44,7 +44,7 @@ An observable consequence: a container whose size changes while the walk is
 reading it is reported rather than silently half-checked, because the
 alternative is an answer about a value that never existed. A change that keeps
 the size is not seen, and the answer is about what the walk read
-([error model](08-error-model.md)).
+([error model](../guides/error-model.md)).
 
 ## It cannot look inside a callable
 
@@ -136,7 +136,7 @@ A `Predicate` refinement runs your callable. That makes it as expressive as
 Python — and opaque to the algebra: the complement of a predicate is not a set
 the library can reason about, two predicates are not compared, and a schema
 carrying one is answered conservatively by every relation
-([decidability](15-decidability.md)). Predicates are the escape hatch, and using
+([decidability](decidability.md)). Predicates are the escape hatch, and using
 one is choosing expressiveness over decidability.
 
 The same holds of a class whose metaclass answers `isinstance` by running code:
@@ -205,16 +205,16 @@ exception that is not an ordinary `Exception` (`KeyboardInterrupt`,
 propagate, because a check that swallowed one would make the process
 unstoppable from inside a loop or hide the interpreter running out of a
 resource. The set is the one the walk page (`docs/dev/04-walk.md`) owns and
-[the error model](08-error-model.md) lists. Everything else a
+[the error model](../guides/error-model.md) lists. Everything else a
 predicate raises is reported as `predicate_error` rather than as a rejected
-value ([refinements](05-refinements.md)), so a bug in your callable is not
+value ([refinements](../guides/refinements.md)), so a bug in your callable is not
 mistaken for data that failed.
 
 The one thing your code must not do is **resize the container being checked**.
 That is not refused — it is reported: the walk reads every container against a
 count taken once, and a count that moved makes the reading cover no state the
 value was ever in, so the answer is `mutated_during_validation` and a non-member
-([error model](08-error-model.md)). It applies equally to another thread on a
+([error model](../guides/error-model.md)). It applies equally to another thread on a
 free-threaded interpreter, which is the case that cannot be written out of a
 program by discipline.
 
@@ -243,7 +243,7 @@ assert not Validator(bool).is_valid(np.bool_(True))
 A bound over `float` asks the value, so `np.float64` answers it by numpy's comparison,
 which converts an `int` to a float first: the relations read a bound past `2**53` as
 `float` does, and
-[the soundness page](14-soundness.md#what-this-argument-assumes) names the difference.
+[the soundness page](soundness.md#what-this-argument-assumes) names the difference.
 
 numpy's own generic reads what it names. `np.ndarray[S, np.dtype[T]]` denotes the
 instances of `np.ndarray` whose `shape` is in `S` and whose elements are `T`'s, read
@@ -360,7 +360,7 @@ outside. Keep what a traced function checks to the attributes.
 
 - **No schema inference from values or code.** A schema is written, not guessed.
 - **No serialization.** Nothing here turns a value into JSON or back; the JSON
-  path *validates during parsing* ([JSON input](07-json.md)) and produces the
+  path *validates during parsing* ([JSON input](../guides/json.md)) and produces the
   same accept/reject decision as the object path, not a serializer.
 - **No JSON Schema import or export.** The two describe different value
   universes — JSON has no `bytes`, no `tuple`, and no class identity — so a
@@ -371,11 +371,11 @@ outside. Keep what a traced function checks to the attributes.
   from a record -- with none for a class instance or a predicate, so it would
   be partial by nature. A value to show is found by sampling and checked with
   `is_valid`, whose membership is exact, as
-  [inspection](09-inspection.md#what-this-cannot-see) does it.
+  [inspection](../guides/inspection.md#what-this-cannot-see) does it.
 - **No static checking.** valgebra runs; a type checker does not run it. The two
-  are complementary, and the [foundations](13-foundations.md) page says where
+  are complementary, and the [foundations](foundations.md) page says where
   their models agree and where they part. What a checker reads from a validator,
-  and the spellings it refuses, are on [static checkers](18-static-checking.md).
+  and the spellings it refuses, are on [static checkers](../guides/static-checking.md).
 
 ## One operator, and it is the one typing already uses
 
@@ -408,10 +408,10 @@ record from its Python spelling is one of the shapes
 `scripts/perf_gate.py --binding-build` holds to an instruction count, and
 `scripts/perf_budget.json` owns the figure. `repr(validator)` gives an
 expression that rebuilds the schema, except for the forms
-[the API reference](16-api.md#operators-on-a-validator) lists, and the
+[the API reference](../reference/api.md#operators-on-a-validator) lists, and the
 refusal says so. A **required record key whose name ends in `?`**, which the
 dict literal cannot spell because every trailing `?` there marks the key
-optional ([schema language](03-schema-language.md#a-key-name-that-ends-in-a-question-mark)),
+optional ([schema language](../guides/schema-language.md#a-key-name-that-ends-in-a-question-mark)),
 prints marked, `<required: 'a?'>`, and its `repr` is a syntax error where it is
 read. One form rebuilds quietly: a **class met with a declaration it did not
 make**, which prints as the class's name and rebuilds as the class with its
@@ -465,7 +465,7 @@ if sys.implementation.name == "cpython":
 
 The pair is freed on CPython. PyPy keeps alive every class an extension module
 is shown, valgebra's or any other's, so there the class outlives its last
-reference whether a validator holds it or not; [PyPy](00-installation.md#pypy)
+reference whether a validator holds it or not; [PyPy](../get-started/installation.md#pypy)
 on the installation page says what that costs a long-running process.
 
 A validator can also be weakly referenced, so a registry keyed by schema can be

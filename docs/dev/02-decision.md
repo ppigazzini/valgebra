@@ -420,7 +420,7 @@ their common refinement, and a constraint over a cell holding few keys is pinned
 to them as one over a finite part is (`over_a_split` in `descr/maps.rs`). The rules
 read such a key as one they cannot place, a proof or nothing. A key holding any
 other part of a kind -- a narrower tuple, a class, the complement of a literal --
-refuses, because no split holds it; [15-decidability.md](../15-decidability.md)
+refuses, because no split holds it; [explanation/decidability.md](../explanation/decidability.md)
 lists what that leaves to the rules. A want indexed past the partition -- no lowering builds one, so it is an
 invariant broken -- is no element of the model, and an atom carrying it is
 proved nothing: its emptiness declines, and its complement keeps the want, so
@@ -606,7 +606,7 @@ asserts nothing beyond the procedure's reach.
 
 That asymmetry is deliberate and it is what makes the procedure safe to extend.
 Adding a rule can only move answers from false to true, so no extension can make
-an accept wrong. The published boundary is `docs/15-decidability.md`; the enumerated
+an accept wrong. The published boundary is `docs/explanation/decidability.md`; the enumerated
 relations the procedure is required to *decide* are
 `tests/test_completeness_ledger.py`, which holds the decided list in both
 directions — a relation that regresses to conservatism fails, and a closed hole
@@ -821,7 +821,7 @@ non-member, a predicate interrupted while `Literal[5]` is probed would answer
 
 **An answer reads Python at the type the trust base grants it for.** Each
 question above stands on a reading the trust base
-([14-soundness.md](../14-soundness.md)) grants for one case -- an exact
+([explanation/soundness.md](../explanation/soundness.md)) grants for one case -- an exact
 builtin's `==` and order, an enumeration as `EnumMeta` builds it, a class as
 Python lays it out when it makes it -- and an object of a neighboring case is
 declined rather than read as that one: a builtin subclass with an `__eq__` or
@@ -1295,7 +1295,7 @@ either. The tables are each interpreter's, for one row and 0 answers over the dr
 **A mapping of one word under a length of two, refused.** `Annotated[dict[Annotated[str,
 Regex("a")], int], MinLen(2)]` holds `{Apart("a"): 1, Apart("a"): 2}` for a `str` subclass whose `==`
 is identity, and declines. Under the assumption on a `str` key
-([14-soundness.md](../14-soundness.md)) it is empty, and a proof would stand against a value the
+([explanation/soundness.md](../explanation/soundness.md)) it is empty, and a proof would stand against a value the
 walk accepts, for a schema no one writes on purpose. The assumption pays for proofs between a
 record and a mapping, and this is neither.
 
@@ -1373,7 +1373,7 @@ one row and 0 answers over the 72,000 seeds of the recursive families.
 `complement(T1).relation_to(tuple[T1])` proves. It moves that one row and no answer over the
 drawn families, though 1,499 declines of an earlier campaign hold such a definition: they
 decline for what the rest of those pairs ask, and the second unfolding a refutation needs
-stays the limit [15-decidability.md](../15-decidability.md) states.
+stays the limit [explanation/decidability.md](../explanation/decidability.md) states.
 
 **A mapping keyed by a class or a shape reads no single entry, refused.**
 `dict[K, str]` below `{}` holds `{K(): ""}`, which the supertype refuses, and declines. Its
@@ -2158,7 +2158,7 @@ fuzzer's spelling, a refinement carrying no constraint, and
 
 **A field's name is read as a word of a clause narrowed by a language**
 (`holds_the_name_as_a_word`), in the last asking, under the assumption
-[`docs/14-soundness.md`](../14-soundness.md) states of a `str` key. The sets answer this of one
+[`docs/explanation/soundness.md`](../explanation/soundness.md) states of a `str` key. The sets answer this of one
 mapping whole, and a reference in the way stopped them, so the rule asks them of the one
 name and the one key. It moved 0 answers over the drawn families, since none draws a record
 below a recursion over narrowed keys, which is what `properties` beside `patternProperties`
@@ -2316,7 +2316,7 @@ it has a comment. Prefer one rule that asks the question.
 
 ## The limit
 
-[docs/15-decidability.md](../15-decidability.md) owns the published fragment and
+[docs/explanation/decidability.md](../explanation/decidability.md) owns the published fragment and
 `tests/test_completeness_ledger.py` the relations it decides. A relation that
 regresses fails there outright; the ledger's strict expected-failure marks are
 the relations that hold and neither decider decides, each with the bound that

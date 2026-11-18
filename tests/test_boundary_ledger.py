@@ -1,7 +1,7 @@
 """Every entry of the published boundary is an entry a test drives.
 
-`docs/15-decidability.md` is the page a caller reads to learn what the relations
-decide. It is three lists -- decided exactly, sound but conservative,
+`docs/explanation/decidability.md` is the page a caller reads to learn what the
+relations decide. It is three lists -- decided exactly, sound but conservative,
 undecidable at runtime -- and but for this file nothing reads it: the
 completeness ledger enumerates relations without citing a bullet, the relation
 ledger and the completeness probe quote the page in prose inside their reasons,
@@ -73,7 +73,7 @@ from valgebra import (
     union,
 )
 
-PAGE = ROOT / "docs" / "15-decidability.md"
+PAGE = ROOT / "docs" / "explanation" / "decidability.md"
 
 #: The three lists, by the heading each sits under.
 DECIDED = "Decided exactly"
@@ -607,7 +607,7 @@ def test_every_entry_of_the_boundary_answers_as_the_page_says(title: str) -> Non
 
 # --- The trust base, held to the tests that show what breaking it costs ------
 #
-# `docs/14-soundness.md` ends with what the soundness argument *assumes*, and
+# `docs/explanation/soundness.md` ends with what the soundness argument *assumes*, and
 # an assumption is the one kind of claim a passing suite says nothing about: it
 # holds wherever the suite looks, because the suite looks at values that satisfy
 # it. What a reader needs is the other half -- a value that violates it and what
@@ -625,7 +625,7 @@ def test_every_entry_of_the_boundary_answers_as_the_page_says(title: str) -> Non
 # differently. Both halves are checked here: every top-level bullet leads with
 # the sentence it assumes, and the count of lead-ins is the count of bullets.
 
-SOUNDNESS = ROOT / "docs" / "14-soundness.md"
+SOUNDNESS = ROOT / "docs" / "explanation" / "soundness.md"
 
 #: An assumption, which the page writes as a bolded lead-in under its last
 #: heading. The sub-points inside one are qualifications of it rather than

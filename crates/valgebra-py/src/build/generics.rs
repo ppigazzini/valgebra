@@ -312,7 +312,7 @@ fn dtype_record(argument: &Bound<'_, PyAny>, lits: &mut Pool) -> PyResult<Option
 ///
 /// A float is deliberately not refused here. It is not a spelling the spec
 /// allows either, but it is a *constant*, and this library pools it as one --
-/// which is what `docs/05-refinements.md` says and what a caller writing
+/// which is what `docs/guides/refinements.md` says and what a caller writing
 /// `Literal[1.5]` means. The line is between a value with no interpretation but
 /// itself and one this library already reads as a schema.
 pub(super) fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> {

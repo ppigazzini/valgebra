@@ -90,7 +90,7 @@ _CLASS_ON_THE_LEFT = (
     "declines and the validator's `__ror__` builds the union. mypy and pyright "
     "read the result as `types.UnionType | type[int]` and refuse the method "
     "called on it, once per member; only ty reads the `__ror__`, and "
-    "`docs/18-static-checking.md` says to write the validator on the left"
+    "`docs/guides/static-checking.md` says to write the validator on the left"
 )
 _VALIDATOR_IN_A_TYPE = (
     "a validator inside `list[...]`, this library's extension of the spelling; "
@@ -109,11 +109,11 @@ EXPECTED: tuple[Expected, ...] = (
     ),
     Expected("ty", "README.md", "invalid-assignment", 1, _MUTATION),
     Expected(
-        "ty", "docs/03-schema-language.md", "invalid-argument-type", 1, _WRONG_POINT
+        "ty", "docs/guides/schema-language.md", "invalid-argument-type", 1, _WRONG_POINT
     ),
     Expected(
         "ty",
-        "docs/03-schema-language.md",
+        "docs/guides/schema-language.md",
         "invalid-type-form",
         2,
         f"{_SHORT_TUPLE}; and `Literal[positive]` is the constant spelling of a "
@@ -122,21 +122,21 @@ EXPECTED: tuple[Expected, ...] = (
     ),
     Expected(
         "ty",
-        "docs/03-schema-language.md",
+        "docs/guides/schema-language.md",
         "unresolved-reference",
         1,
         _FORWARD_REFERENCE,
     ),
     Expected(
         "ty",
-        "docs/04-algebra.md",
+        "docs/guides/algebra.md",
         "invalid-type-form",
         1,
         "a float `Literal`, the extension of the spelling the page states",
     ),
     Expected(
         "ty",
-        "docs/15-decidability.md",
+        "docs/explanation/decidability.md",
         "invalid-type-form",
         15,
         "float and `Decimal` `Literal`s and validators inside `list[...]` and "
@@ -144,60 +144,70 @@ EXPECTED: tuple[Expected, ...] = (
         "and a `Literal` of a computed tag, which a union of tagged records is "
         "built from",
     ),
-    Expected("ty", "docs/16-api.md", "invalid-argument-type", 1, _WRONG_JSON),
-    Expected("ty", "docs/17-boundaries.md", "missing-attribute", 1, _UNDECLARED),
+    Expected("ty", "docs/reference/api.md", "invalid-argument-type", 1, _WRONG_JSON),
+    Expected(
+        "ty", "docs/explanation/boundaries.md", "missing-attribute", 1, _UNDECLARED
+    ),
     Expected("mypy", "CHANGELOG.md", "valid-type", 2, _VALIDATOR_IN_A_TYPE),
     Expected("mypy", "README.md", "assignment", 1, _MUTATION),
-    Expected("mypy", "docs/03-schema-language.md", "arg-type", 1, _WRONG_POINT),
-    Expected("mypy", "docs/03-schema-language.md", "misc", 1, _SHORT_TUPLE),
+    Expected("mypy", "docs/guides/schema-language.md", "arg-type", 1, _WRONG_POINT),
+    Expected("mypy", "docs/guides/schema-language.md", "misc", 1, _SHORT_TUPLE),
     Expected(
-        "mypy", "docs/03-schema-language.md", "name-defined", 1, _FORWARD_REFERENCE
+        "mypy", "docs/guides/schema-language.md", "name-defined", 1, _FORWARD_REFERENCE
     ),
-    Expected("mypy", "docs/04-algebra.md", "union-attr", 2, _CLASS_ON_THE_LEFT),
+    Expected("mypy", "docs/guides/algebra.md", "union-attr", 2, _CLASS_ON_THE_LEFT),
     Expected(
         "mypy",
-        "docs/15-decidability.md",
+        "docs/explanation/decidability.md",
         "valid-type",
         7,
         "validators inside `list[...]`, and a float `Literal` as a type argument, "
         "which mypy refuses there: the two extensions of the spelling the page "
         "decides over",
     ),
-    Expected("mypy", "docs/16-api.md", "arg-type", 1, _WRONG_JSON),
-    Expected("mypy", "docs/17-boundaries.md", "attr-defined", 1, _UNDECLARED),
+    Expected("mypy", "docs/reference/api.md", "arg-type", 1, _WRONG_JSON),
+    Expected("mypy", "docs/explanation/boundaries.md", "attr-defined", 1, _UNDECLARED),
     Expected("pyright", "README.md", "reportAttributeAccessIssue", 1, _MUTATION),
     Expected(
-        "pyright", "docs/03-schema-language.md", "reportArgumentType", 1, _WRONG_POINT
+        "pyright",
+        "docs/guides/schema-language.md",
+        "reportArgumentType",
+        1,
+        _WRONG_POINT,
     ),
     Expected(
         "pyright",
-        "docs/03-schema-language.md",
+        "docs/guides/schema-language.md",
         "reportInvalidTypeForm",
         1,
         _SHORT_TUPLE,
     ),
     Expected(
         "pyright",
-        "docs/03-schema-language.md",
+        "docs/guides/schema-language.md",
         "reportUndefinedVariable",
         1,
         _FORWARD_REFERENCE,
     ),
     Expected(
         "pyright",
-        "docs/04-algebra.md",
+        "docs/guides/algebra.md",
         "reportAttributeAccessIssue",
         2,
         _CLASS_ON_THE_LEFT,
     ),
-    Expected("pyright", "docs/16-api.md", "reportArgumentType", 1, _WRONG_JSON),
+    Expected("pyright", "docs/reference/api.md", "reportArgumentType", 1, _WRONG_JSON),
     Expected(
-        "pyright", "docs/17-boundaries.md", "reportAttributeAccessIssue", 1, _UNDECLARED
+        "pyright",
+        "docs/explanation/boundaries.md",
+        "reportAttributeAccessIssue",
+        1,
+        _UNDECLARED,
     ),
-    Expected("ruff", "docs/03-schema-language.md", "F821", 1, _FORWARD_REFERENCE),
+    Expected("ruff", "docs/guides/schema-language.md", "F821", 1, _FORWARD_REFERENCE),
     Expected(
         "ruff",
-        "docs/03-schema-language.md",
+        "docs/guides/schema-language.md",
         "N803",
         1,
         "the lambda's parameter is `X` because that is how the repr the block "
@@ -205,7 +215,7 @@ EXPECTED: tuple[Expected, ...] = (
     ),
     Expected(
         "ruff",
-        "docs/03-schema-language.md",
+        "docs/guides/schema-language.md",
         "UP045",
         1,
         "`Optional[int]` is shown read beside `int | None`, as a spelling a "
@@ -213,7 +223,7 @@ EXPECTED: tuple[Expected, ...] = (
     ),
     Expected(
         "ruff",
-        "docs/05-refinements.md",
+        "docs/guides/refinements.md",
         "UP045",
         2,
         "`Optional[int]` is the spelling a model moved from pydantic carries, "
@@ -221,7 +231,7 @@ EXPECTED: tuple[Expected, ...] = (
     ),
     Expected(
         "ruff",
-        "docs/05-refinements.md",
+        "docs/guides/refinements.md",
         "UP035",
         1,
         "`deprecated` comes from `typing_extensions`, which serves it on every "
@@ -229,14 +239,14 @@ EXPECTED: tuple[Expected, ...] = (
     ),
     Expected(
         "ruff",
-        "docs/08-error-model.md",
+        "docs/guides/error-model.md",
         "S301",
         1,
         "the block pickles a validator to show the refusal",
     ),
     Expected(
         "ruff",
-        "docs/16-api.md",
+        "docs/reference/api.md",
         "UP037",
         1,
         '`next: "Node"` is the quoted forward reference the block shows refused',

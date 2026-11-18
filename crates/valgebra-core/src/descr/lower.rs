@@ -693,7 +693,7 @@ impl Bounds {
 ///
 /// The field after the third is outside: four fields against sixteen corners
 /// spend 10,132 units, though they read 96 nodes of `BUDGET`'s. That is the width
-/// of the decided fragment, and `docs/15-decidability.md` states it as one.
+/// of the decided fragment, and `docs/explanation/decidability.md` states it as one.
 ///
 /// `tests/test_completeness_ledger.py` carries the record shapes and the dict
 /// shapes as rows, which is what makes this figure re-derivable: the row fails

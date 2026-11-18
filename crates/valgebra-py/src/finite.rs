@@ -9,7 +9,7 @@
 //! writes for `const` and `enum`.
 //!
 //! A value stands for its literal's whole set only where the constant is that
-//! set alone (`docs/14-soundness.md`, "A literal is its constant's class under
+//! set alone (`docs/explanation/soundness.md`, "A literal is its constant's class under
 //! `==`"): an exact `int`, `bool`, `str`, `bytes`, `None`, or a nonzero finite
 //! `float`; a float zero is read as its two values. And the walk reads the supertype as the relation would only where
 //! no atom of it runs code a second call may answer differently: no

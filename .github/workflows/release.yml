@@ -60,7 +60,7 @@ jobs:
         # gain are the ones whose cost grows with the caller's data, where the
         # record walk's is fixed at its field count. A caller for whom the
         # record walk is the shape that matters builds their own plain wheel,
-        # and `docs/11-performance.md` carries the two commands and the numbers.
+        # and `docs/guides/performance.md` carries the two commands and the numbers.
         # The `pgo compare` lane in `ci.yml` reads it as close to where it is
         # applied as a lane gets: both wheels from one source, every shape, on
         # both bench interpreters, on dispatch. The figures stay on the page and
@@ -225,7 +225,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           # --find-interpreter builds for every interpreter the image exposes
           # that satisfies requires-python: each CPython and the free-threaded
-          # build where present (see docs/00-installation.md, which names what
+          # build where present (see docs/get-started/installation.md, which names what
           # ships). The Linux, macOS and Windows free-threaded rows name theirs
           # instead, the Linux ones so that PyPy is built in its own plain row.
           # --pgo (native targets only) runs the training workload configured

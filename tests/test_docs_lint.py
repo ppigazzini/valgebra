@@ -56,16 +56,21 @@ def test_the_page_an_index_serves_links_by_url(
 ) -> None:
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     (tmp_path / "docs" / "dev").mkdir(parents=True)
-    (tmp_path / "docs" / "07-json.md").write_text("# JSON\n\n## It holds\n")
-    (tmp_path / "docs" / "dev" / "07-ci.md").write_text("# CI\n")
+    (tmp_path / "docs" / "guides").mkdir()
+    (tmp_path / "docs" / "guides" / "json.md").write_text("# JSON\n\n## It holds\n")
+    (tmp_path / "docs" / "dev" / "ci.md").write_text("# CI\n")
     (tmp_path / "SECURITY.md").write_text("here\n")
     site, tree = lint.SITE_URL, lint.TREE_URL
 
-    for relative in ("docs/07-json.md", "SECURITY.md", "docs/07-json.md#it-holds"):
+    for relative in (
+        "docs/guides/json.md",
+        "SECURITY.md",
+        "docs/guides/json.md#it-holds",
+    ):
         assert lint.check_index_page_links(f"[it]({relative})\n"), relative
     for held in (
-        f"{site}07-json/",
-        f"{site}07-json/#it-holds",
+        f"{site}guides/json/",
+        f"{site}guides/json/#it-holds",
         f"{site}llms.txt",
         f"{tree}SECURITY.md",
         "https://llmstxt.org",
@@ -73,9 +78,9 @@ def test_the_page_an_index_serves_links_by_url(
     ):
         assert not lint.check_index_page_links(f"[it]({held})\n"), held
     for dead in (
-        f"{site}07-gone/",
-        f"{site}07-json/#gone",
-        f"{site}dev/07-ci/",
+        f"{site}guides/gone/",
+        f"{site}guides/json/#gone",
+        f"{site}dev/ci/",
         f"{tree}GONE.md",
     ):
         assert lint.check_index_page_links(f"[it]({dead})\n"), dead
@@ -704,11 +709,11 @@ def test_an_llms_line_that_is_its_page_description_passes(
 
 def _synthetic_examples(root: Path, imports: str, installs: str) -> None:
     """Write a page whose example imports `imports`, and an install page."""
-    (root / "docs").mkdir()
+    (root / "docs" / "get-started").mkdir(parents=True)
     (root / "docs" / "guide.md").write_text(
         f"# Guide\n\n```python\n{imports}\nimport json\n```\n"
     )
-    (root / "docs" / "00-installation.md").write_text(
+    (root / "docs" / "get-started" / "installation.md").write_text(
         "# Installation\n\n```bash\npip install valgebra\n"
         f"pip install {installs}\n```\n"
     )

@@ -236,7 +236,7 @@ def test_opening_a_record_that_claims_a_region_leaves_one_clause() -> None:
     Writing it as two would cost the pair rather than the answer: a clause keyed
     by a complement is a shape the set representation declines, so the same set
     spelled the long way stops being decided. The merge is what keeps `open`
-    inside the fragment `docs/15-decidability.md` promises.
+    inside the fragment `docs/explanation/decidability.md` promises.
     """
 
     class Rec(TypedDict):

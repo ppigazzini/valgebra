@@ -676,7 +676,7 @@ pub(super) fn leaves_the_name_out_of_a_table(
 
 /// Whether the sets read `name` as a word of this key, in the last asking: a field
 /// reads a key by its hash and `==`, a language by its text, and a `str` key's are one
-/// (`docs/14-soundness.md`). So `{"a": int}` is below a recursion over
+/// (`docs/explanation/soundness.md`). So `{"a": int}` is below a recursion over
 /// `Annotated[str, MaxLen(1)]` keys, as it is below one such mapping, which the sets
 /// read whole where no reference stands in the way. Charged a goal's reading
 /// ([`LEAF_READING`]), asked of each field under each clause: a record of 4,096 fields

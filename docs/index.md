@@ -32,7 +32,7 @@ assert not users.is_valid({"name": "Ada", "age": -1})
 !!! warning "Pre-alpha"
     valgebra is under active development and published to PyPI. The APIs
     described here work, and every `0.0.x` release may break them, saying where
-    in its notes. See the [release notes](12-changelog.md) for what is
+    in its notes. See the [release notes](changelog.md) for what is
     built and what counts as a break.
 
 ## What valgebra is for
@@ -74,7 +74,7 @@ valgebra as a bare class and is not deep-checked.
   deliberately conservative beyond it. The whole model is one idea.
 - **A real Boolean algebra.** `union`, `intersection`, and `complement` compose
   any schema into a lattice whose laws are property-tested, and a schema is built
-  in the [lattice normal form](04-algebra.md): `repr` shows it and `==` compares
+  in the [lattice normal form](guides/algebra.md): `repr` shows it and `==` compares
   it, so no later pass is needed to reach it.
 - **Typing-first.** Standard annotations are the primary notation, read through
   the typing spec's own introspection.
@@ -93,21 +93,21 @@ valgebra as a bare class and is not deep-checked.
 
 ## Where to start
 
-- New here? [Installation](00-installation.md), then the
-  [quickstart](02-quickstart.md).
-- Have a task in mind? The [recipes](19-recipes.md) each do one end to end.
-- Writing schemas? The [schema language](03-schema-language.md) covers every
-  form with its denotation, [refinements](05-refinements.md) the constraints,
-  and [recursive schemas](06-recursion.md) the fixpoint.
-- Composing them? The [Boolean algebra](04-algebra.md).
-- Type-checking code that uses them? [Static checkers](18-static-checking.md).
+- New here? [Installation](get-started/installation.md), then the
+  [quickstart](get-started/quickstart.md).
+- Have a task in mind? The [recipes](get-started/recipes.md) each do one end to end.
+- Writing schemas? The [schema language](guides/schema-language.md) covers every
+  form with its denotation, [refinements](guides/refinements.md) the constraints,
+  and [recursive schemas](guides/recursion.md) the fixpoint.
+- Composing them? The [Boolean algebra](guides/algebra.md).
+- Type-checking code that uses them? [Static checkers](guides/static-checking.md).
 - Studying a codebase with no schemas of its own? [Inspecting a
-  codebase](09-inspection.md) asks what its annotations imply, and what nothing
+  codebase](guides/inspection.md) asks what its annotations imply, and what nothing
   enforces.
-- Holding another format's values? [Several value universes](20-universes.md) writes
+- Holding another format's values? [Several value universes](explanation/universes.md) writes
   JSON's and TOML's as sets, and reads arrays by what they expose.
-- Wondering what it decides? The [decidability boundary](15-decidability.md),
-  and the [foundations](13-foundations.md) behind it.
+- Wondering what it decides? The [decidability boundary](explanation/decidability.md),
+  and the [foundations](explanation/foundations.md) behind it.
 - Wondering whether it does something at all? [What it cannot
-  do](17-boundaries.md) lists the deliberate boundaries and says which are the
+  do](explanation/boundaries.md) lists the deliberate boundaries and says which are the
   product's and which are a runtime check's.

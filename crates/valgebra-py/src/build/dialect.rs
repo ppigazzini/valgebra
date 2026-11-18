@@ -179,7 +179,7 @@ pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
             // again is the same statement.
             ']' => inside = false,
             // `[:name:]` is a POSIX class, which this engine reads and `re`
-            // does not -- a divergence `docs/05-refinements.md` names, with the
+            // does not -- a divergence `docs/guides/refinements.md` names, with the
             // example that shows how the two read it. It is skipped whole, so
             // an operator after it is still read as one.
             '[' if next.map(|(_, symbol)| symbol) == Some(':') => {

@@ -11,14 +11,14 @@ question, and valgebra stays a development dependency. A constraint is read off
 the `annotated_types` vocabulary; metadata another library writes for itself,
 such as msgspec's `Meta` or pydantic's `Field`, is that library's and is
 ignored, so a field carrying it reads as its base, a wider set than the one
-that library enforces ([refinements](05-refinements.md#unrecognized-markers)).
+that library enforces ([refinements](refinements.md#unrecognized-markers)).
 
 This page is the recipes. Each is one question, asked of one or two annotations,
 answered by set reasoning rather than by reading. They suit an agent working on a
 codebase it did not write, and they need no adoption from that codebase.
 
 For using valgebra as a contract *in* your own code, see the
-[tutorial](01-tutorial.md) and the [algebra guide](04-algebra.md).
+[tutorial](../get-started/tutorial.md) and the [algebra guide](algebra.md).
 
 ## The shape of every question
 
@@ -238,9 +238,9 @@ assert Validator(After).relation_to(Validator(Before)) == "subset"
 
 A protocol relates the same way, and a plain class is below one only where its
 instances cannot be changed out of it, which its annotations do not decide
-([what a validator cannot do](17-boundaries.md#it-reads-values-not-declarations)).
+([what a validator cannot do](../explanation/boundaries.md#it-reads-values-not-declarations)).
 
-The [decidability boundary](15-decidability.md) states where the answers are exact.
+The [decidability boundary](../explanation/decidability.md) states where the answers are exact.
 The place that bites an inspection script is a deeply nested Boolean
 combination, where the work is a product of the branches. A table of literals on
 the left is not one of them: it denotes a finite set and is decided by
@@ -251,7 +251,7 @@ against a `Literal` of any width is `"not_subset"`. A part of a kind is the
 descriptor's to answer, and the descriptor reads at most `BUDGET` schema nodes
 (`crates/valgebra-core/src/descr/lower.rs`), so `Annotated[int, Ge(0)]` against
 a `Literal` whose members and union node pass that budget is `"undecided"` — one of the
-bounds the [decidability boundary](15-decidability.md#sound-but-conservative)
+bounds the [decidability boundary](../explanation/decidability.md#sound-but-conservative)
 lists under a schema too large to build.
 
 ## What this cannot see

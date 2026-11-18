@@ -68,7 +68,7 @@ where the other decides.
   `additionalProperties` is absent -- probes its declared fields as a `TypedDict` does, and
   scans the keys it does not declare alone. When `validate` explains a refused value it resumes
   where the first pass stopped, so a predicate on a field before the refusal runs once where it
-  ran twice (`docs/05-refinements.md`).
+  ran twice (`docs/guides/refinements.md`).
 
 - **Composing a validator copies no operand whose indices do not move.** The first operand of a
   combination, and one whose definitions the table holds at its start, enters as the handle it
@@ -1956,7 +1956,7 @@ whether the class is generic.
   below was walked once per path. `complement(recursive(lambda t: union(int,
   [t], [union(t, str)])))` took 0.3 seconds to refuse a list nested 101 deep
   on the 0.0.17 wheel and 3 seconds at 102, a value its schema admits and that
-  `docs/10-limits.md` states the walk linear in, and a list nested 128 deep
+  `docs/guides/limits.md` states the walk linear in, and a list nested 128 deep
   took longer than fifteen seconds on every release. The cost inside the
   bounds reached 0.0.17 through 0.0.20, and the one past them every release. A stop the inner walk kept answers one
   of its own kind with no more room, as the walk's own stops answer it: the
@@ -2383,7 +2383,7 @@ in a relation, and a chain of definitions -- grow no faster than it.
   value. A definition reaching a predicate, or a class whose metaclass is not
   `type`, is walked at each occurrence as before, since that code is called at
   each one; [the limits
-  page](https://ppigazzini.github.io/valgebra/10-limits/#what-the-bounds-do-not-bound)
+  page](https://ppigazzini.github.io/valgebra/guides/limits/#what-the-bounds-do-not-bound)
   says so.
 - **A tuple reads what an unpacked tuple splices into it as written there.**
   `tuple[int, *tuple[str, *tuple[bool, ...]]]` was read as `tuple[int, str,
@@ -3408,7 +3408,7 @@ set the representation named wrongly, so each was a relation answered wrongly.
 
     `open` on a mapping writes a clause keyed by a complement, which is a shape
     the set representation declines, so relations about such a schema fall back
-    to the rules (`docs/15-decidability.md` records the decline). Membership is
+    to the rules (`docs/explanation/decidability.md` records the decline). Membership is
     unaffected. Opening a *record* is unchanged in both answer and decidability.
 
 - **A pattern prints the way Python spells it.** The `Regex` marker inside a
@@ -3451,7 +3451,7 @@ set the representation named wrongly, so each was a relation answered wrongly.
 - **A `NamedTuple` prints as its name, as every other class does.**
   `repr(Validator(Point))` gave `intersection(tuple[int, str], Point)` where a
   dataclass gives `DC` and a plain class gives `Plain`, and
-  `docs/03-schema-language.md` states one rule for all of them. The schema is a
+  `docs/guides/schema-language.md` states one rule for all of them. The schema is a
   meet either way -- an `isinstance` beside a deep check of what the class
   declares -- and the reading that names the class looked only for a record of
   *named* fields, which a `NamedTuple` does not have: its fields are positions.
@@ -3601,7 +3601,7 @@ set the representation named wrongly, so each was a relation answered wrongly.
   now raises a `ValueError` naming the operator this engine would have read.
   Escape the characters to mean them literally, or write the classes out. A
   POSIX class (`[[:alpha:]]`) is read rather than refused: it is the divergence
-  `docs/05-refinements.md` already names, with both readings shown.
+  `docs/guides/refinements.md` already names, with both readings shown.
 - **A pattern in extended mode may end in a comment.** `(?x)` makes `#` run to
   the end of the line, and the anchor a whole-string match needs was appended
   after it -- so the closing half was swallowed and a pattern `re` accepts
@@ -3702,7 +3702,7 @@ answer, and it reached `MinLen`/`MaxLen` over such a subclass too.
   sides interned, and about a percent cheaper with only ours.
 
 - **PyPy 3.11 is a stated target.** The `Implementation :: PyPy` classifier and
-  `docs/00-installation.md` name the four wheels published for it from 0.0.10
+  `docs/get-started/installation.md` name the four wheels published for it from 0.0.10
   onward -- manylinux and musllinux, x86_64 and aarch64 -- so a consumer there
   can tell a supported platform from an accident of the build matrix. Every
   push builds the extension against PyPy and imports it: the C API PyPy offers
@@ -3770,7 +3770,7 @@ each is written out below.
   sequence against a bound it cannot meet, a class met with its attributes
   against a union or a recursive record, and a complement against a class. Each
   moves a pair from `"undecided"` to `"not_subset"`, which is the direction the
-  procedure may move in. `docs/15-decidability.md` is
+  procedure may move in. `docs/explanation/decidability.md` is
   where that list lives rather than here; this entry is the answer, not its
   reach.
 
@@ -4353,7 +4353,7 @@ each is written out below.
 - The completeness probe searches refinements. Its schema universe crossed every
   other kind the decision procedure treats differently and held no refinement, so
   that whole fragment was outside the reach of the gate
-  `docs/15-decidability.md` cites as the reason an unlisted conservative answer
+  `docs/explanation/decidability.md` cites as the reason an unlisted conservative answer
   cannot go unnoticed. Four atoms — two order bounds and two regexes — put it in
   reach, and the four suspected gaps they surface are on the ledger with the
   route to deciding each. No answer changed; nothing was found unsound.
@@ -4514,7 +4514,7 @@ each is written out below.
   by the IR's own order and a literal sorts there by its **pool slot** -- the
   order the constants were first seen -- so `Literal[1, 2]` and `Literal[2, 1]`
   were one schema by `==` and by `hash` and two by `repr`, against
-  `docs/04-algebra.md`'s "`repr` shows it and `==` compares it". The literals in
+  `docs/guides/algebra.md`'s "`repr` shows it and `==` compares it". The literals in
   a union are now ordered by what they print; members that are not literals keep
   the place the normal form gives them.
 
@@ -4528,7 +4528,7 @@ each is written out below.
   key whatever it pools.
 
 - An integer key of any size reaches an error path as an integer, and so does a
-  `bool`. `docs/08-error-model.md` promises a path a caller can walk back down to
+  `bool`. `docs/guides/error-model.md` promises a path a caller can walk back down to
   the value, and a key outside a machine word's range was rendered as its `repr`
   — `'1180591620717411303424'` — while `True` was excluded outright and arrived
   as `'True'`. Both index nothing. `d[True]` and `d[1]` are one entry in Python,
@@ -4800,7 +4800,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   fifty thousand: a single comparison bound about 16 ns where it was about 123,
   and two about 29 where they were about 258. A comparison bound therefore costs
   less than a call into a Python predicate, which is the ordering
-  [the refinements page](https://ppigazzini.github.io/valgebra/05-refinements/)
+  [the refinements page](https://ppigazzini.github.io/valgebra/guides/refinements/)
   describes. The absolute figures are one machine's and move by around a tenth
   between runs; the ratio and the ordering are what travel.
 
@@ -4876,7 +4876,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   once no later member can change the verdict.
 
 - Membership costs what it cost. The competitive baseline in
-  [the performance page](https://ppigazzini.github.io/valgebra/11-performance/) is re-measured with its spread and
+  [the performance page](https://ppigazzini.github.io/valgebra/guides/performance/) is re-measured with its spread and
   the method that produced it: against pydantic in strict mode, 7.6x on a schema
   nested twenty-five deep, 2.1x on a fifty-field closed record, and 1.8x on a
   flat array of ten thousand integers.
@@ -4958,7 +4958,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   `intersection`, `complement`, `recursive`, and `simplify` all reject a schema
   past a fixed nesting depth, recursive-definition count, or total node count
   with a `ValueError`. `simplify` can therefore raise when negation-normal form
-  expands a schema past the size bound (see `docs/10-limits.md`).
+  expands a schema past the size bound (see `docs/guides/limits.md`).
 - The project describes its schema algebra as *closed* under its operations
   rather than *complete*.
 
@@ -4984,7 +4984,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   `union`, `intersection`, or `complement` past a fixed depth is rejected at
   construction with a `ValueError`, so a schema grown in an unbounded loop cannot
   overflow the native stack on its next check. A `recursive` back edge counts as
-  a leaf, so a recursive schema's depth stays finite (see `docs/10-limits.md`).
+  a leaf, so a recursive schema's depth stays finite (see `docs/guides/limits.md`).
 - The type stub declares the `__copy__` and `__deepcopy__` methods a compiled
   validator exposes.
 

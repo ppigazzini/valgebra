@@ -323,7 +323,7 @@ fn unprinted(name: String, taken: &FxHashSet<&str>) -> String {
 /// `Literal[1, 2]` and `Literal[2, 1]`, `A | B` and `B | A`, and `Annotated[int,
 /// Ge(3), Ge(5)]` and `Annotated[int, Ge(5), Ge(3)]` are each one schema by `==`
 /// and by `hash`, and printed in the slot order they would be two.
-/// `docs/04-algebra.md` says "`repr` shows it and `==` compares it", so each
+/// `docs/guides/algebra.md` says "`repr` shows it and `==` compares it", so each
 /// pair has to be one rendering.
 ///
 /// The variant order is the slot-free part of the sort, so the runs keep it --

@@ -1,4 +1,4 @@
-"""The promises `docs/08-error-model.md` makes, held at the sites that make them.
+"""The promises `docs/guides/error-model.md` makes, held at the sites that make them.
 
 Two of them are short enough to quote. `fail_fast=True` "stops at the first
 failure", and the page's own example asserts `len(err.errors) == 1`. And a path
@@ -403,7 +403,7 @@ NOT_DRIVEN: dict[str, str] = {
 
 def _promised() -> set[str]:
     """Every promise the page separates with a heading."""
-    page = (ROOT / "docs" / "08-error-model.md").read_text(encoding="utf-8")
+    page = (ROOT / "docs" / "guides" / "error-model.md").read_text(encoding="utf-8")
     found = set(_HEADING.findall(page))
     # The scan is the detector: no heading at all would pass both directions.
     assert len(found) >= 10, sorted(found)

@@ -10,7 +10,7 @@ relationships versus where it stays deliberately conservative. It is the
 reference behind the claims the rest of the docs make — "a closed, lawful
 lattice", "subtyping is set inclusion", "sound but deliberately conservative" —
 so each is backed rather than asserted. The [soundness
-argument](14-soundness.md) takes the next step: why an accept is never wrong,
+argument](soundness.md) takes the next step: why an accept is never wrong,
 node by node.
 
 ## Schemas denote sets; validation is membership
@@ -37,7 +37,7 @@ distributive, complemented lattice. Every Boolean-algebra law therefore holds �
 commutativity, associativity, idempotence, absorption, identities,
 distributivity, De Morgan, and double negation — and valgebra property-tests each
 against the membership relation rather than asserting it (see the
-[algebra guide](04-algebra.md)).
+[algebra guide](../guides/algebra.md)).
 
 The laws hold of the schema a caller **builds**, not of a pass over it
 afterwards: `union`, `intersection` and `complement` produce the lattice normal
@@ -114,14 +114,14 @@ below `b` exactly when `a` and the complement of `b` share no value. That
 decides pairs no rule about shapes reaches, and it costs about three orders of
 magnitude more than a rule -- `scripts/perf_gate.py --decision-rules` and
 `--decision-sets` ask one corpus of both
-([performance](11-performance.md#what-a-relation-between-two-validators-costs))
+([performance](../guides/performance.md#what-a-relation-between-two-validators-costs))
 -- which is why it is asked second and only where the rules decline.
 
 Each kind's representation is **bounded**: a union of dicts, objects or sets
 holds at most a fixed number of atoms, and a build spends a fixed allowance
 reaching one. Past either the sets refuse, and the refusal is an answer of its
 own -- "not proven" rather than "not true". That is why the conservative list
-on [the decidability page](15-decidability.md) has entries about size beside
+on [the decidability page](decidability.md) has entries about size beside
 the entries about shape: a relation the sets would decide can still be one they
 decline to build, and the same relation decides under a larger bound.
 
@@ -182,12 +182,12 @@ which fragment each part settles:
   `is_empty` decide a wider fragment than construction folds — class and literal
   inclusion, refinements (including the emptiness of contradictory bounds like
   `Ge(10) & Le(0)`), sequences, sets, records and mappings, and recursion at its
-  greatest fixpoint. The [decidability boundary](15-decidability.md) lists exactly
+  greatest fixpoint. The [decidability boundary](decidability.md) lists exactly
   what is decided and what stays conservative.
 - **Conservative.** A predicate refinement is opaque, and a narrow decidable tail
   and the runtime-undecidable constructs remain (the boundary records them). An
   answer is sound relative to the [trust
-  base](14-soundness.md#what-this-argument-assumes): over values that answer
+  base](soundness.md#what-this-argument-assumes): over values that answer
   Python's questions as a function of themselves, whose `__class__` is their
   type, and, for an enumeration's instance, that the enumeration made, among
   the rest it lists. `is_empty` does not report a non-empty schema as empty,

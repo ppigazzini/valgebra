@@ -2,7 +2,7 @@
 
 A reader copies a method name off a page and calls it, and a name the class
 does not have fails at the first call. The examples cannot catch one: they run,
-but a name in a sentence runs nowhere. `docs/10-limits.md` would list
+but a name in a sentence runs nowhere. `docs/guides/limits.md` would list
 `is_disjoint_from` among the relations a validator answers, and the API has
 `relation_to`, `is_subtype_of`, `is_equivalent` and `is_empty`.
 
@@ -44,8 +44,23 @@ pytestmark = pytest.mark.repository
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
 PACKAGE = ROOT / "python" / "valgebra" / "__init__.py"
 
-#: The user pages: the documentation set a reader of the API reads.
-PAGES = sorted((ROOT / "docs").glob("*.md"))
+#: The user pages: the documentation set a reader of the API reads, in every
+#: folder of the site, the developer set apart.
+PAGES = sorted(
+    page
+    for page in (ROOT / "docs").rglob("*.md")
+    if page.relative_to(ROOT / "docs").parts[0] != "dev"
+)
+
+
+def test_the_pages_read_are_the_sites() -> None:
+    """The pages read are the nav's, so a page moved into a folder is still read."""
+    config = (
+        (ROOT / "mkdocs.yml").read_text(encoding="utf-8").partition("\nplugins:")[0]
+    )
+    nav = set(re.findall(r"^ +- [^:\n]+: ([A-Za-z0-9/-]+\.md)$", config, re.MULTILINE))
+    assert {page.relative_to(ROOT / "docs").as_posix() for page in PAGES} == nav
+
 
 #: A backticked span on one line.
 SPAN = re.compile(r"`([^`\n]+)`")

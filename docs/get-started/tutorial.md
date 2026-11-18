@@ -10,8 +10,8 @@ constraint, an optional field, a real failure you inspect, and a JSON document �
 building each step on the last. Every snippet runs as written; copy them in
 order.
 
-It assumes valgebra is [installed](00-installation.md). For the meaning of each
-form you meet here, the [schema language](03-schema-language.md) is the reference;
+It assumes valgebra is [installed](installation.md). For the meaning of each
+form you meet here, the [schema language](../guides/schema-language.md) is the reference;
 this page is the path, not the catalog.
 
 ## 1. Your first validator
@@ -86,13 +86,13 @@ assert users.is_valid({"name": "Ada", "age": 36, "note": "extra"})  # open
 That last line is the one to notice: a `TypedDict` is **open**, so a key it does
 not declare is admitted. That is the typing spec's reading of the form rather
 than a valgebra choice, and step 6 shows the spelling that is closed. The
-[schema language](03-schema-language.md#a-typeddict-is-open-a-dict-literal-is-closed)
+[schema language](../guides/schema-language.md#a-typeddict-is-open-a-dict-literal-is-closed)
 has both, and `closed=True` for a `TypedDict` that should refuse.
 
 ## 5. Adding a constraint
 
 Plain types say *what kind*; a refinement says *which values*. Narrow a field
-with `Annotated` and an [annotated-types](05-refinements.md) marker — here, an age
+with `Annotated` and an [annotated-types](../guides/refinements.md) marker — here, an age
 that cannot be negative:
 
 ```python
@@ -145,7 +145,7 @@ except ValidationError as err:
 assert raised
 ```
 
-The [error model](08-error-model.md) covers aggregation and union reporting.
+The [error model](../guides/error-model.md) covers aggregation and union reporting.
 
 ## 7. Validating JSON
 
@@ -154,7 +154,7 @@ the Rust path and run the very same checks, so a document is judged as the value
 `json.loads` builds from it. The JSON reader is the stricter of the two: a
 non-standard float token such as `NaN` and an escape naming a lone surrogate
 are refused as `json_invalid`, among the documents
-[the JSON path](07-json.md) lists:
+[the JSON path](../guides/json.md) lists:
 
 ```python
 from valgebra import Validator
@@ -181,11 +181,11 @@ assert record == {"name": "Ada", "age": 36}
 You can now check scalars, collections, records, constraints, failures, and
 JSON. From here:
 
-- The [recipes](19-recipes.md) put them to work, each on one task end to end.
-- The [schema language](03-schema-language.md) lists every form and the set it
+- The [recipes](recipes.md) put them to work, each on one task end to end.
+- The [schema language](../guides/schema-language.md) lists every form and the set it
   denotes.
-- [Refinements](05-refinements.md) covers the full constraint vocabulary.
-- The [Boolean algebra](04-algebra.md) composes schemas with `union`, `intersection`,
-  and `complement`, and the [foundations](13-foundations.md) explain the theory.
-- [Recursive schemas](06-recursion.md) handle trees and linked structures with
+- [Refinements](../guides/refinements.md) covers the full constraint vocabulary.
+- The [Boolean algebra](../guides/algebra.md) composes schemas with `union`, `intersection`,
+  and `complement`, and the [foundations](../explanation/foundations.md) explain the theory.
+- [Recursive schemas](../guides/recursion.md) handle trees and linked structures with
   `recursive`.

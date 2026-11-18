@@ -55,7 +55,7 @@
 //! that a key type is infinite, is met by a cell's holding more keys than the atom
 //! can use, and its keys are pinned otherwise, as a finite part's are. A word is
 //! one key to this, and a label a word of a language: true of a key whose hash and
-//! `==` are its text's, and named in `docs/14-soundness.md` for one whose are not.
+//! `==` are its text's, and named in `docs/explanation/soundness.md` for one whose are not.
 
 use std::collections::{BTreeMap, BTreeSet};
 

@@ -200,7 +200,7 @@ fn a_form_the_two_engines_agree_on_is_left_alone() {
         // Escaped, so neither engine reads an operator.
         r"[\w\-\-\d]",
         r"[\--x]",
-        // A POSIX class, the divergence `docs/05-refinements.md` names with
+        // A POSIX class, the divergence `docs/guides/refinements.md` names with
         // both readings shown -- and the only spelling of one there is.
         r"[[:alpha:]]",
         r"[[:alpha:][:digit:]]",

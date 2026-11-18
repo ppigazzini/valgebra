@@ -406,8 +406,8 @@ _OPEN_WORLD = (
     "The open world, not a gap in the rules: a subclass of this class may also "
     "derive from {kind}, so no value of this universe refutes the relation and "
     "no argument proves it. Deciding it would mean reading the class hierarchy "
-    "as closed, which is the one assumption `docs/15-decidability.md` names and "
-    "declines to make."
+    "as closed, which is the one assumption `docs/explanation/decidability.md` "
+    "names and declines to make."
 )
 
 ACCEPTED: dict[str, str] = {
@@ -556,7 +556,7 @@ def test_every_predicate_is_the_proof_answer_of_a_relation(survey: Survey) -> No
 
     `is_empty` is the one worth spelling out: emptiness reduces to `s <= nothing`,
     so the three answers about it are a relation away
-    ([the boundary](../docs/15-decidability.md)) and a caller wanting them asks
+    ([the boundary](../docs/explanation/decidability.md)) and a caller wanting them asks
     for them there. A method of its own would be a second spelling of one
     question, which the surface rule refuses.
     """
@@ -621,7 +621,7 @@ def _disagreements() -> list[str]:
     """Pairs where `a <= b` and `a & ~b is empty` give different answers.
 
     `docs/dev/02-decision.md` defines `a <= b` as "`a & ~b` admitting no value",
-    and `docs/15-decidability.md` decides by `a ∧ ¬b = ∅`. Both procedures are
+    and `docs/explanation/decidability.md` decides by `a ∧ ¬b = ∅`. Both procedures are
     sound, so a disagreement is one of them being *less complete* than the
     definition the pages give -- not an unsoundness, and not something a caller
     reading the identity would expect.

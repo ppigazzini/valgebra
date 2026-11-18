@@ -29,7 +29,7 @@ because both hand back something a caller reads — `load` the value itself, and
 a `Value::Json` is never explained: the explaining arms of the JSON walk are
 unreachable by construction, and a document reaches the same codes with the same
 `loc` a Python value reaches, which is what
-[08-error-model.md](../08-error-model.md) promises. The in-place path exists for
+[guides/error-model.md](../guides/error-model.md) promises. The in-place path exists for
 the question whose answer is no object, the one that answers a `bool`. It builds
 the object `json.loads` would give only for a node that compares the value with
 a Python object -- a literal, an instance or object check, a refinement's
@@ -359,7 +359,7 @@ value all fall through to the linear scan, which stays the one source of truth
 for behavior. A **report** does depend on one: a record the index holds a plan
 for is read by its keys, and one it holds none for by its entries, which
 decides how far a deciding pass gets and so which branch of a union of records
-is explained ([08-error-model.md](../08-error-model.md)). So the traversal that
+is explained ([guides/error-model.md](../guides/error-model.md)). So the traversal that
 builds the index descends into every node a record can sit under.
 
 **The constant itself is found by its address.** A literal a program spells in
@@ -562,7 +562,7 @@ record's field, raise where `cpyext` declares no exception, which it reports as
 a fatal error and ends the process inside the call. A reading around the attach
 would ask the type of every element from Python before the walk read it, a pass
 over each container on every PyPy walk for a value `cpyext` shows no extension.
-`docs/00-installation.md` states the behavior, and
+`docs/get-started/installation.md` states the behavior, and
 `test_a_subclass_whose_len_raises_is_read_by_its_storage` holds CPython's half.
 
 **Every container the walk reads answers this way, and for one reason.** A
@@ -885,7 +885,7 @@ which asks the comparisons, and the first value past the word, whose read raises
 ends the range for that list, so a list of them pays one raise. Read for one value,
 with no list to hold the operands across, the range would be a read per operand
 and a raise per value past the word, which `Comparing an order bound` under
-[Measured and not taken](../11-performance.md#measured-and-not-taken) counts.
+[Measured and not taken](../guides/performance.md#measured-and-not-taken) counts.
 `a_list_of_bounded_integers_reads_as_the_comparisons_read_it` holds the range to
 the comparisons at every edge of the word. Where every constraint of a `str` is a
 length bound, the bounds are one inclusive range of lengths read once for the
@@ -1075,7 +1075,7 @@ them.
 
 **A stack probe of the walk's own is refused.** Levels are not bytes, so a
 thread started with less stack than its platform's default can overflow before
-the bound does, and [the limits page](../10-limits.md) says so. Reading the
+the bound does, and [the limits page](../guides/limits.md) says so. Reading the
 stack itself -- `stacker::remaining_stack()` beside `descend` -- would turn that
 overflow into `recursion_limit`, and it is not in: it adds a crate that
 assembles for every wheel target, a call on every level of every walk, and a
@@ -1145,7 +1145,7 @@ its own. Four conditions make a kept answer the value's:
   class whose metaclass is not `type` is never remembered
   (`MemoPlan::remembers`): the refinements page promises a predicate a call at
   each occurrence, and a class with a metaclass of its own may answer
-  `isinstance` by code, which `docs/17-boundaries.md` reads as two calls.
+  `isinstance` by code, which `docs/explanation/boundaries.md` reads as two calls.
 - **For one call.** The memo is the call's and is dropped with it.
 - **A reference to each Python value it keys.** User code the walk runs -- an
   `__eq__` behind a literal, a key's `__hash__` -- can replace a list's element
@@ -1176,7 +1176,7 @@ what the report names is where the first explaining walk met the stop.
 
 **What it does not reach.** A definition reaching a predicate or a hooked class
 is walked at each occurrence, and [the limits
-page](../10-limits.md#what-the-bounds-do-not-bound) says so. A meet's full
+page](../guides/limits.md#what-the-bounds-do-not-bound) says so. A meet's full
 report holds each member's failures, and where both members read one child the
 report itself doubles with each level: the memo shortens the walk, and the
 report is the size it is. `memo_tests.rs` beside the walk holds the memo to the

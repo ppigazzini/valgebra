@@ -97,7 +97,7 @@ ROWS: tuple[Reading, ...] = (
             "are ambiguous over it: ty and pyright answer the gradual type by "
             "the spec's ambiguity rule, mypy the first overload. Nothing in the "
             "stub moves on a change here; a caller who wants a type writes the "
-            "parameter typed, as `docs/18-static-checking.md` says."
+            "parameter typed, as `docs/guides/static-checking.md` says."
         ),
     ),
     Reading(
@@ -114,8 +114,8 @@ ROWS: tuple[Reading, ...] = (
             "method on it is an error once per member. ty reads the validator's "
             "`__ror__`, which is what runs: `type.__or__` declines a validator. "
             "When mypy or pyright join ty, the class-on-the-left row of "
-            "`docs/18-static-checking.md` moves, and `docs/04-algebra.md`'s rows "
-            "in `scripts/check_doc_examples.py` go."
+            "`docs/guides/static-checking.md` moves, and `docs/guides/algebra.md`'s "
+            "rows in `scripts/check_doc_examples.py` go."
         ),
     ),
     Reading(
@@ -141,7 +141,7 @@ ROWS: tuple[Reading, ...] = (
             "checker; mypy matches it against `type[_S]` and the other two do "
             "not. The frontend reads it as its supertype's set, so the typed "
             "reading is the narrower and sound one. When ty or pyright join "
-            "mypy, the `NewType` row of `docs/18-static-checking.md` moves."
+            "mypy, the `NewType` row of `docs/guides/static-checking.md` moves."
         ),
     ),
     Reading(
@@ -154,7 +154,7 @@ ROWS: tuple[Reading, ...] = (
             "pyright do. A protocol validator is the protocol's member record, "
             "which reads a method member as being callable and no more, so the "
             "typed reading is wider than the set where a member names a "
-            "signature, as `docs/18-static-checking.md` says. When mypy joins "
+            "signature, as `docs/guides/static-checking.md` says. When mypy joins "
             "the other two, the protocol row of that page moves."
         ),
     ),
@@ -167,7 +167,7 @@ ROWS: tuple[Reading, ...] = (
             "A protocol that is not runtime-checkable is the same member "
             "record, and each checker reads it as it reads the "
             "runtime-checkable one. When the two rows part, the protocol row "
-            "of `docs/18-static-checking.md` splits."
+            "of `docs/guides/static-checking.md` splits."
         ),
     ),
     Reading(

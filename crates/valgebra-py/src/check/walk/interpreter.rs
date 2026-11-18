@@ -9052,7 +9052,7 @@ fn the_smallest_recursive_body_is_walked_to_the_unfolding_bound() {
 /// got furthest (`chosen_record`), and how far a pass gets depends on how the
 /// record is read: a closed record by its keys, in the declared order, and one
 /// the index holds no plan for by its entries, in the dict's order
-/// (`docs/08-error-model.md`). So the index owes a plan to every record it can
+/// (`docs/guides/error-model.md`). So the index owes a plan to every record it can
 /// reach, and the value here tells the two readings apart: by its keys the
 /// `str` branch admits `a` and is explained, by its entries the `int` branch
 /// admits `b` and is. The union alone is the premise, read by its keys.
@@ -9132,7 +9132,7 @@ fn a_union_of_records_reports_alike_wherever_it_sits() {
 /// its undeclared keys by the clause: the explaining pass resumes at the field
 /// the first pass refused, or past the fields where an undeclared key refused,
 /// so a predicate on a field before it runs once, and a field is read once in a
-/// record its clause admits whatever keys it holds (`docs/05-refinements.md`).
+/// record its clause admits whatever keys it holds (`docs/guides/refinements.md`).
 #[test]
 fn a_record_whose_clause_reads_values_reads_each_field_once() {
     Python::attach(|py| {

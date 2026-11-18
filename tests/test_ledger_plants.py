@@ -1728,10 +1728,10 @@ PLANTS = (
         # form the frontend stops reading is read as a literal, which denotes
         # the annotation object and admits nothing a caller has.
         "tests/test_form_ledger.py",
-        ("docs/03-schema-language.md",),
+        ("docs/guides/schema-language.md",),
         lambda tree: _edit(
             tree,
-            "docs/03-schema-language.md",
+            "docs/guides/schema-language.md",
             "| `bool` | `{True, False}` |\n",
             "| `bool` | `{True, False}` |\n| `complex` | every `complex` instance |\n",
         ),
@@ -1745,10 +1745,10 @@ PLANTS = (
         # breaks, or a decline it states and the tree decides, reads the same
         # as a page nobody has checked.
         "tests/test_boundary_ledger.py",
-        ("docs/15-decidability.md",),
+        ("docs/explanation/decidability.md",),
         lambda tree: _edit(
             tree,
-            "docs/15-decidability.md",
+            "docs/explanation/decidability.md",
             "- **Sets and frozensets.** By element inclusion.\n",
             "- **Sets and frozensets.** By element inclusion.\n"
             "- **A relation nobody drives.** Planted.\n",
@@ -1817,10 +1817,10 @@ PLANTS = (
         # An assumption typed without its bolded lead-in: the trust base keeps
         # the sentence and the marker scan stops seeing it as an assumption.
         "tests/test_boundary_ledger.py",
-        ("docs/14-soundness.md",),
+        ("docs/explanation/soundness.md",),
         lambda tree: _edit(
             tree,
-            "docs/14-soundness.md",
+            "docs/explanation/soundness.md",
             "- **The crates contain no `unsafe`.** Both crate roots carry",
             "- The crates contain no `unsafe`. Both crate roots carry",
         ),
@@ -1830,10 +1830,10 @@ PLANTS = (
         # An assumption added to the trust base with no test naming it: a
         # sentence the suite cannot be wrong about.
         "tests/test_boundary_ledger.py",
-        ("docs/14-soundness.md",),
+        ("docs/explanation/soundness.md",),
         lambda tree: _edit(
             tree,
-            "docs/14-soundness.md",
+            "docs/explanation/soundness.md",
             "- **Predicate refinements are opaque.**",
             "- **A planted assumption no test shows the cost of.** Planted.\n"
             "- **Predicate refinements are opaque.**",
@@ -1844,10 +1844,10 @@ PLANTS = (
         # An assumption's sentence rewritten on the page, which leaves the
         # `# TRUST:` marker carrying the old wording and naming nothing.
         "tests/test_boundary_ledger.py",
-        ("docs/14-soundness.md",),
+        ("docs/explanation/soundness.md",),
         lambda tree: _edit(
             tree,
-            "docs/14-soundness.md",
+            "docs/explanation/soundness.md",
             "- **The crates contain no `unsafe`.**",
             "- **No crate contains `unsafe`.**",
         ),
@@ -2350,10 +2350,10 @@ PLANTS = (
     Plant(
         # The markers table's header reworded, so the parse reads one page.
         "tests/test_form_ledger.py",
-        ("docs/05-refinements.md",),
+        ("docs/guides/refinements.md",),
         lambda tree: _edit(
             tree,
-            "docs/05-refinements.md",
+            "docs/guides/refinements.md",
             "| Marker | Constraint | Failure code |",
             "| Refinement | Constraint | Failure code |",
         ),
@@ -3648,10 +3648,10 @@ PLANTS = (
         # A relation the API does not have, listed beside the four it has: the
         # sentence runs nowhere, so no example fails on it.
         "tests/test_api_names_in_docs.py",
-        ("docs/10-limits.md",),
+        ("docs/guides/limits.md",),
         lambda tree: _edit(
             tree,
-            "docs/10-limits.md",
+            "docs/guides/limits.md",
             "`is_equivalent`, `is_empty` -- holds",
             "`is_equivalent`, `is_disjoint_from`, `is_empty` -- holds",
         ),
@@ -3660,10 +3660,10 @@ PLANTS = (
     Plant(
         # A method respelled in a sentence that calls it on a validator.
         "tests/test_api_names_in_docs.py",
-        ("docs/03-schema-language.md",),
+        ("docs/guides/schema-language.md",),
         lambda tree: _edit(
             tree,
-            "docs/03-schema-language.md",
+            "docs/guides/schema-language.md",
             "adding or removing an `.open()`",
             "adding or removing an `.opened()`",
         ),
@@ -3681,6 +3681,19 @@ PLANTS = (
             'SPAN = re.compile(r"``([^`\\n]+)``")',
         ),
         trips=("test_the_scan_reads_the_names_that_are_there",),
+    ),
+    Plant(
+        # The pages read from the top folder alone, so a page filed under a
+        # section's folder goes unread and its names unchecked.
+        "tests/test_api_names_in_docs.py",
+        ("tests/test_api_names_in_docs.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_api_names_in_docs.py",
+            'for page in (ROOT / "docs").rglob("*.md")',
+            'for page in (ROOT / "docs").glob("*.md")',
+        ),
+        trips=("test_the_pages_read_are_the_sites",),
     ),
     Plant(
         # A job renamed, and the gate still waiting on the old name.

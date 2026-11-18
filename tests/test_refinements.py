@@ -261,7 +261,7 @@ def test_a_function_is_a_predicate_whatever_module_defines_it() -> None:
     is a decorator returning what it is given, so it admits a truthy value and
     refuses `0`. A function carries no mark telling the two apart, and a list of
     modules whose functions are ignored drops the first two with the third:
-    this is the limit `docs/05-refinements.md` states.
+    this is the limit `docs/guides/refinements.md` states.
     """
     finite = Validator(Annotated[float, math.isfinite])
     assert finite.is_valid(1.0)

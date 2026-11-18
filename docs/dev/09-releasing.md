@@ -88,7 +88,7 @@ done
 1. **Read the tree against the last release**, on every CPython release a
    wheel is built for with a profile: an environment holding the version PyPI
    serves, built here from its tag, and one holding the tree, named at one
-   length, and a `count` of the two, as [Reading one build against another](../11-performance.md#reading-one-build-against-another)
+   length, and a `count` of the two, as [Reading one build against another](../guides/performance.md#reading-one-build-against-another)
    reads them. Built here, the two differ in their sources alone. Run the
    three for each release, `LAST` the version PyPI serves:
 
@@ -189,7 +189,7 @@ done
    Three remedies are refused. A hash seed fixed in the release's training: two builds
    of one source by `scripts/page_figures.py`, which fixes it, placed the 3.15 list loop
    at offsets 48 and 0 in its line. A loop alignment flag:
-   [measured and not taken](../11-performance.md#measured-and-not-taken). Publishing a
+   [measured and not taken](../guides/performance.md#measured-and-not-taken). Publishing a
    dry run's wheels so a reading comes before the upload: each run already runs the
    suite on the wheels it uploads, and the section that names a move is part of the
    commit those wheels are built from.

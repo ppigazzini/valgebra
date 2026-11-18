@@ -59,9 +59,9 @@ def test_a_refinement_spends_a_level_of_the_depth_budget() -> None:
 
 def test_the_limits_page_names_the_refinement() -> None:
     """A budget a reader can exhaust is one the page accounts for."""
-    page = (_DOCS / "10-limits.md").read_text(encoding="utf-8")
+    page = (_DOCS / "guides" / "limits.md").read_text(encoding="utf-8")
     assert "refinement" in page.lower(), (
-        "docs/10-limits.md explains the list and tuple multiplier but not the "
+        "docs/guides/limits.md explains the list and tuple multiplier but not the "
         "refinement, so a reader who pins a length has nothing to attribute "
         "the lost depth to"
     )
@@ -91,9 +91,9 @@ def test_a_map_can_constrain_some_keys_and_free_the_rest() -> None:
 
 def test_the_schema_language_page_shows_the_idiom() -> None:
     """The composition is worth a page only if the page carries it."""
-    page = (_DOCS / "03-schema-language.md").read_text(encoding="utf-8")
+    page = (_DOCS / "guides" / "schema-language.md").read_text(encoding="utf-8")
     assert "complement" in page, (
-        "docs/03-schema-language.md states that clauses are a disjunction and that "
+        "docs/guides/schema-language.md states that clauses are a disjunction and that "
         "named fields take precedence, but never shows how to constrain some "
         "keys and leave the rest free"
     )
@@ -137,9 +137,9 @@ def test_the_schema_language_page_names_each_form_it_refuses(
     they are most likely to have written.
     """
     del form  # the companion row above owns the behavior
-    page = (_DOCS / "03-schema-language.md").read_text(encoding="utf-8")
+    page = (_DOCS / "guides" / "schema-language.md").read_text(encoding="utf-8")
     generic = label.split("[", maxsplit=1)[0]
     assert f"{generic}[" in page, (
-        f"docs/03-schema-language.md never names {label}, so a reader who "
+        f"docs/guides/schema-language.md never names {label}, so a reader who "
         "writes it and meets NotImplementedError has no page to consult"
     )

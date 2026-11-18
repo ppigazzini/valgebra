@@ -268,7 +268,7 @@ takes out values a clause claims
 **A node, a kind or a parameter for another value universe.** Refused where its
 values embed in Python's. JSON's are what `json.loads` returns, so every JSON set
 is a set of Python values below the JSON values' own top
-([docs/20-universes.md](../20-universes.md)), reached by the nodes as they stand, and case 1
+([docs/explanation/universes.md](../explanation/universes.md)), reached by the nodes as they stand, and case 1
 of the admission test is what it fails: write it as a combination and add
 nothing. `1` and `1.0` being one JSON number is no node either: every set a JSON
 frontend builds admits both. A fact that decides less than it denotes, as the
@@ -375,7 +375,7 @@ of the string. The cost is completeness on a schema nobody can decide anyway, an
 `tests/test_combinators.py` pins the witness so the fold cannot be added back by
 someone reading only the law. An attribute record, a literal, a bound, a length
 and a step fold because Python's rules ask each of them for one answer about a
-value. The trust base assumes it ([14-soundness.md](../14-soundness.md)), and
+value. The trust base assumes it ([explanation/soundness.md](../explanation/soundness.md)), and
 five known-unsound tests pin what a value breaking it is answered.
 
 **A method that reduces a schema.** Refused. Construction settles the lattice
@@ -578,7 +578,7 @@ the second's definitions by the same pairing (`place_definitions` in
 `crates/valgebra-py/src/build.rs`), so a definition the first already holds is
 that definition rather than a copy the folds would read as another term. It is one of the binding's swept surfaces, and it decides `==` and
 nothing else -- `is_equivalent` is the decision procedure, a different question
-with a different answer, and [04-algebra.md](../04-algebra.md) is about why.
+with a different answer, and [guides/algebra.md](../guides/algebra.md) is about why.
 A union's or a meet's members, a map's clauses and a refinement's constraints
 are matched as the sets they are. Members are matched in place up to the first
 one out of place, and each after it among the other side's members that hash
@@ -621,7 +621,7 @@ handle (`Schema::unfolded`).
 The cost is that `repr`, `==` and the reported error follow the schema as
 *built*, not as written: `intersection(int, complement(int))` is `nothing` and
 reports `no_match`. That is recorded in
-[08-error-model.md](../08-error-model.md), where a reader meets it.
+[guides/error-model.md](../guides/error-model.md), where a reader meets it.
 
 ## What a length is
 
@@ -767,7 +767,7 @@ rejects the value itself has settled it, and a member that fails inside the
 value leaves the others meaningful. That second rule is not specific to classes
 — it is the one a refinement already applies between a base and its constraints,
 which is why `Annotated[int, Gt(0)]` does not report a bound on a string — and
-it is recorded in [08-error-model.md](../08-error-model.md). The error snapshot
+it is recorded in [guides/error-model.md](../guides/error-model.md). The error snapshot
 pins both.
 
 ## How a class reaches the core
@@ -1005,7 +1005,7 @@ reason. `in` is kept for the reason `|` is: it is Python's own
 spelling of the one question the product answers, membership, as `|` is
 Python's spelling of a union, where `&` and `~` would spell combinators the
 language has no operator for. A validator does not pickle either, and the
-refusal says what to send instead ([docs/17-boundaries.md](../17-boundaries.md)).
+refusal says what to send instead ([docs/explanation/boundaries.md](../explanation/boundaries.md)).
 
 ## The limit
 

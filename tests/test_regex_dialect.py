@@ -5,7 +5,7 @@ It also means the dialect is the Rust engine's rather than `re`'s, and the two
 disagree on patterns *both* accept — so compiling successfully is not a test of
 which language a pattern denotes.
 
-Each case below pins the behavior and asserts `docs/05-refinements.md` records it.
+Each case below pins the behavior and asserts `docs/guides/refinements.md` records it.
 A reader porting patterns from `re` has no other way to find out.
 """
 
@@ -21,7 +21,7 @@ import pytest
 from _tree import ROOT
 from valgebra import Regex, Validator
 
-_PAGE = (ROOT / "docs" / "05-refinements.md").read_text(encoding="utf-8")
+_PAGE = (ROOT / "docs" / "guides" / "refinements.md").read_text(encoding="utf-8")
 
 
 def _matches(pattern: str, text: str) -> bool:
@@ -326,7 +326,7 @@ def test_the_page_names_the_divergence(topic: str) -> None:
     and the assertion is about the topic being covered, not its typography.
     """
     assert topic.lower() in _PAGE.lower(), (
-        f"docs/05-refinements.md does not mention {topic!r}; a pattern valid in "
+        f"docs/guides/refinements.md does not mention {topic!r}; a pattern valid in "
         "both engines can denote different sets, and nothing else says so"
     )
 
@@ -359,7 +359,9 @@ def test_a_form_only_re_reads_is_refused_by_the_parse(
     re.compile(pattern)
     with pytest.raises(ValueError, match="invalid regular expression"):
         Validator(Annotated[str, Regex(pattern)])
-    assert f"`{spelled}`" in _PAGE, f"docs/05-refinements.md does not list {spelled}"
+    assert f"`{spelled}`" in _PAGE, (
+        f"docs/guides/refinements.md does not list {spelled}"
+    )
 
 
 # TRUST: The regular-expression parser reads a class as the set it writes.

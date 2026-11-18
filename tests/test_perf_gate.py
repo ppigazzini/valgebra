@@ -832,8 +832,8 @@ GAP_PAGES = (
     "docs/dev/00-architecture.md",
     "docs/dev/01-schema-ir.md",
     "docs/dev/02-decision.md",
-    "docs/11-performance.md",
-    "docs/13-foundations.md",
+    "docs/guides/performance.md",
+    "docs/explanation/foundations.md",
 )
 
 

@@ -21,7 +21,7 @@ reads `path`. Formatting is the last step and never the record.
 
 **The code, the exception type and the path format are part of the documented
 API.** They are pinned by snapshot tests, so a wording change is a reviewed diff
-rather than a silent break in someone's error handling. `docs/08-error-model.md`
+rather than a silent break in someone's error handling. `docs/guides/error-model.md`
 is the user-facing statement of the same thing.
 
 **A code is a name in a table.** Half the vocabulary is the core's: a leaf
@@ -85,7 +85,7 @@ reason the path is usable on a dict:
 | `Entered` | the key before it, entered by a failure **inside** it. The binding's tuple ends there, since no subscript reaches into a key, and the location writes the segments after it as the key's own, `('x',), key[0]`, apart from `('x',)[0]` in its value. It is no level of the value, so `PathSegment::steps` leaves it out where a union explains its deepest branch; and it holds nothing, since a variant holding a segment made the type recursive and its drop a call at every level an explaining walk pops (+2.07% on the record explain shape). `entered_the_key` in the record walk marks the key once its own walk has failed inside it |
 
 A consumer that flattens the path to strings loses the distinction the type
-exists to keep. `docs/08-error-model.md` states the same split for a caller, in
+exists to keep. `docs/guides/error-model.md` states the same split for a caller, in
 the form the Python tuple takes.
 
 `Index` is a position in the **value being validated**, so it is not one of the
@@ -139,7 +139,7 @@ in the meet's turn, so the report carries the elements' violations beside it.
   of such a subclass writing an order or a remainder of its own, which the walk
   reads reflected ahead of the builtin's, so that the builtin's bound read back
   is another set (`operand_repr`). Every refusal is a syntax error or a
-  call the frontend refuses, and `docs/16-api.md` lists them.
+  call the frontend refuses, and `docs/reference/api.md` lists them.
   `tests/test_repr.py` holds each, and the pytest mutation sweep, which owns
   `render.rs`, reads them there.
 
@@ -160,7 +160,7 @@ failure raised as a group of one prints its line twice, uncaught or through
 failure, where today the failures stay in Rust until a caller reads one
 (`test_the_error_model_is_built_when_it_is_asked_for`). The one split a
 caller's handling turns on, a walk that stopped against a value refused, is
-in the code already: `docs/08-error-model.md` names the five codes a stopped
+in the code already: `docs/guides/error-model.md` names the five codes a stopped
 walk raises.
 
 ## The limit

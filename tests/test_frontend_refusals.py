@@ -16,7 +16,7 @@ has rather than to the one the test was written against. Reword the sentence and
 the pattern stops matching, which is the failure this exists to produce.
 
 What it cannot do is judge whether the sentence is *good*. That is the
-reviewer's, and `docs/03-schema-language.md` and `docs/05-refinements.md` are
+reviewer's, and `docs/guides/schema-language.md` and `docs/guides/refinements.md` are
 where the reviewer's answer is written down.
 
 The other direction is the accepted list: a site the suite does not read is

@@ -20,7 +20,7 @@ only one of them is the API:
   stops accepting what it accepted, an exception type that changes.
 - **Not a break.** A relation that answered `False` ("not proven") and now
   answers `True`. The conservative answer is documented as "no, or not proven"
-  ([decidability](15-decidability.md)) -- so code that treats `False` as a proof
+  ([decidability](explanation/decidability.md)) -- so code that treats `False` as a proof
   of the negative was reading a guarantee that was never given. Widenings are
   listed in the notes below, and they are the commonest entry.
 - **Not a break, and worth reading anyway.** A `repr` that changes, an

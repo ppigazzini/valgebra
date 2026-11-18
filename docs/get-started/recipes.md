@@ -109,9 +109,9 @@ checker what nothing has checked. A schema narrows where a checker reads it as
 a type, as it reads a class such as a `TypedDict`, a dataclass or
 `list[Order]`; `int | None`, a `Literal` and an `Annotated` form read as
 `Validator[object]` and narrow nothing
-([what each spelling reads as](18-static-checking.md#a-validators-type-is-its-sets)).
+([what each spelling reads as](../guides/static-checking.md#a-validators-type-is-its-sets)).
 And a `False` narrows nothing: past a refusal the value reads as it did before
-([a `True` narrows](18-static-checking.md#a-true-narrows-and-a-false-does-not)).
+([a `True` narrows](../guides/static-checking.md#a-true-narrows-and-a-false-does-not)).
 
 ## A schema against its last version
 
@@ -139,7 +139,7 @@ assert Validator(CategoryV2).relation_to(CategoryV1) == "not_subset"
 ```
 
 A record follows the same rule, and a `TypedDict` is
-[open](03-schema-language.md#a-typeddict-is-open-a-dict-literal-is-closed):
+[open](../guides/schema-language.md#a-typeddict-is-open-a-dict-literal-is-closed):
 the old version admits any key it does not name, with any value.
 
 ```python
@@ -181,7 +181,7 @@ not yet proven", so a test asserting it passes on a question the procedure
 declines; `"not_subset"` is a refutation, a value of the one outside the other.
 Where the procedure declines, `relation_to` answers `"undecided"` and both
 assertions fail, so the test is red rather than green on a guess. Which
-relations decline is the [decidability boundary](15-decidability.md#the-contract).
+relations decline is the [decidability boundary](../explanation/decidability.md#the-contract).
 
 ## Stored data against a new schema
 
@@ -192,7 +192,7 @@ new, that is proven of every value the old schema admits, and no row needs
 reading. Where `relation_to` answers `"not_subset"`, some old value is refused,
 though not necessarily one the table holds, and the rows are read:
 `is_valid_json` parses each stored document and checks it
-[in place](07-json.md#performance), building no dict for it, and
+[in place](../guides/json.md#performance), building no dict for it, and
 `validate_json` gives the reasons for the ones it refuses:
 
 ```python
@@ -413,7 +413,7 @@ rates drifted at (1, 'currency') [missing_key]
 
 A response that belongs is walked once and builds no error: the walk that says
 where runs, and the error is built, only for a response that drifted
-([reporting a failure](11-performance.md#reporting-a-failure)). The log line
+([reporting a failure](../guides/performance.md#reporting-a-failure)). The log line
 carries each failure's path and code and not its message, since the message
 renders the value it refused, and a response's values can be data a log should
 not keep; a code is stable, so a count by path and code is a metric.
@@ -423,7 +423,7 @@ second rate renamed `currency` to `code`, which reads as `currency` missing:
 that is the drift that breaks the line reading the field, and a closed record
 reports an added field too. A JSON number written without a point is an `int`,
 which a `float` field refuses
-([the JSON value mapping](07-json.md#json-to-python-value-mapping)), so where a
+([the JSON value mapping](../guides/json.md#json-to-python-value-mapping)), so where a
 provider writes whole numbers bare, the field is `int | float`.
 
 ## A field of a FastAPI request
@@ -612,7 +612,7 @@ does above.
 
 **A refused route is not a proven overlap.** `is_empty` answers `True` only on a
 proof, and `False` both where the two schemas meet and where the procedure
-declines ([the decidability boundary](15-decidability.md#the-contract)), so the
+declines ([the decidability boundary](../explanation/decidability.md#the-contract)), so the
 router refuses what it cannot prove apart, which is the safe side; a value both
 admit, as the block names, shows the overlap is real. Where one field names the
 kind, a table keyed by it is the router, as the FastAPI recipe's is, and needs

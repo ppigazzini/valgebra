@@ -1,9 +1,9 @@
 """Every form the schema-language pages tabulate is a form a test drives.
 
-Two pages tabulate what a caller may write: `docs/03-schema-language.md` lists
+Two pages tabulate what a caller may write: `docs/guides/schema-language.md` lists
 the scalars, the collections, the native forms, the prefix-and-tail shapes, the
 class forms, and -- in its own table -- the forms that are **refused** rather
-than read; `docs/05-refinements.md` lists the markers. Those tables are the
+than read; `docs/guides/refinements.md` lists the markers. Those tables are the
 surface a reader learns the language from, and each row is a promise about an
 outcome: this spelling builds and admits these values, or this spelling raises.
 
@@ -67,8 +67,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 PAGES = (
-    ROOT / "docs" / "03-schema-language.md",
-    ROOT / "docs" / "05-refinements.md",
+    ROOT / "docs" / "guides" / "schema-language.md",
+    ROOT / "docs" / "guides" / "refinements.md",
 )
 
 #: The header a table of forms opens with. A page carries tables about other
@@ -505,8 +505,8 @@ def test_the_universe_is_the_pages_own_tables() -> None:
     assert len(_cells()) >= 45, _cells()
     # And it reads both pages, not one of them twice.
     assert {page.name for page, _, _ in tables} == {
-        "03-schema-language.md",
-        "05-refinements.md",
+        "schema-language.md",
+        "refinements.md",
     }
 
 

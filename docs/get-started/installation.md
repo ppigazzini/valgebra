@@ -31,9 +31,9 @@ packages it does not:
   refusal use.
 - [FastAPI](https://pypi.org/project/fastapi/) and
   [pydantic](https://pypi.org/project/pydantic/), which the
-  [FastAPI recipe](19-recipes.md#a-field-of-a-fastapi-request) uses.
+  [FastAPI recipe](recipes.md#a-field-of-a-fastapi-request) uses.
 - [numpy](https://pypi.org/project/numpy/), which the
-  [arrays section](17-boundaries.md#it-reads-an-array-through-what-the-array-exposes)
+  [arrays section](../explanation/boundaries.md#it-reads-an-array-through-what-the-array-exposes)
   of the boundaries page uses.
 
 Install them to run the examples as printed:
@@ -100,7 +100,7 @@ The musllinux sets run in Alpine containers, the free-threaded wheels on uv's mu
 build of each release, since the Docker library publishes no free-threaded image
 (`docs/dev/09-releasing.md` in the repository).
 
-One promise [What it cannot do](17-boundaries.md#it-holds-what-its-schema-names-and-lets-go-of-it)
+One promise [What it cannot do](../explanation/boundaries.md#it-holds-what-its-schema-names-and-lets-go-of-it)
 makes holds differently there. A validator releases the
 classes, enums and predicates its schema names when nothing else holds them, and
 on PyPy it cannot: `cpyext` builds a `PyTypeObject` proxy for every class an

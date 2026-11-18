@@ -6,7 +6,7 @@ The commonest shape a field has is a set of permitted values, so `expected` is
 where a caller looks for them -- and if it names the *kinds* of the branches
 instead, every caller writes the list out again by hand.
 
-`docs/08-error-model.md` states the rule these tests hold: `expected` names the
+`docs/guides/error-model.md` states the rule these tests hold: `expected` names the
 set.
 """
 

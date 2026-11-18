@@ -105,6 +105,10 @@ docs = [
     # HTML through soupsieve, whose fix for CVE-2026-126190, 4.0.0, needs Python
     # 3.11.5: below it the lock would hold 2.10, so the plugin installs from there.
     "mkdocs-llmstxt>=0.5; python_full_version >= '3.11.5'",
+    # Writes a page at each address a page has moved from. 1.2.3 adds nothing to
+    # the plugin but an import of properdocs, a second MkDocs it installs, to
+    # print a banner on every build.
+    "mkdocs-redirects>=1.2.2,<1.2.3",
 ]
 
 [tool.uv]
@@ -321,7 +325,7 @@ strict-equality-semantics = true
 # `strict-generic-narrowing` stays off. Under it `isinstance(x, dict)` on an
 # `object` narrows to a dict whose key type is unknown, and indexing it takes a
 # key of type `Never`: walking a value by the path a `ValidationError` reports
-# -- `docs/08-error-model.md` shows a caller doing it -- cannot be written
+# -- `docs/guides/error-model.md` shows a caller doing it -- cannot be written
 # without a cast.
 
 [tool.ty.src]

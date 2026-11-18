@@ -17,7 +17,7 @@ claims:
   answers 404 on the site, where ``mkdocs build --strict`` reports it only at
   INFO. A published page names such a page by its path instead.
 * **A relative path on the page an index serves.** PyPI renders ``README.md`` at
-  the project's own URL, where ``docs/07-json.md`` resolves to nothing, so that
+  the project's own URL, where ``docs/guides/json.md`` resolves to nothing, so that
   page names a page of the site or a file of the tree by its URL. Each such URL
   is resolved here as a relative link is, to its page, heading or file.
 * **A named path that does not exist.** A ``crates/...``, ``scripts/...``,
@@ -1258,7 +1258,7 @@ def check_llms_manifest() -> list[str]:
 
 
 #: The page that says what to install, relative to the root.
-INSTALL_PAGE = "docs/00-installation.md"
+INSTALL_PAGE = "docs/get-started/installation.md"
 #: A fenced python block, which is what the example runner executes.
 PYTHON_BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
 #: What a ``pip install`` line installs: every word after it but an option.

@@ -536,7 +536,7 @@ struct Entry<'a, 'py> {
 /// reaching a name is no field of it ([`the_entry_a_name_finds`]).
 ///
 /// The relations read a field's key as a `str`, so a key of another type that
-/// reaches a name is outside them, which `docs/14-soundness.md` states.
+/// reaches a name is outside them, which `docs/explanation/soundness.md` states.
 ///
 /// The names come from the plan's interned keys where it holds them, which
 /// carry their hashes, and are built from the field otherwise. The questions

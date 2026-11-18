@@ -702,7 +702,7 @@ fn tops_merged(defaults: &[MapClause]) -> Vec<MapClause> {
 /// Leaving them apart costs a pair its answer where the region claimed holds a
 /// literal: the region freed is then the literal's complement, a key holding
 /// part of a kind, which the set representation declines
-/// (`docs/15-decidability.md`), so the same set written the long way stops
+/// (`docs/explanation/decidability.md`), so the same set written the long way stops
 /// being decided. Over whole kinds the long way is decided too, and the fold
 /// is the shorter term. Where the values differ there is nothing to fold and
 /// the complement stands, which is the mapping case the page records.
@@ -882,7 +882,7 @@ pub enum Schema {
     /// Denotes every value whose type is `int` or a subclass of it:
     /// `issubclass(type(x), int)`. The type is the real one, not what a
     /// `__class__` property answers, so a proxy `isinstance` admits is not a
-    /// member (`docs/14-soundness.md`).
+    /// member (`docs/explanation/soundness.md`).
     ///
     /// In Python `bool` is a subclass of `int`, so `True` and `False` are
     /// integers and are members of this set. No value is carved out: subtyping
@@ -915,7 +915,7 @@ pub enum Schema {
     /// distinction between `Literal[1]`, `Literal[True]`, and `Literal[1.0]`.
     ///
     /// A set under the trust base, which takes a value's `==` to answer one way
-    /// (`docs/14-soundness.md`): a value whose `==` answers two calls
+    /// (`docs/explanation/soundness.md`): a value whose `==` answers two calls
     /// differently is outside it, and `Literal[c] & ~Literal[c]` is `Nothing`
     /// whatever that value answers.
     ///
@@ -1020,7 +1020,7 @@ pub enum Schema {
     ///
     /// An attribute is read as the value's own, so the record is a set under the
     /// trust base, which takes what a value answers to be a fact about it
-    /// (`docs/14-soundness.md`). Construction folds it with its complement on
+    /// (`docs/explanation/soundness.md`). Construction folds it with its complement on
     /// that ground, and a property whose reads alternate is outside the sets
     /// the fold is about.
     ///
@@ -1653,7 +1653,7 @@ pub(crate) const REACHED: usize = LONGEST / 128;
 /// them; `carries.rs` holds each to the bases it narrows.
 ///
 /// Every constraint but [`Constraint::Predicate`] is a set under the trust base
-/// (`docs/14-soundness.md`). The comparison, the length and the `%` it reads
+/// (`docs/explanation/soundness.md`). The comparison, the length and the `%` it reads
 /// are operators Python's rules make facts about the value -- the language
 /// reference's rules for comparisons, the data model's `__len__` -- with
 /// not-a-number the exception they name, read as one. So construction folds a
@@ -1680,15 +1680,15 @@ pub enum Constraint {
     /// `value % pool[i] == 0`: a numeric multiple of the operand. Where
     /// Python's `%` raises -- a float against an integer step past the float
     /// range -- the value is outside, as a value whose operation raises an
-    /// ordinary exception is (`docs/08-error-model.md`).
+    /// ordinary exception is (`docs/guides/error-model.md`).
     MultipleOf(OperandIx),
     /// `pool[i](value)` is truthy. The documented Python-callback slow path.
     Predicate(PredIx),
     /// The string fully matches this regular expression, anchored at both ends
     /// as `re.fullmatch` anchors, in the Rust engine's dialect rather than `re`'s
-    /// (`docs/05-refinements.md`). A value that is not a `str` has no text to
+    /// (`docs/guides/refinements.md`). A value that is not a `str` has no text to
     /// match and is outside the set, a `bytes` value among them, as is a string
-    /// holding a lone surrogate (`docs/14-soundness.md`). The pattern is held
+    /// holding a lone surrogate (`docs/explanation/soundness.md`). The pattern is held
     /// inline rather than pooled; the bindings compile it once and match
     /// natively. The structural rules relate two patterns only when they are
     /// written identically; the set representation reads a pattern as the

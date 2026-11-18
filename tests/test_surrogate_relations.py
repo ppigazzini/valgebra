@@ -4,7 +4,7 @@ r"""A `str` the codecs cannot encode is a `str`, and no pattern matches it.
 code points -- surrogates included. `"\\ud800"` is one character long, compares
 and hashes like any other string, and is a member of `str`.
 
-A pattern is a different matter. `docs/14-soundness.md` records it: a `Regex`
+A pattern is a different matter. `docs/explanation/soundness.md` records it: a `Regex`
 constraint matches the *text* of a string, and a string carrying a lone surrogate
 has no text, so it matches no pattern at all. The walk says so, in both
 directions.

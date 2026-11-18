@@ -66,11 +66,11 @@ What each spelling reads as:
 subscripted as `Validator` of it, and some of those are refused when built:
 `Sequence[int]`, `deque[int]`, `type[int]` and a user generic such as `Box[int]`
 type-check and raise `NotImplementedError` at the call, as
-[the forms the schema language does not list](03-schema-language.md#a-form-this-page-does-not-list)
+[the forms the schema language does not list](schema-language.md#a-form-this-page-does-not-list)
 do. The `instance_of` row is read the same way: `instance_of(TD)` for a
 `TypedDict` type-checks as `Validator[TD]` and raises `TypeError` at the call,
 as `instance_of` of a `Protocol` does, since neither class has instances of its
-own ([the class alone](03-schema-language.md#the-class-alone)).
+own ([the class alone](schema-language.md#the-class-alone)).
 
 The rows that name a checker are held by `tests/test_checker_readings.py`, which
 runs all three over one fixture per row under `tests/typing/readings/` and
@@ -208,7 +208,7 @@ immutable and hashable, so one built there is the intended shared value.
   `Validator(Point)` reads as `Point` and admits only the points whose fields
   are members too; nothing here makes a checker run the validator. A callable
   is checked for being callable and no more
-  ([a callable is not looked inside](17-boundaries.md#it-cannot-look-inside-a-callable)),
+  ([a callable is not looked inside](../explanation/boundaries.md#it-cannot-look-inside-a-callable)),
   so where the type names a signature the set is wider than the type: a
   protocol with a method, or a class with a field typed `Callable[[int], float]`,
   admits a value whose method or field takes other arguments. Under ty and
@@ -217,7 +217,7 @@ immutable and hashable, so one built there is the intended shared value.
   validator as `Validator[object]` and narrows nothing.
 - **An editor shows the types, not the prose.** The stub carries no docstrings,
   as a stub does by convention (ruff's `PYI021`); the prose is on the compiled
-  objects, where `help()` reads it, and on the [API reference](16-api.md).
+  objects, where `help()` reads it, and on the [API reference](../reference/api.md).
 - **The readings are the locked checkers'.** A caller on another release of ty,
   mypy or pyright may read a row differently until the project's lock reaches
   it.

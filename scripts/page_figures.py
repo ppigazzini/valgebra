@@ -1,6 +1,6 @@
 """Re-read every wall-clock figure the performance and JSON pages state.
 
-`docs/11-performance.md` and `docs/07-json.md` state figures measured on one
+`docs/guides/performance.md` and `docs/guides/json.md` state figures measured on one
 machine over the repeats the performance page's Method section names. This
 takes each of them again, on the checkout as it stands or on a commit, and
 prints it under the name of the page section that states it. It edits no page:
@@ -105,8 +105,8 @@ JSON_SHAPES = ("record", "nested", "array")
 INTERPRETER_ROWS = ("large_array", "wide_record", "deep_nesting", "scalar")
 
 #: The two pages, as a report names them above the figures each carries.
-PERFORMANCE = "docs/11-performance.md"
-JSON_PAGE = "docs/07-json.md"
+PERFORMANCE = "docs/guides/performance.md"
+JSON_PAGE = "docs/guides/json.md"
 
 #: A crate reading the JSON document with jiter alone: the tree its walk reads,
 #: and the pull parser building nothing. Written into the work directory with

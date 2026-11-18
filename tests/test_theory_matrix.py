@@ -307,8 +307,8 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         [b"", b"a", b"\xff", "a", ""],
     ),
     # -- the carriers decline where they cannot spell the bound --------------
-    # `docs/15-decidability.md` names four edges of the integer carrier. A bound
-    # is held within `2**120` of zero and Python's integers are unbounded, so a
+    # `docs/explanation/decidability.md` names four edges of the integer carrier.
+    # A bound is held within `2**120` of zero and Python's integers are unbounded, so a
     # bound past that is held as the widest set the carrier spells: the direction
     # the widening proves comes back `subset`, and the one a value refutes
     # declines rather than reporting a value the procedure never found.
@@ -495,7 +495,7 @@ IDS = [row[0] for row in ROWS]
 
 # THEORY: the-carriers-are-i64-and-f64
 def test_every_edge_of_the_integer_carrier_has_a_row() -> None:
-    """The edges `docs/15-decidability.md` names are rows, not sentences.
+    """The edges `docs/explanation/decidability.md` names are rows, not sentences.
 
     Deviation 11 is a property of the *representation*: a bound is held within
     `2**120` of zero and Python's integers are unbounded, so a bound it cannot

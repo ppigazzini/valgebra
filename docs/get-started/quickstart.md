@@ -6,7 +6,7 @@ description: Condensed feature tour for readers who know the domain.
 
 This is the condensed tour — a one-line scalar check through a refined
 `TypedDict` to a composed contract — for a reader who wants valgebra at a glance.
-For a guided, step-by-step path, start with the [tutorial](01-tutorial.md) instead.
+For a guided, step-by-step path, start with the [tutorial](tutorial.md) instead.
 Every snippet runs as written.
 
 ## Compile once, check many
@@ -77,7 +77,7 @@ assert not adult.is_valid(5)
 `TypedDict`, dataclasses and `NamedTuple` compile, and refinements on their
 fields are enforced. An enum compiles to its members, and a protocol to the
 values carrying each of its members, holding what the member declares
-([schema language](03-schema-language.md#a-protocol-is-the-record-of-its-members)):
+([schema language](../guides/schema-language.md#a-protocol-is-the-record-of-its-members)):
 
 ```python
 from typing import Annotated, TypedDict

@@ -295,7 +295,7 @@ was disturbed, and the 3.15 results below read both — so read a cell here
 against the same cell, not against the gate's output.
 
 **One command re-reads every figure on this page and on the
-[JSON page](07-json.md#performance)**, on the checkout as it stands or on the
+[JSON page](json.md#performance)**, on the checkout as it stands or on the
 commit `--rev` names:
 
 ```bash
@@ -420,7 +420,7 @@ itself:
 
 So a server checking each request's own payload scales with its threads, and
 threads checking one shared structure do not. The
-[installation page](00-installation.md#free-threaded-cpython) says what to do
+[installation page](../get-started/installation.md#free-threaded-cpython) says what to do
 about the second.
 
 ### The closest races
@@ -506,7 +506,7 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
   for what valgebra is and is not for.
 - These figures are for the object path — validating a value already in hand.
   The JSON input path is measured separately, on the same machine class, in the
-  [JSON page](07-json.md).
+  [JSON page](json.md).
 
 ## How the speed is made
 
@@ -1041,7 +1041,7 @@ program that builds validators per request, and to no validation call.
   that compares it with one: a literal, an instance or object check, a
   refinement's comparison or predicate. The two sources run one walk and stay
   equivalent by construction, which a property test holds over random schemas
-  and documents ([the JSON page](07-json.md) has the figures).
+  and documents ([the JSON page](json.md) has the figures).
 - **A closed record reads a document's keys through its plan, once.** Each key
   of the parsed object is resolved through the record's name-to-position plan
   and every declared field's value gathered before any is checked, because a

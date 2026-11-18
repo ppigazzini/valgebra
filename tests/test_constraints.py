@@ -661,7 +661,7 @@ def test_a_whole_float_step_is_not_the_integer_step_it_equals() -> None:
     `2**53 + 1` -- whose nearest float is `2**53` -- is a multiple of `2.0` and
     not of `2`. Each step is read as the number it is, and `typing`'s cache,
     which keys `Annotated` by equality, makes the two one marker in a process
-    that wrote either first: `docs/05-refinements.md` says so, and this holds
+    that wrote either first: `docs/guides/refinements.md` says so, and this holds
     what it says.
     """
     past = 2**53 + 1
