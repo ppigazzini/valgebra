@@ -388,7 +388,7 @@ The soundness is relative to a small, explicit trust base:
   `regex-syntax` crate for the walk and for the relations alike.
 
   **A negated class whose set is split at the surrogate gap is the one place it
-  does not.** `regex-syntax` 0.8.11 negates a set holding
+  does not.** `regex-syntax` 0.8.12 negates a set holding
   a range that ends at U+D7FF and another that starts at U+E000 into a set that
   keeps both, so `[^\x{D7FF}\x{E000}]` admits `"\ud7ff"` and `"\ue000"`, and the
   relations read the same wrong set: it is decided `not_subset` of

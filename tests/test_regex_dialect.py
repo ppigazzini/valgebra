@@ -367,7 +367,7 @@ def test_a_form_only_re_reads_is_refused_by_the_parse(
 # TRUST: The regular-expression parser reads a class as the set it writes.
 @pytest.mark.xfail(
     strict=True,
-    reason="regex-syntax 0.8.11 negates a set split at the surrogate gap into one "
+    reason="regex-syntax 0.8.12 negates a set split at the surrogate gap into one "
     "keeping U+D7FF and U+E000",
 )
 def test_a_negated_class_split_at_the_surrogate_gap_is_the_set_it_writes() -> None:
