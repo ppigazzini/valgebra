@@ -64,6 +64,7 @@ other:
 
 * **The developer set's index.** A page in ``docs/dev/`` that no row of its
   ``README.md`` names fails, and a row naming a page that does not exist fails.
+  The user pages keep no such table: the site's ``nav`` is their list.
 * **The table of products.** A test carrying a ``PRODUCT:`` marker with no row
   in the products table of ``docs/dev/08-testing.md`` fails, and a row naming a
   test that declares no product fails. The ledger rule below is satisfied by a
@@ -735,12 +736,13 @@ def check_pinned_numbers(text: str, numbers: list[str]) -> list[str]:
 
 
 def check_index(relative: str) -> list[str]:
-    """Hold one documentation set's index to the set, in both directions.
+    """Hold a documentation set's index to the set, in both directions.
 
-    ``relative`` is the directory under the repository root. Both sets index
-    themselves from a ``README.md`` whose rows name sibling pages, so one check
-    serves both; a page in neither the directory nor the index is the drift this
-    catches.
+    ``relative`` is the directory under the repository root: the developer set,
+    which GitHub renders and nothing publishes, so its ``README.md`` is where a
+    reader finds the pages, in the order to read them. The user pages have no
+    such table; the site's ``nav`` lists them, and the build fails on a page it
+    leaves out.
     """
     directory = ROOT / relative
     if not directory.is_dir():
@@ -1206,7 +1208,7 @@ DESCRIPTION = re.compile(r"^description: (.+)$", re.MULTILINE)
 
 
 def check_llms_manifest() -> list[str]:
-    """Hold the machine-readable manifest to the nav, in both directions.
+    """Hold the machine-readable manifest to the nav, in both directions and in order.
 
     ``mkdocs.yml`` names every user page twice: once in ``nav``, which builds the
     site, and once in the ``llmstxt`` sections, which build ``/llms.txt`` for a
@@ -1216,7 +1218,8 @@ def check_llms_manifest() -> list[str]:
 
     A manifest line also carries its page's summary, which is a copy of the
     page's own ``description:``, and is held to it: a copy that moves apart
-    describes to that reader a page the site no longer has.
+    describes to that reader a page the site no longer has. The manifest lists
+    the pages in the nav's order, so the two lists are one list written twice.
     """
     config = ROOT / "mkdocs.yml"
     if not config.exists():
@@ -1225,8 +1228,9 @@ def check_llms_manifest() -> list[str]:
     body = text.partition("  - llmstxt:")
     if not body[1]:
         return []
-    nav = set(re.findall(r"^ +- [^:\n]+: ([A-Za-z0-9-]+\.md)$", body[0], re.MULTILINE))
-    lines = dict(re.findall(r"^ +- ([A-Za-z0-9-]+\.md): (.+)$", body[2], re.MULTILINE))
+    order = re.findall(r"^ +- [^:\n]+: ([A-Za-z0-9/-]+\.md)$", body[0], re.MULTILINE)
+    nav = set(order)
+    lines = dict(re.findall(r"^ +- ([A-Za-z0-9/-]+\.md): (.+)$", body[2], re.MULTILINE))
     if not nav or not lines:
         return ["mkdocs.yml: the nav or the llms.txt manifest reads as empty"]
     problems = [
@@ -1237,6 +1241,10 @@ def check_llms_manifest() -> list[str]:
         )
         for page in sorted(pages)
     ]
+    if not problems and order != list(lines):
+        problems.append(
+            "mkdocs.yml: the llms.txt manifest lists the pages in another order"
+        )
     for page, summary in sorted(lines.items()):
         source = ROOT / "docs" / page
         if not source.exists():
@@ -1408,7 +1416,7 @@ def main(argv: list[str]) -> int:
         + check_internal_reference(prose)
         + check_history(prose)
     ]
-    failures += check_index("docs/dev") + check_index("docs")
+    failures += check_index("docs/dev")
     failures += check_example_installs()
     failures += check_ledger_table()
     failures += check_product_table()

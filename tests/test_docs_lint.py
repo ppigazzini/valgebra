@@ -283,7 +283,7 @@ def test_the_shipped_tree_is_clean() -> None:
     assert result.returncode == 0, result.stdout
 
 
-@pytest.mark.parametrize("relative", ["docs", "docs/dev"])
+@pytest.mark.parametrize("relative", ["docs/dev"])
 def test_each_index_is_held_in_both_directions(relative: str) -> None:
     # Driven against the real sets, since the check reads a fixed location. Both
     # directions are exercised by the negative controls recorded in the commit
@@ -673,6 +673,25 @@ def test_an_llms_line_that_is_not_its_page_description_fails(
     _synthetic_manifest(tmp_path, "What the page was.")
     problems = lint.check_llms_manifest()
     assert any("README.md" in problem for problem in problems), problems
+
+
+def test_an_llms_manifest_out_of_the_nav_order_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    (tmp_path / "docs" / "guides").mkdir(parents=True)
+    for page in ("README.md", "guides/json.md"):
+        (tmp_path / "docs" / page).write_text("---\ndescription: A page.\n---\n")
+    nav = "nav:\n  - Home: README.md\n  - JSON: guides/json.md\n"
+    manifest = "plugins:\n  - llmstxt:\n      sections:\n        Start:\n"
+    swapped = "          - guides/json.md: A page.\n          - README.md: A page.\n"
+    (tmp_path / "mkdocs.yml").write_text(nav + manifest + swapped)
+    assert lint.check_llms_manifest() == [
+        "mkdocs.yml: the llms.txt manifest lists the pages in another order"
+    ]
+    kept = "          - README.md: A page.\n          - guides/json.md: A page.\n"
+    (tmp_path / "mkdocs.yml").write_text(nav + manifest + kept)
+    assert lint.check_llms_manifest() == []
 
 
 def test_an_llms_line_that_is_its_page_description_passes(

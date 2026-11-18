@@ -136,7 +136,7 @@ plugins:
       full_output: llms-full.txt
       sections:
         Getting started:
-          - README.md: What valgebra is, how it is positioned, and the index to this guide.
+          - README.md: What valgebra is, how it is positioned, and where to start.
           - 00-installation.md: Install the package and its build toolchain.
           - 01-tutorial.md: Guided learning path from a scalar schema to an inspected failure.
           - 02-quickstart.md: Condensed feature tour for readers who know the domain.
@@ -152,13 +152,13 @@ plugins:
           - 10-limits.md: Resource limits and the bounds the validator enforces.
           - 11-performance.md: Measured benchmarks, datasets, and compared versions.
           - 18-static-checking.md: What ty, mypy and pyright read from a schema, the spellings they refuse, and the ruff settings a project that validates its own classes needs.
+        Release notes:
+          - 12-changelog.md: Every released version, what it changed, and what to do on upgrade.
         Explanation:
           - 13-foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
           - 14-soundness.md: Why membership checking is sound on its own terms.
           - 15-decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
           - 17-boundaries.md: What a runtime validator cannot do, and why each boundary is where it is.
           - 20-universes.md: JSON's and TOML's values, and arrays, as sets below the top, in one algebra with no vocabulary of their own.
-        Release notes:
-          - 12-changelog.md: Every released version, what it changed, and what to do on upgrade.
         API reference:
           - 16-api.md: The full public surface, generated from the package docstrings.

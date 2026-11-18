@@ -128,6 +128,14 @@ page exactly as it binds a hand-written one: add no section that exists to look
 complete — a summary restating the section above it, a recap of what a gate
 prints, a next-steps list nobody asked for.
 
+**The nav is the one list of the site's pages.** `mkdocs.yml`'s `nav` orders
+them, and no page keeps a table of them: the sidebar and `llms.txt` are the
+index. The manifest's sections repeat the nav in its order, which
+`scripts/docs_lint.py` holds, the build fails on a page the nav leaves out, and
+`scripts/run_doc_examples.py` finds every page by glob, so a page added to the
+nav needs no other edit. The developer set, which GitHub renders and nothing
+publishes, is listed by `docs/dev/README.md` in the order to read it.
+
 ## Hot and cold
 
 These pages do not age alike, and treating them the same is why they rot. A page

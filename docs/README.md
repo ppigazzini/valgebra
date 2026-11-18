@@ -1,5 +1,5 @@
 ---
-description: What valgebra is, how it is positioned, and the index to this guide.
+description: What valgebra is, how it is positioned, and where to start.
 ---
 
 # valgebra
@@ -90,35 +90,6 @@ valgebra as a bare class and is not deep-checked.
 - **Immutable and thread-safe** by design. Free-threaded CPython 3.14 and 3.15
   are supported, with `cp314t` and `cp315t` wheels for Linux, macOS and Windows
   x64.
-
-## The set
-
-Read in order, or jump: each page owns one subject and says what it does not
-cover.
-
-| Page | Covers |
-|---|---|
-| [00-installation.md](00-installation.md) | installing the package and its build toolchain |
-| [01-tutorial.md](01-tutorial.md) | a guided path from a scalar schema to an inspected failure |
-| [02-quickstart.md](02-quickstart.md) | the condensed tour, for a reader who knows the domain |
-| [19-recipes.md](19-recipes.md) | tasks done end to end with a value already in hand, each with what it cannot do |
-| [03-schema-language.md](03-schema-language.md) | every schema form, with its denotation as a set of values |
-| [04-algebra.md](04-algebra.md) | the Boolean lattice, the normal form construction builds, and the composition recipes |
-| [05-refinements.md](05-refinements.md) | constraints and predicate refinements over a base schema |
-| [06-recursion.md](06-recursion.md) | the fixpoint for self-referential schemas |
-| [07-json.md](07-json.md) | parsing and validating JSON on the Rust path |
-| [08-error-model.md](08-error-model.md) | the exception type, the codes, and the violation path |
-| [09-inspection.md](09-inspection.md) | interrogating a codebase that has no schemas of its own |
-| [10-limits.md](10-limits.md) | the resource bounds the validator enforces |
-| [11-performance.md](11-performance.md) | the measured benchmarks, and what they do not claim |
-| [18-static-checking.md](18-static-checking.md) | what a static checker reads from a schema, and the spellings it refuses |
-| [12-changelog.md](12-changelog.md) | every released version, and what to do on upgrade |
-| [13-foundations.md](13-foundations.md) | the denotational frame and the theory it is sourced from |
-| [14-soundness.md](14-soundness.md) | why an accept is never wrong, node by node |
-| [15-decidability.md](15-decidability.md) | what is decided exactly, and what stays conservative |
-| [17-boundaries.md](17-boundaries.md) | what a validator cannot do, and why each boundary is where it is |
-| [20-universes.md](20-universes.md) | JSON's and TOML's values, and arrays, as sets in one algebra |
-| [16-api.md](16-api.md) | everything callable |
 
 ## Where to start
 
