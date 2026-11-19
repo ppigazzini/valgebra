@@ -39,10 +39,12 @@ jobs:
     name: wheels (${{ matrix.platform.runner }} ${{ matrix.platform.target }} ${{ matrix.platform.manylinux || matrix.platform.variant || 'native' }})
     runs-on: ${{ matrix.platform.runner }}
     # Twice the slowest row's reading, rounded up, as a sweep shard's ceiling
-    # is twice its slowest shard's: the macOS x86_64 row builds seven
-    # interpreters with a profile each on a four-core Intel VM, and its slowest
-    # reading is 54 minutes. A row that reaches the ceiling is canceled with the
-    # release waiting on it.
+    # is twice its slowest shard's. The macOS rows are the slowest: seven
+    # interpreters with a profile each on a three-core Apple silicon VM, the
+    # x86_64 one training its profile under Rosetta 2. Until a release reads
+    # that row, it is held to twice the 55 minutes the same build reads on
+    # GitHub's Intel macOS VM, which runs it at under half the speed. A row
+    # that reaches the ceiling is canceled with the release waiting on it.
     timeout-minutes: 110
     strategy:
       fail-fast: false
@@ -68,7 +70,11 @@ jobs:
         # setting rather than as the reading it is.
         # Recording a profile means *running* the instrumented build, so PGO
         # applies only where the build host executes its own output: the glibc
-        # Linux (x86_64 and aarch64), macOS, and Windows x64 runners. Two
+        # Linux (x86_64 and aarch64), macOS, and Windows x64 runners. The macOS
+        # x86_64 wheel is built on Apple silicon and its instrumented build runs
+        # under Rosetta 2, which every arm64 macOS image installs: the counters
+        # count the x86_64 build's own branches and calls, so the profile is the
+        # one an Intel host records, whatever the translation costs in time. Two
         # targets ship a plain (non-profiled) release build instead, with the
         # same platform compatibility: the Windows arm64 wheel, whose
         # instrumentation profile fails to merge on that toolchain, and the
@@ -105,10 +111,14 @@ jobs:
           - { runner: ubuntu-26.04-arm, target: aarch64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/bin/python /opt/python/pp312-pypy312_pp80/bin/python, variant: pypy80 }
           - { runner: ubuntu-26.04, target: x86_64, manylinux: musllinux_1_2 }
           - { runner: ubuntu-26.04, target: aarch64, manylinux: musllinux_1_2 }
-          # The arm64 row builds on macos-26, the newest macOS GitHub hosts. The
-          # x86_64 row builds on macos-15-intel, as CPython's CI does
-          # (python/cpython#148038): macos-26-intel carries an unresolved stall
-          # (actions/runner-images#13882) that fails this row.
+          # Both macOS rows build on macos-26, the newest macOS GitHub hosts, an
+          # Apple silicon VM. The x86_64 row cross-builds: `arch: x86_64`
+          # installs uv's x86_64 interpreters, which run under Rosetta 2, and the
+          # `x86_64-apple-darwin` toolchain links for the same floor, macOS
+          # 10.12, that Rust's target defaults to and the wheel tag carries.
+          # GitHub's Intel macOS VM builds the same seven profiled interpreters
+          # in 55 minutes to this VM's 22 (`gh run view <id> --json jobs` on a
+          # release run).
           #
           # On a host runner `--find-interpreter` builds for what the image
           # carries, and an image's tool cache is not the supported set.
@@ -118,7 +128,7 @@ jobs:
           # step can fail there (maturin-action's README, python/cpython#127294),
           # and that job builds the interpreters by name. Windows arm64 installs
           # 3.12 onward.
-          - { runner: macos-15-intel, target: x86_64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
+          - { runner: macos-26, target: x86_64, arch: x86_64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
           - { runner: macos-26, target: aarch64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
           - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15" }
           - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.14t\n3.15t", interpreter: python3.14t python3.15t, variant: freethreaded }
@@ -136,25 +146,48 @@ jobs:
       # `allow-prereleases` lets `3.15` resolve to its release candidate until
       # 3.15.0 is published and to the release after: the ABI is fixed from the
       # first candidate, so the wheel is the one the final release loads.
-      - if: ${{ matrix.platform.pythons }}
+      - if: ${{ matrix.platform.pythons && !matrix.platform.arch }}
         uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.platform.pythons }}
           allow-prereleases: true
+      # A row that cross-builds takes uv's builds of its interpreters for the
+      # architecture its `arch` names, each a binary of that architecture
+      # alone. python.org's macOS builds, the ones `setup-python` installs, are
+      # universal2: on Apple silicon they run their arm64 half, and the profile
+      # run's venv refuses the x86_64 wheel. A single-architecture build runs
+      # under Rosetta 2 whatever starts it -- maturin, the venv made from it,
+      # pip inside that venv. `python-version` sets `UV_PYTHON` to the newest
+      # release's build of that architecture, so a request naming no interpreter
+      # resolves to one the target loads and never to the runner's arm64; the
+      # lookup below asks for each interpreter by its full key.
+      - if: ${{ matrix.platform.arch }}
+        uses: $/.github/actions/setup-uv
+        with:
+          python-version: ${{ format('cpython-3.15-macos-{0}', matrix.platform.arch) }}
+          enable-cache: "false"
       # On macOS a free-threaded install answers to `python3.14` as well as
       # `python3.14t`, and the one installed last is first on `PATH`, so
       # `--find-interpreter` can find the free-threaded build under the
       # release's name and build `cp314t` and `cp315t` with no `cp314` or
-      # `cp315` beside them. So each interpreter is found where `setup-python`
-      # records it, in the tool cache under the runner's architecture -- some
-      # releases install as a framework and some as a plain build, and the tool
-      # cache holds both -- and asked whether it is the build it is named for.
+      # `cp315` beside them. So each interpreter is found where it is installed
+      # and asked whether it is the build it is named for: on a cross row, uv's
+      # build by its key; otherwise the tool cache `setup-python` records it
+      # in, under the runner's architecture, where some releases install as a
+      # framework and some as a plain build.
+      #
+      # maturin's profile run makes its venv with any `uv` on `PATH` and then
+      # installs the `dev` group there; with none it makes it with
+      # `python -m venv` and pip, as on the arm64 row. A cross row takes uv off
+      # `PATH` once its interpreters are in, so both macOS rows train their
+      # profiles in a venv made the same way.
       - name: Name the interpreters
         id: interpreters
         if: ${{ matrix.platform.pythons && runner.os == 'macOS' }}
         shell: bash
         env:
           PYTHONS: ${{ matrix.platform.pythons }}
+          ARCH: ${{ matrix.platform.arch }}
         run: |
           arch="$(echo "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')"
           named=""
@@ -163,10 +196,17 @@ jobs:
               *t) minor="${version%t}"; want=1 ;;
               *) minor="$version"; want=0 ;;
             esac
+            if [ -n "$ARCH" ]; then
+              key="cpython-$version-macos-$ARCH"
+              uv python install "$key"
+              set -- "$(uv python find "$key")"
+            else
+              set -- \
+                "$RUNNER_TOOL_CACHE"/Python/"$minor".*/"$arch"*/bin/python"$minor"t \
+                "$RUNNER_TOOL_CACHE"/Python/"$minor".*/"$arch"*/bin/python"$minor"
+            fi
             exe=""
-            for candidate in \
-              "$RUNNER_TOOL_CACHE"/Python/"$minor".*/"$arch"*/bin/python"$minor"t \
-              "$RUNNER_TOOL_CACHE"/Python/"$minor".*/"$arch"*/bin/python"$minor"; do
+            for candidate in "$@"; do
               [ -x "$candidate" ] || continue
               got="$("$candidate" -c 'import sysconfig; print(sysconfig.get_config_var("Py_GIL_DISABLED") or 0)')"
               if [ "$got" = "$want" ]; then
@@ -175,11 +215,14 @@ jobs:
               fi
             done
             if [ -z "$exe" ]; then
-              echo "::error::no $version build for $arch in the tool cache"
+              echo "::error::no $version build for ${ARCH:-$arch} installed"
               exit 1
             fi
             named="$named $exe"
           done
+          if [ -n "$ARCH" ]; then
+            rm -f "$(command -v uv)" "$(command -v uvx)"
+          fi
           echo "list=${named# }" >> "$GITHUB_OUTPUT"
       # The action pulls its container itself, once, with no retry, so a registry
       # answering `504` fails a release dispatch that has nothing wrong with it --
@@ -300,7 +343,7 @@ jobs:
           # carries, which is PyPy 8.0 on both.
           - { name: linux-x86_64-pypy80, runner: ubuntu-26.04, artifact: wheels-ubuntu-26.04-x86_64-pypy80, pythons: "pypy@3.11 pypy@3.12" }
           - { name: linux-aarch64-pypy80, runner: ubuntu-26.04-arm, artifact: wheels-ubuntu-26.04-arm-aarch64-pypy80, pythons: "pypy@3.11 pypy@3.12" }
-          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
+          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-26-x86_64-native, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
           - { name: macos-arm64, runner: macos-26, artifact: wheels-macos-26-aarch64-native, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
           - { name: windows-x64, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-native, pythons: "3.11 3.15", imports: "3.12 3.13 3.14" }
           - { name: windows-x64-freethreaded, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-freethreaded, pythons: "3.14t 3.15t" }

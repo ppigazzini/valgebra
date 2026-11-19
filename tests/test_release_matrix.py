@@ -12,7 +12,10 @@ the calendar, does not read the matrix.
 Held both ways: every platform row builds every classified release, and its
 free-threaded build from the first release that supports one, or the gap is
 named with its reason; every gap is one the matrix has; and a row that leaves
-its interpreters to the build image says so by name.
+its interpreters to the build image says so by name. A macOS row installs the
+interpreters of the architecture it builds for, which on a cross-build is not
+the runner's: an interpreter running arm64 code, a universal2 build's included,
+loads no x86_64 wheel, and the profile run fails on the wheel it trains.
 
 And what ships has a lane. A wheel is a separate artifact a caller installs, and
 one no push runs is one nothing exercised until somebody reported it, so each
@@ -185,6 +188,66 @@ def test_every_row_names_its_interpreters_or_says_why() -> None:
     assert unnamed == set(UNNAMED), (
         f"rows leaving their interpreters to the image: {sorted(unnamed)}; "
         f"excused: {sorted(UNNAMED)}"
+    )
+
+
+#: The value the steps read a row's interpreters' architecture from.
+_ROW_ARCH = "${{ matrix.platform.arch }}"
+
+
+def _runner_arch(runner: str) -> str:
+    """Give a macOS runner's own architecture: aarch64, but for the Intel labels."""
+    return "x86_64" if runner.endswith(("-intel", "-large")) else "aarch64"
+
+
+def test_every_macos_row_installs_the_interpreters_its_target_loads() -> None:
+    """A macOS row's interpreters are its target's: uv's builds on a cross row.
+
+    python.org's macOS builds, which `setup-python` installs, are universal2 and
+    run their arm64 half on Apple silicon, where the profile run's venv refuses
+    an x86_64 wheel. So a row whose target is not its runner's names the target
+    in `arch`, skips `setup-python`, and has the lookup install and find uv's
+    build of that architecture alone, which Rosetta 2 runs whatever starts it.
+    uv then leaves `PATH`, so maturin makes the profile's venv with
+    `python -m venv` and pip, as on the arm64 row.
+    """
+    macos = [row for row in _rows() if str(row["runner"]).startswith("macos-")]
+    assert macos, "no macOS row was read"
+    wrong = {
+        _platform(row): row.get("arch") or _runner_arch(str(row["runner"]))
+        for row in macos
+        if (row.get("arch") or _runner_arch(str(row["runner"]))) != row["target"]
+    }
+    assert not wrong, (
+        f"macOS rows installing interpreters their target does not load: {wrong}; "
+        "name the target in the row's `arch`"
+    )
+
+    steps = read_workflow(WORKFLOWS / "release.yml")["jobs"]["wheels"]["steps"]
+    setup = next(
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith("actions/setup-python@")
+    )
+    assert "!matrix.platform.arch" in str(setup.get("if", "")), (
+        "`setup-python` must leave a cross row alone: its builds are universal2"
+    )
+    uv = [step for step in steps if step.get("uses") == "$/.github/actions/setup-uv"]
+    assert [step.get("if") for step in uv] == [_ROW_ARCH], (
+        f"one uv install, on the rows naming `arch`: {uv}"
+    )
+    naming = next(step for step in steps if step.get("name") == "Name the interpreters")
+    assert steps.index(uv[0]) < steps.index(naming), "uv must come before the lookup"
+    assert naming["env"].get("ARCH") == _ROW_ARCH, (
+        f"the interpreter lookup must read `{_ROW_ARCH}` as `ARCH`"
+    )
+    run = str(naming["run"])
+    assert 'key="cpython-$version-macos-$ARCH"' in run, (
+        "a cross row's lookup must ask uv for the build of `ARCH`"
+    )
+    assert 'uv python install "$key"' in run, "the lookup must install that build"
+    assert 'rm -f "$(command -v uv)" "$(command -v uvx)"' in run, (
+        "uv must leave `PATH` before maturin makes the profile's venv"
     )
 
 

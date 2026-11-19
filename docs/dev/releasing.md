@@ -284,13 +284,23 @@ image, so the workflow installs every supported one first; Windows builds its
 free-threaded wheels in a job of their own, since a release and its
 free-threaded build can fail to co-install in one step. On macOS a free-threaded
 install also answers to the release's name, and `--find-interpreter` finds it
-there in the release's place, so the macOS builds find each interpreter in the
-tool cache `setup-python` records it in, under the runner's architecture, and
-ask it which build it is -- a framework path holds only some releases. The
-wheel job's ceiling (`timeout-minutes` in `release.yml`) is twice its slowest
-row's reading, rounded up, which is the macOS x86_64 build: seven interpreters,
-each built twice for its profile, on the slowest runner the matrix uses. A row
-that reaches the ceiling is canceled, and the release waits on every row. The
+there in the release's place, so the macOS builds find each interpreter where it
+is installed and ask it which build it is -- in the tool cache `setup-python`
+records it in, under the runner's architecture, where a framework path holds
+only some releases. Both macOS rows build on Apple silicon, and the x86_64 row
+cross-builds. python.org's macOS interpreters, the ones `setup-python` installs,
+are universal2 and run their arm64 half there, where the profile run's venv
+refuses an x86_64 wheel. So that row's `arch: x86_64` installs uv's x86_64
+builds instead, each a binary of that architecture alone, which Rosetta 2 runs
+whatever starts it. uv then leaves `PATH`: maturin's profile run makes its venv
+with any uv it finds and installs the `dev` group there, and without one it makes
+it with `python -m venv` and pip, as on the arm64 row.
+`tests/test_release_matrix.py` holds each macOS row's interpreters to its target.
+The wheel job's ceiling (`timeout-minutes`
+in `release.yml`) is twice its slowest row's reading, rounded up, and the
+slowest are the macOS rows: seven interpreters, each built twice for its
+profile. A row that reaches the ceiling is canceled, and the release waits on
+every row. The
 Windows arm64 smoke runs
 on the arm64 interpreters `setup-python` installs, because uv's own build of a
 release candidate can be x64 alone. The maturin a release builds with is the one `uv.lock`
@@ -318,7 +328,11 @@ carries, and Windows arm64 none.
 builds an instrumented extension, trains it with the `pgo-command` in
 `pyproject.toml` (`scripts/pgo_workload.py`), and rebuilds with the profile; the
 musllinux cross-builds, the PyPy wheels and the Windows arm64 row ship plain
-release builds with the same compatibility.
+release builds with the same compatibility. The macOS x86_64 row is a cross-build
+that still runs its output: Rosetta 2, which every arm64 macOS image installs,
+runs the instrumented x86_64 build. The counters count that build's own branches
+and calls, so the profile is the one an Intel host records; the translation
+changes only how long training takes.
 
 **No wheel links an interpreter.** maturin injects the pyo3 `extension-module`
 behavior at build time, and `crates/valgebra-py/Cargo.toml` leaves the feature

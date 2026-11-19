@@ -3447,6 +3447,60 @@ PLANTS = (
         trips=("test_every_row_names_its_interpreters_or_says_why",),
     ),
     Plant(
+        # A macOS cross row that leaves `arch` empty: arm64 interpreters for an
+        # x86_64 target, which load no wheel it builds.
+        "tests/test_release_matrix.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "target: x86_64, arch: x86_64, pgo: true",
+            "target: x86_64, pgo: true",
+        ),
+        trips=("test_every_macos_row_installs_the_interpreters_its_target_loads",),
+    ),
+    Plant(
+        # `setup-python` installing on a cross row: universal2 builds, which run
+        # their arm64 half on Apple silicon.
+        "tests/test_release_matrix.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "      - if: ${{ matrix.platform.pythons && !matrix.platform.arch }}\n"
+            "        uses: actions/setup-python@v7.1.0",
+            "      - if: ${{ matrix.platform.pythons }}\n"
+            "        uses: actions/setup-python@v7.1.0",
+        ),
+        trips=("test_every_macos_row_installs_the_interpreters_its_target_loads",),
+    ),
+    Plant(
+        # The lookup asking uv for the runner's architecture: arm64 builds under
+        # a cross row.
+        "tests/test_release_matrix.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            'key="cpython-$version-macos-$ARCH"',
+            'key="cpython-$version-macos-$arch"',
+        ),
+        trips=("test_every_macos_row_installs_the_interpreters_its_target_loads",),
+    ),
+    Plant(
+        # uv left on `PATH`: maturin makes the profile's venv with it and
+        # installs the `dev` group there.
+        "tests/test_release_matrix.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            '            rm -f "$(command -v uv)" "$(command -v uvx)"\n',
+            "            :\n",
+        ),
+        trips=("test_every_macos_row_installs_the_interpreters_its_target_loads",),
+    ),
+    Plant(
         # The classifiers gone: every check over them compares nothing.
         "tests/test_release_matrix.py",
         ("pyproject.toml",),
