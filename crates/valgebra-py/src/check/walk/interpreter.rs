@@ -8712,9 +8712,9 @@ fn a_union_explains_the_record_branch_that_got_furthest() {
     });
 }
 
-/// A record read by its entries ranks by the entries it admitted, and a
-/// record branch that is not chosen is not explained at all: its later field
-/// would run the predicate.
+/// A record whose clause reads values ranks by the fields it admitted, as a
+/// closed record does, and a record branch that is not chosen is not explained
+/// at all: its later field would run the predicate.
 #[test]
 fn a_union_explains_no_record_branch_but_the_chosen_one() {
     Python::attach(|py| {
@@ -8740,8 +8740,8 @@ fn a_union_explains_no_record_branch_but_the_chosen_one() {
             union_report(py, vec![open.clone(), closed], "{'a': 1, 'l': 'b'}", &pool).first(),
             Some(&("int_type", "l".to_owned()))
         );
-        // A scanned record refused inside a field's value, before one refused
-        // at an entry.
+        // A record refused inside a field's value, before one refused at a
+        // missing field.
         let nested = Schema::keyed_map(
             vec![field(
                 "zz",
@@ -8768,6 +8768,71 @@ fn a_union_explains_no_record_branch_but_the_chosen_one() {
             calls(&module),
             0,
             "the branch refused at its tag ran nothing"
+        );
+    });
+}
+
+/// A branch read by its entries ranks as one read by its keys: by the entries
+/// it admitted, then by a refusal inside a field's value before one at a field.
+/// A mapping whose clause holds a structured value is read by its entries, and
+/// so is a record whose probe for a declared name raised: the key below hashes
+/// as the optional `a` and raises the first time it is compared.
+#[test]
+fn a_branch_read_by_its_entries_ranks_by_how_far_it_got() {
+    use pyo3::exceptions::PyValueError;
+    Python::attach(|py| {
+        let lists = |item| {
+            Schema::keyed_map(
+                vec![],
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: Schema::list(SeqShape::homogeneous(item)),
+                }],
+            )
+        };
+        assert_eq!(
+            union_report(
+                py,
+                vec![lists(Schema::Str), lists(Schema::Int)],
+                "{'a': [1], 'b': ['x']}",
+                &[],
+            )
+            .first(),
+            Some(&("int_type", "b[0]".to_owned()))
+        );
+        let module = helpers(
+            py,
+            "class Raising:\n\
+             \x20   def __init__(self, error):\n\
+             \x20       self.error = error\n\
+             \x20   def __hash__(self):\n\
+             \x20       return hash('a')\n\
+             \x20   def __eq__(self, other):\n\
+             \x20       error, self.error = self.error, None\n\
+             \x20       if error is not None:\n\
+             \x20           raise error\n\
+             \x20       return False\n",
+            "raising_probe",
+        );
+        let record = |fields| Schema::record(fields, Openness::Closed);
+        let flat = record(vec![field("q", Schema::Int, true)]);
+        let nested = record(vec![
+            field("a", Schema::Int, false),
+            field("zz", record(vec![field("b", Schema::Int, true)]), true),
+        ]);
+        let value = PyDict::new(py);
+        value.set_item("zz", eval(py, "{'b': 'x'}")).expect("zz");
+        let key = module
+            .getattr("Raising")
+            .and_then(|class| class.call1((py.get_type::<PyValueError>(),)))
+            .expect("the key");
+        value.set_item(key, 1i64).expect("a key hashing as 'a'");
+        let union = Schema::Union(vec![flat, nested].into());
+        let (admitted, report) = explain(py, &union, value.as_any(), &[], &[]);
+        assert!(!admitted);
+        assert_eq!(
+            codes_at(&report).first(),
+            Some(&("int_type", "zz.b".to_owned()))
         );
     });
 }

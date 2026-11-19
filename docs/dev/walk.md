@@ -267,7 +267,9 @@ branches' by the progress rule above. A fatal signal raised while one branch is
 explained stops the explaining of the rest, as it stops every later walk.
 `a_refused_union_reports_what_its_chosen_branch_reports_alone` in
 `check/walk/interpreter.rs` holds the report to the chosen branch's own, and
-`a_union_explains_the_record_branch_that_got_furthest` the choice.
+`a_union_explains_the_record_branch_that_got_furthest` and
+`a_branch_read_by_its_entries_ranks_by_how_far_it_got` the choice, by keys and
+by entries.
 
 **A record's deciding pass reads its tag first.** Fields are stored sorted by
 name, so a tag such as `type` sorts after a recursive `left`; read in that
@@ -417,8 +419,9 @@ declared keys has no undeclared key for any clause to govern. **By a scan**
 resolves it -- an exact `str` by its text, any other key as the declared name
 its hash and `==` reach (`declared_position`), where the dict answers that name
 with this entry (`the_entry_a_name_finds`) -- and each undeclared key read
-against the clause that covers it: a mapping, and a record its plan holds no
-interned key of every field for. **Explaining**
+against the clause that covers it: a mapping, a record its plan holds no
+interned key of every field for, and a record whose probe raised an error that
+is not a fatal signal. **Explaining**
 (`keyed_map_explain`): the scan that reports every violation rather than the
 first. A list of records reads its node's plan and clauses once
 (`RecordReading` in `walk/record.rs`). What a record read by its keys asks of
