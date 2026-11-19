@@ -13,10 +13,26 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- feat: a meet or a complement only the sets read holds a value
-- feat: a product is read empty a component at a time
-
 -->
+
+## [0.0.30] - 2026-11-19
+
+A release of answers, with two additions and no node. A tuple or a record is read a component at a
+time where the set of the whole is past the build's bounds: a string of 584 code points or more
+beside a part only the set representation reads, such as the meet a translation writes for
+`{"type": "integer", "minimum": 0}`, left the product `undecided`, and the product holds a value
+where each part does and none where one part holds none. Over the 70,000 pairs each generation of a
+fuzzer draws, the relations give 969 answers more than 0.0.29 on the second generation, 40 on the
+first and 868 on the fourth, and lose none; the families of exact relations over lists, records,
+mappings, TypedDicts and recursions give 5,738 more and lose none. The JSON Schema test suite,
+corpus and containment studies, read through `valgebra-jsonschema`, move no count, and
+`valgebra-vtjson`'s differential suite passes.
+
+Against 0.0.29 built here from its tag, on CPython 3.11 through 3.15, every shape of the profiled
+wheels counts within 0.5% of 0.0.29's but three on 3.15: the explaining walk of a record 4.70% more,
+of a list 0.93% more and a deep JSON document 0.56% fewer, each of which an environment 4,096 bytes
+larger reads alike, so the move is where the allocator's heap starts and not the code. The
+instruction gate's ten decision workloads count from 0.11% fewer instructions to 0.38% more.
 
 ### Added
 
@@ -5077,7 +5093,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.29...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.30...HEAD
+[0.0.30]: https://github.com/ppigazzini/valgebra/compare/v0.0.29...v0.0.30
 [0.0.29]: https://github.com/ppigazzini/valgebra/compare/v0.0.28...v0.0.29
 [0.0.28]: https://github.com/ppigazzini/valgebra/compare/v0.0.27...v0.0.28
 [0.0.27]: https://github.com/ppigazzini/valgebra/compare/v0.0.26...v0.0.27
