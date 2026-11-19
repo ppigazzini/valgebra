@@ -396,16 +396,16 @@ surface, and each holds answers this tree's gates do not. What that asks of a re
   and containment studies run with `--check`, on a checkout whose `valgebra` is that wheel. A count
   may move: more proven, fewer undecided. A proof against a containment label, or a new
   disagreement with the `jsonschema` package, is a defect here, and it stops the bump.
-- **A companion re-pins on a minor.** A `0.0.x` minor is a breaking release to them, as their
-  `pyproject.toml` floors say, so each moves its floor with a release of its own, and holds its
-  ceiling at the next minor: `valgebra>=0.0.29,<0.0.30`. A ceiling of `<0.1` admits the next
-  minor before the companion's suite has run on it, so a resolver installs the two together the
-  day this package releases.
+- **A companion names a floor and no ceiling**, `valgebra>=X.Y.Z`: the release its studies were
+  read on, and every release after it. A ceiling cannot be lifted from a published version, so a
+  capped companion would owe a release of its own to every release of this package, and until it
+  shipped no resolver would install the two together. A release that moves a companion's answers
+  is read against it first, as above, and each companion's `Upstream` workflow runs its suite on
+  this package's `main` every Monday, so a change that breaks one shows before the cut ships it.
+  A companion moves its floor in a release of its own when it needs what a release here adds.
 - **The floor and the matrix are theirs too.** A companion's `requires-python` follows
   [Which interpreters a release supports](#which-interpreters-a-release-supports), and it builds no
   wheel, so it reads this package's on each.
-
-Each bump costs a companion two commits and a session, so a release batches its `feat`s.
 
 ## What this does not cover
 

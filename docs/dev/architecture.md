@@ -274,7 +274,7 @@ above it, and each is refused where an earlier row reaches the same thing.
 | a set typing syntax spells, which the frontend refuses and the nodes reach | the **frontend** (`build/`) | a form, what it denotes, and a refusal for what it does not name | `np.ndarray[S, np.dtype[T]]` |
 | a set the forms reach, which a decider declines | a **decider** (`descr/`, `decision*`), and no node | a reading, its laws, the release differential, a gate shape | a step over floats, a key narrowed by a pattern |
 | a set no combination reaches, in the domain | a **node**, by the [admission test](schema-ir.md#whether-to-add-a-variant) | every match over the IR, and the ledgers | |
-| another language's schemas | a **companion**, a package of its own | a repository, a gate, a re-pin per [release](releasing.md#a-companion-reads-the-release) | `valgebra-jsonschema`, `valgebra-vtjson` |
+| another language's schemas | a **companion**, a package of its own | a repository, a gate, and its studies read before a [release](releasing.md#a-companion-reads-the-release) that moves a decider | `valgebra-jsonschema`, `valgebra-vtjson` |
 
 **A recipe is the default.** The algebra expressing a pattern is the point of it, so a wrapper
 around one line is not shipped: it would be a second spelling to document, test and keep, and
@@ -298,7 +298,8 @@ form and an array's other readings are a `Protocol`.
 lead with. Its refusals are a dialect's rather than the algebra's. And its conformance suite would
 make each dialect's fix a release of this package. A companion reads the public surface alone, and
 what it finds comes back as one of the rows above: its studies are how a decider gap shows demand.
-Each costs a repository and a re-pin per release, so one opens only with content and a consumer.
+Each costs a repository, and its studies read before every release that moves a decider, so one opens
+only with content and a consumer.
 
 ## Every bound, and what holds it
 
