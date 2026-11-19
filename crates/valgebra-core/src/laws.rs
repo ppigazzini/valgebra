@@ -5120,6 +5120,43 @@ fn a_length_bound_over_a_union_is_met_by_a_member_of_the_union_grown_to_it() {
     );
 }
 
+/// A length bound over a refinement is met by what the refinement refines,
+/// grown to it.
+///
+/// The pair: a list of two, a frozenset of at least two floats under a bound
+/// over a frozenset of floats, and a reference, against `None`. It is refuted by
+/// `[frozenset({0.0, 1.0}), 1]`, and the universe holds that value only where
+/// the floats are read off the frozenset under both refinements: the inner one
+/// names no element to grow, and two integers are no floats.
+#[test]
+fn a_length_bound_over_a_refinement_is_met_by_what_it_refines_grown_to_it() {
+    let defs = fixpoint_defs();
+    let floats = Schema::Coll {
+        container: CollKind::FrozenSet,
+        element: Arc::new(Schema::Float),
+    };
+    let bounded = Schema::Refine {
+        base: Arc::new(Schema::Refine {
+            base: Arc::new(floats),
+            constraints: vec![Constraint::MinLen(0)].into(),
+        }),
+        constraints: vec![Constraint::MinLen(2)].into(),
+    };
+    let a = Schema::list(SeqShape::fixed([bounded, Schema::Ref(DefIx::new(1))]));
+    let b = Schema::NoneType;
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        a_value_parts(&subject, &other),
+        "no value of a frozenset of two floats and an integer is built"
+    );
+}
+
 /// A map with a catch-all is separated from a closed record by a key neither
 /// declares.
 ///
@@ -5227,14 +5264,27 @@ fn length_wanted(constraint: &Constraint) -> Option<usize> {
     }
 }
 
+/// The schema under every refinement stacked on `schema`: what a length bound
+/// over it grows. A bound over `frozenset[float]` under `MinLen(0)` grows a set
+/// of floats, and read at the inner refinement the element is no schema at all.
+fn unrefined(schema: &Schema) -> &Schema {
+    match schema {
+        Schema::Refine { base, .. } => unrefined(base),
+        _ => schema,
+    }
+}
+
 /// Containers of `len` members of the schema's element, in every shape a length
 /// is read from.
 ///
 /// A set holds its members once, so its `len` members are *distinct*: padding
 /// one with a repeat would claim a value the interpreter reads as shorter. Where
 /// the element cannot supply that many, there is no such set and none is built.
-/// A union names no element of its own, so each of its members is grown.
+/// A union names no element of its own, so each of its members is grown. A
+/// refinement grows the schema it refines ([`unrefined`]), and its bounds are
+/// the callers': each keeps only the members of the schema it asked about.
 fn sized_like(schema: &Schema, len: usize, fuel: usize) -> Vec<Obj> {
+    let schema = unrefined(schema);
     if let Schema::Union(members) = schema {
         return members
             .iter()
@@ -6000,9 +6050,10 @@ fn candidates(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
 /// at a position of a fixed shape, where the cap leaves a node a quarter of its
 /// values, the refutation then has no witness. So a tailed sequence is filled
 /// past its prefix with a member of its tail, ahead of the base's own edges,
-/// since the bound is what the refinement adds to them.
+/// since the bound is what the refinement adds to them. A base that refines a
+/// sequence in turn is read as the sequence ([`unrefined`]).
 fn sequences_around(base: &Schema, len: usize) -> Vec<Obj> {
-    let Schema::Seq { container, shape } = base else {
+    let Schema::Seq { container, shape } = unrefined(base) else {
         return Vec::new();
     };
     let prefix: Option<Vec<Obj>> = shape
