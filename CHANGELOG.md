@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - feat: a meet or a complement only the sets read holds a value
+- feat: a product is read empty a component at a time
 
 -->
 
@@ -26,6 +27,12 @@ answer of its own, or a repair to a change not yet released.
   code points is a table past the set representation's state bound, so the pair's set is refused
   whole, and the meet beside it is read alone, as a refinement is. A complement such as
   `~Annotated[int, Ge(0)]` beside the same string is read the same way.
+
+- **A product is read empty a component at a time.** `tuple[Annotated[str, MaxLen(584)], E]`, for
+  `E` a meet only the set representation proves empty, such as `M & (Annotated[int, Lt(0)] |
+  Annotated[float, Lt(0)])`, is `subset` of `nothing` and of every other validator, and `is_empty`
+  reads it empty, where both stayed `undecided`; so is a record with such a required field. The
+  pair's own set is refused for its string, and the empty meet beside it is read alone.
 
 ## [0.0.29] - 2026-11-18
 

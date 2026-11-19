@@ -955,8 +955,17 @@ it: the structural rules, and the emptiness of the difference through the
 descriptor. Both are sound and neither subsumes the other, so `is_subtype_of`
 asks the rules and then the descriptor, and `is_empty` asks its own pair. Below
 `nothing` the two are one question, so `is_empty` reads what the relation there
-reads where the pair declines: a string subject's texts, and a union a member at
-a time, each member's emptiness the rules' or the descriptor's. The law
+reads where the pair declines: a string subject's texts, a union a member at
+a time, each member's emptiness the rules' or the descriptor's, and a product a
+component at a time (`a_component_read_empty`), a product being empty where a
+component is [FCB08, Lem. 6.5] and a record where a required field is
+[Cas23, (11)], which a reading of the whole misses where another component is
+past the build's bounds. The relation reads a product so last of what follows
+the pair's own reading, and below every supertype, an empty subject being below
+each: its components' readings spend the query's steps, and asked among the
+parts they starved a refutation the respellings reach. So
+`tuple[Annotated[str, MaxLen(584)], E]`, for a meet `E` only the sets empty, is
+empty and below every set. The law
 `below_nothing_exactly_where_read_empty` holds the two to one answer in both
 directions, over drawn shaped schemas and the union of two. And where every
 decider declined with the query's steps spent, the relation reads the two

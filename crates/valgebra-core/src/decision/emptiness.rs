@@ -313,11 +313,13 @@ impl Schema {
         // automata and takes products -- a third of the decision workload,
         // spent on a question already answered.
         match self.verdict_rec(cx) {
-            // A string subject's texts last, and a union a member at a time, as
-            // the relation below `Nothing` reads them, so the two answer alike:
-            // a union is empty where each member is, which a reading of the
-            // whole can miss where one member's emptiness is the rules' and
-            // another's the descriptor's.
+            // A string subject's texts last, a union a member at a time, and a
+            // product a component at a time, as the relation below `Nothing`
+            // reads them, so the two answer alike: a union is empty where each
+            // member is, which a reading of the whole can miss where one
+            // member's emptiness is the rules' and another's the descriptor's,
+            // and a product where one component is, which a reading of the
+            // whole misses where another component is past the build's bounds.
             Verdict::Unknown
                 if self.denotes_no_value(cx.oracle, cx.defs)
                     || (matches!(self, Schema::Refine { .. } | Schema::Intersection(_))
@@ -325,12 +327,50 @@ impl Schema {
                             .decided_by_its_texts(&Schema::Nothing, cx.oracle)
                             .holds())
                     || matches!(self, Schema::Union(members)
-                        if members.iter().all(|member| member.empty_under(cx))) =>
+                        if members.iter().all(|member| member.empty_under(cx)))
+                    || self.a_component_read_empty(cx) =>
             {
                 Verdict::Empty
             }
             verdict => verdict,
         }
+    }
+
+    /// Whether a component of this product is read empty, a component at a time
+    /// as [`empty_under`](Self::empty_under) reads a schema: a product is empty
+    /// where a component is [FCB08, Lem. 6.5], a record where a required field is
+    /// [Cas23, (11)], and an attribute record where an attribute is.
+    ///
+    /// Asked where the rules and the set reading of the whole product decline. The
+    /// rules read each component by their own readings alone, and the set reading
+    /// of the whole is refused where one component is past the build's bounds: a
+    /// string of at most 584 code points is a table past the state bound, so
+    /// `tuple[Annotated[str, MaxLen(584)], E]` for a meet `E` only the sets empty
+    /// is read empty here and nowhere else. A component the rules place is not
+    /// lowered, and a product with no component the rules leave open is not read.
+    /// `is_empty` asks it, and so does the relation of a product subject, last of
+    /// what follows the reading of the whole pair
+    /// ([`decided_past_the_whole_pair`](Self::decided_past_the_whole_pair)), so the
+    /// two answer one set alike.
+    pub(super) fn a_component_read_empty(&self, cx: &mut Cx<'_>) -> bool {
+        if !matches!(
+            self,
+            Schema::Seq { .. } | Schema::KeyedMap { .. } | Schema::AttrRecord { .. }
+        ) {
+            return false;
+        }
+        // A level of its own, so a tower of products descends no deeper than the
+        // query may.
+        descending(cx.budget, false, || match self {
+            Schema::Seq { shape, .. } => shape.prefix.iter().any(|item| item.empty_under(cx)),
+            Schema::KeyedMap { fields, .. } => fields
+                .iter()
+                .any(|field| field.required && field.schema.empty_under(cx)),
+            Schema::AttrRecord { fields } => {
+                fields.iter().any(|field| field.schema.empty_under(cx))
+            }
+            _ => false,
+        })
     }
 
     /// Whether the descriptor proves this schema admits no value.

@@ -508,7 +508,11 @@ answers `"undecided"`.
   is there a pattern counting code points or bytes, a few states a code point,
   and the sets read one up to about 250 code points or 2,000 bytes before its
   table passes the state bound; past 4,094 the bound is refused before it is
-  built. A
+  built. A tuple or a record holding such a string beside a part only the sets
+  read is read a part at a time, a product holding a value where each part does
+  and none where one part holds none: `tuple[Annotated[str, MaxLen(5120)], M]`,
+  for `M` the meet a translation writes for `{"type": "integer", "minimum": 0}`,
+  is `not_subset` of `nothing`, on `("", 0)`. A
   refinement whose base holds a value of every length its bounds admit -- a
   word, a sequence with a repeated element, a mapping keyed by every name --
   is refuted below a bound leaving one of those lengths out, at any length

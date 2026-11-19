@@ -13766,6 +13766,69 @@ mod leaves {
         }
     }
 
+    // THEORY: a-sequence-splits-across-a-union, records-maps-and-structs
+    /// A product is empty where a component is [FCB08, Lem. 6.5], and a record where
+    /// a required field is [Cas23, (11)], read a component at a time where the set of
+    /// the whole is refused: two patterns sharing no word meet in a set only the sets
+    /// empty, and beside a string of at most 584 code points, a table past the state
+    /// bound, the product is read empty by its components, by `is_empty` and by the
+    /// relation alike, below `nothing` and below every other set.
+    #[test]
+    fn a_product_beside_a_component_past_the_bounds_is_empty_by_its_components() {
+        let none = Schema::meet([pattern("a+"), pattern("b+")]);
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        assert_eq!(
+            none.verdict_rec(&mut cx),
+            Verdict::Unknown,
+            "the rules leave it open"
+        );
+        assert!(none.is_empty_with(&Pure, &[]), "and the sets empty it");
+        let empty = Schema::record(Vec::new(), Openness::Closed);
+        let pairs = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Int]));
+        for most in [583, 584, 5120] {
+            let words = Schema::refine(Schema::Str, vec![Constraint::MaxLen(most)]);
+            let pair = Schema::tuple(SeqShape::fixed([words.clone(), none.clone()]));
+            let field = |name: &str, schema: &Schema| Field {
+                name: name.into(),
+                schema: schema.clone(),
+                required: true,
+            };
+            let record = Schema::record(
+                vec![field("a", &words), field("b", &none)],
+                Openness::Closed,
+            );
+            let attribute = |name: &str, schema: &Schema| Attribute {
+                name: name.into(),
+                schema: schema.clone(),
+            };
+            let attributes =
+                Schema::attr_record(vec![attribute("a", &words), attribute("b", &none)]);
+            for subject in [&pair, &record, &attributes] {
+                assert!(subject.is_empty_with(&Pure, &[]), "{subject:?}");
+                for other in [&Schema::Nothing, &empty, &pairs] {
+                    assert_eq!(
+                        subject.subtype_relation_under(other, &Pure, &[]),
+                        Relation::Holds,
+                        "{subject:?} below {other:?}"
+                    );
+                }
+            }
+        }
+        let optional = Schema::record(
+            vec![Field {
+                name: "b".into(),
+                schema: none,
+                required: false,
+            }],
+            Openness::Closed,
+        );
+        assert!(
+            !optional.is_empty_with(&Pure, &[]),
+            "an absent key is a value"
+        );
+    }
+
     /// A value the sets read is held for the query and charged each time it is asked,
     /// so the memo changes no allowance, and what is held is what is read back.
     #[test]

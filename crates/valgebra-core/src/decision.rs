@@ -1165,6 +1165,11 @@ impl Schema {
                     Relation::Unknown
                 }
             })
+            // A product holding a component read empty, as `is_empty` reads it,
+            // is below every set. Last, since its components' readings spend the
+            // query's steps: asked among the parts, they starved a refutation the
+            // respellings reach.
+            .or_else(|| Relation::proven(self.a_component_read_empty(cx)))
             .or_else(|| self.below_by_emptiness(other, cx))
     }
 
