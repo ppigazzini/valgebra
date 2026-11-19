@@ -1209,6 +1209,15 @@ as a list against a length-bounded list of the same element.
   is most relations, drops with no thread-local read (`walked` in `oracle.rs`), and
   a relation reads its answer off the oracle by reference, its size being past
   what a move does inline.
+- **A value the last asking reads of a schema is read once a query.** The
+  asking that reads a pair's leaves lowers each refinement, meet and complement
+  the rules leave open, alone, for a value, and a query asks the same ones
+  again: one question over drawn JSON shapes asked the sets of a meet of nine
+  nodes 3,609 times, and read for 94 ms on a release build against 6.2 ms
+  without the reading. The query holds each answer under its number
+  (`Cx::reads_a_value` in `decision.rs`) and charges the steps each time it is
+  asked, so the memo moves no answer, and the question reads 8.7 ms. The
+  instruction gate's decision workloads read within 0.4% of the last release's.
 - **A length bound costs a state an element and little else.** A bound over a
   list is an automaton of one letter repeated, so the letter is held by one
   handle and asked whether it takes every value once (`chain` in
