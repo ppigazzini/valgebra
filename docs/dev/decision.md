@@ -496,7 +496,14 @@ difference (`refuted_narrowed_deeper`), sound because every unfolding of a
 fixpoint lies inside it [FCB08, §4.3]. It is asked once, at the root, so a
 decided pair pays one comparison, and never where one unfolding answers: the
 deeper term spends the build budget first, and asked in place of the first it
-left a corpus of recursive schemas less decided. An unfolding builds one copy
+left a corpus of recursive schemas less decided. Reading deeper is refused both
+ways it can be asked. Every reference unfolded twice (`UNFOLDS = 2`) refutes a
+fixpoint over `tuple[complement(t), t]` below its swap, and leaves `undecided` a
+record over `complement(tuple[t, int])` one unfolding refutes below `int`; the
+last reading taken one level deeper gains nothing and leaves `undecided` a
+record over `complement(int | t)` the reading as it stands refutes below `str`.
+`test_a_recursive_record_is_refuted_at_the_depth_the_tree_reads` in
+`tests/test_recursion.py` holds both refutations, on `{"k": "s"}`. An unfolding builds one copy
 of a body for each definition, unfoldings left and polarity
 (`Schema::unfolded`), and every reference to it holds that handle: a body
 naming its definition `m` times unfolded twice is two copies of the body,

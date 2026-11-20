@@ -394,6 +394,25 @@ def test_what_opening_a_placeholder_meant_is_written_another_way() -> None:
     assert Validator({"k": int}).open() == Validator({"k": int, anything: anything})
 
 
+def test_a_recursive_record_is_refuted_at_the_depth_the_tree_reads() -> None:
+    """Two records over a complement of their own fixpoint are refuted on a value.
+
+    `{"k": "s"}` is a member of each, and neither a `str` nor an `int`, and the
+    relations find it at the unfolding depth the tree reads. A deeper one loses
+    one of them either way it is asked: every reference unfolded twice leaves
+    the second `undecided`, and the last reading taken one level deeper leaves
+    the first, which is the test a proposal to read deeper fails.
+    """
+    over_a_union = recursive(lambda x: {"k": complement(union(int, x))})
+    over_a_pair = recursive(
+        lambda x: {"k": complement(Validator(tuple[x, int]))}  # ty: ignore[invalid-type-form]
+    )
+    assert over_a_union.is_valid({"k": "s"})
+    assert over_a_pair.is_valid({"k": "s"})
+    assert over_a_union.relation_to(str) == "not_subset"
+    assert over_a_pair.relation_to(int) == "not_subset"
+
+
 #: Leaves of the terms drawn below, and the finished sets a placeholder is
 #: replaced by to read what a term asked inside a builder would answer about it.
 _TERM_ATOMS: tuple[object, ...] = (
