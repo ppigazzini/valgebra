@@ -454,22 +454,28 @@ fn room_below_the_reserve() -> bool {
 }
 
 /// How much deeper than `PyPy`'s last answer the walk goes before asking
-/// again: a few levels of the walk's frames, well inside [`ROOM_RESERVE`].
+/// again. The question is asked from [`ROOM_RESERVE`] below the walk, so the
+/// step bounds how far past `PyPy`'s threshold that frame can land between two
+/// answers, and past it the question itself overflows inside `cpyext`, which
+/// ends the process: at 2 KiB, explaining a list nested 1,600 deep and a JSON
+/// value twelve lists deep ended `PyPy` 3.11 and 3.12 under a recursion limit
+/// of 48. Each answer is a call into `PyPy`, paid by every value deep enough to
+/// cross a step: a JSON value eight lists deep reads 12% slower on `PyPy` 3.12
+/// at 1 KiB than at 2 KiB, and 40% at 512 bytes.
 #[cfg(PyPy)]
-const ROOM_STEP: usize = 2_048;
+const ROOM_STEP: usize = 1_024;
 
 /// The stack the walk keeps free below itself on `PyPy`, beside the step it
 /// may have gone since the last answer: room for the Python a level runs and
 /// for raising what it raises. Small enough that asking from below it is no
-/// overflow of its own wherever `PyPy` runs the walk at all: at 32 KiB the
-/// question took the process down under a recursion limit of 45. Measured on
-/// `PyPy` 3.11 against a list nested to 1,600: under the default limit the
-/// walk refuses at its bound as before, and under limits of 200, 60 and 45,
-/// where every walk past a few dozen levels ended the process, `is_valid`
-/// refuses at `recursion_limit` and the explaining walk's rendering raises a
-/// `RecursionError` the caller catches.
+/// overflow of its own: at 32 KiB the question took the process down under a
+/// recursion limit of 45, and at 16 KiB under 38, 41 and 53 on `PyPy` 3.12.
+/// Measured with [`ROOM_STEP`] on `PyPy` 3.11 and 3.12, explaining a list
+/// nested 1,600 deep and a JSON value twelve lists deep under every limit from
+/// 37 to 120: no process ends, `is_valid` refuses at `recursion_limit`, and the
+/// explaining walk's rendering raises a `RecursionError` the caller catches.
 #[cfg(PyPy)]
-const ROOM_RESERVE: usize = 16_384;
+const ROOM_RESERVE: usize = 12_288;
 
 /// An address on the current native stack: a local's, in the frame it is
 /// inlined into.

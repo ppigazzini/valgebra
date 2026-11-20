@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: opening or closing a recursive placeholder is refused
+- fix: the walk asks PyPy for room before its question can overflow
 
 -->
 
@@ -28,6 +29,17 @@ answer of its own, or a repair to a change not yet released.
   built another set the same way. Both now raise `ValueError` on a schema holding a placeholder,
   in its root or in a definition. **A call that returned now raises:** open the validator
   `recursive` returns, or write `anything: anything` into the record where it is declared.
+
+- **A walk on PyPy under a lowered recursion limit asks for room before its question can
+  overflow.** PyPy sizes the stack its C-API calls may use by the recursion limit, and the walk
+  asks `__pypy__.stack_almost_full` from a frame kept free below it, once it has gone a step
+  deeper than the last answer. With a 2 KiB step and a 16 KiB reserve that frame could land past
+  PyPy's threshold, where the question itself overflowed inside `cpyext` and ended the process:
+  explaining a list nested 1,600 deep or a JSON value twelve lists deep did so on PyPy 3.12 under
+  limits of 38, 41 and 53, and on PyPy 3.11 under 37, 38, 40, 42 and 43. The walk asks every 1 KiB
+  from 12 KiB below it, and under every limit from 37 to 120 no process ends on either; a value deep
+  enough to cross a step reads up to 12% slower on PyPy. The limits page's floor is 37, where it was
+  45.
 
 ## [0.0.30] - 2026-11-19
 

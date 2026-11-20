@@ -612,11 +612,14 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
     past it ended the process. The walk asks PyPy's stack check once a step
     deeper (`ROOM_STEP`), from a frame `ROOM_RESERVE` bytes below it, and
     refuses at `recursion_limit` where there is no room. In a child
-    interpreter under limits of 200 and 60, a list nested five deep is still a
-    member, one nested 1,600 deep is not, and validating it raises an
-    exception the caller catches: the
+    interpreter under every limit from the limits page's floor of 37 to 64, and
+    under 200, a list nested five deep is still a member, one nested 1,600 deep
+    is not, and validating it raises an exception the caller catches: the
     walk's `ValidationError`, or the `RecursionError` the explaining walk's
-    rendering raises.
+    rendering raises. Explaining a JSON value twelve lists deep against a JSON
+    fixpoint finishes too. Every limit is asked because what runs out is a
+    stack the limit sizes, not a count it bounds, and a limit that ends the
+    process can sit between two that do not.
     """
     program = textwrap.dedent(
         """
@@ -624,19 +627,30 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
         from valgebra import ValidationError, Validator, recursive, union
 
         lists = Validator(recursive(lambda t: union(int, [t])))
+        json = Validator(
+            recursive(lambda j: union(None, bool, int, str, float, [j], {str: j}))
+        )
         value = 0
         for _ in range(1600):
             value = [value]
         shallow = [[[[[0]]]]]
+        nested = None
+        for _ in range(12):
+            nested = [nested]
         sys.setrecursionlimit(int(sys.argv[1]))
         print(lists.is_valid(shallow), lists.is_valid(value))
         try:
             lists.validate(value)
         except (ValidationError, RecursionError):
             print("raised")
+        try:
+            json.validate(nested)
+        except (ValidationError, RecursionError):
+            pass
+        print("explained")
         """
     )
-    for limit in (200, 60):
+    for limit in (*range(37, 65), 200):
         result = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
             [sys.executable, "-c", program, str(limit)],
             capture_output=True,
@@ -646,7 +660,7 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
         )
         why = (limit, result.stderr[-400:])
         assert result.returncode == 0, why
-        assert result.stdout.split() == ["True", "False", "raised"], why
+        assert result.stdout.split() == ["True", "False", "raised", "explained"], why
 
 
 # BOUND: MAX_DECISION_DEPTH

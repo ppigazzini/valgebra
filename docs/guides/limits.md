@@ -124,14 +124,14 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   calls use a stack it scales by the recursion limit, `sys.setrecursionlimit`
   included, and a call past it fails in a way PyPy cannot report, ending the
   process. So on PyPy a level the walk opens a step deeper than before asks
-  PyPy's own check whether 16 KiB below it are still free, and where they are
+  PyPy's own check whether 12 KiB below it are still free, and where they are
   not the walk refuses at `recursion_limit`, as at its bounds. Under the
   default limit the bounds come first. Under a limit lowered to a few hundred
   or below the walk can stop short of them, at a depth its own frames decide,
   so `is_valid` and the explaining `validate`, whose frames are larger, can
   stop at different depths and name different reasons; there the explaining
   walk's rendering, which is Python, can raise `RecursionError`, which
-  propagates. A limit below about 45 leaves PyPy too little stack to run the
+  propagates. A limit below about 37 leaves PyPy too little stack to run the
   walk at all.
 
     The parser has a bound of its own — a couple of hundred levels of arrays and
