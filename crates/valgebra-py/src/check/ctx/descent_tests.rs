@@ -199,3 +199,66 @@ fn the_first_level_reserves_the_levels_after_it() {
         "the trail did not grow inside the reservation"
     );
 }
+
+/// Before 3.14 the walk calls a predicate only with [`CALL_OUT_RESERVE`] of
+/// the thread's stack left, and short of it answers the `RecursionError` that
+/// ends a chain of re-entries. The short call is made by recursing on a thread
+/// of its own until the thread's bounds say the reserve is not left, which
+/// reads the same bounds the question does.
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+#[test]
+fn a_predicate_is_called_only_with_the_reserve_left() {
+    use super::CALL_OUT_RESERVE;
+
+    fn asked_with(left: usize) -> bool {
+        let filler = [0_u8; 1_024];
+        std::hint::black_box(&filler);
+        let room = if stacker::remaining_stack().is_some_and(|now| now > left) {
+            asked_with(left)
+        } else {
+            WalkState::new().room_for_python().is_ok()
+        };
+        std::hint::black_box(&filler);
+        room
+    }
+
+    let asked = |left: usize| {
+        std::thread::Builder::new()
+            .stack_size(4 * CALL_OUT_RESERVE)
+            .spawn(move || asked_with(left))
+            .unwrap()
+            .join()
+            .unwrap()
+    };
+    assert!(
+        !asked(CALL_OUT_RESERVE / 2),
+        "short of the reserve, no call"
+    );
+    assert!(
+        asked(2 * CALL_OUT_RESERVE),
+        "with the reserve left, the call"
+    );
+}
+
+/// Before 3.14 a predicate is short of the reserve from an address between the
+/// thread's limit and its floor, the limit plus the reserve, both ends held,
+/// and the error counts the bytes above the limit in kilobytes; above the
+/// floor, below the limit, or on a thread whose limit is not read, it has room.
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+#[test]
+fn a_predicate_is_short_only_between_the_limit_and_the_floor() {
+    use super::{CALL_OUT_RESERVE, overflow_message, short_of_the_reserve};
+
+    let floor = 1_000_000;
+    let limit = floor - CALL_OUT_RESERVE;
+    assert_eq!(short_of_the_reserve(floor + 1, floor), None);
+    assert_eq!(short_of_the_reserve(floor, floor), Some(CALL_OUT_RESERVE));
+    assert_eq!(short_of_the_reserve(limit + 7, floor), Some(7));
+    assert_eq!(short_of_the_reserve(limit, floor), Some(0));
+    assert_eq!(short_of_the_reserve(limit - 1, floor), None);
+    assert_eq!(short_of_the_reserve(5, 0), None);
+    assert_eq!(
+        overflow_message(40 * 1024 + 7),
+        "Stack overflow (40 kB of the thread's stack left)"
+    );
+}

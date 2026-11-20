@@ -186,18 +186,21 @@ assert not page.is_valid([{"id": 1}, {"id": "two"}])
 
 What bounds it is Python's own recursion limit and the native stack, not a
 valgebra bound: the walk's depth guard is per call, so each re-entry starts a
-fresh walk on top of the frames the last one holds. On the main thread of
-CPython a predicate that re-enters without a base case raises
-`RecursionError`; on PyPy the process ends in PyPy's own stack check, inside
-`cpyext`, with no nesting between the calls. The
-native frames between two Python calls are not what the recursion limit
-counts, though, so where each re-entry walks levels of nesting, or on a thread
-with a small stack, the native stack can run out first and the process ends.
-Which of the two a run reaches depends on the interpreter's own stack check --
-CPython 3.15 catches an overflow while the frames between two Python calls stay
-under its margin, and 3.12 does not -- and on how many levels each re-entry
-walks. Give a re-entering predicate a base case, and run it on a thread of
-1 MiB or more.
+fresh walk on top of the frames the last one holds. On CPython a predicate that
+re-enters without a base case raises `RecursionError`, on any thread: 3.14 and
+later raise it at the Python frame between two calls, where the thread's stack
+runs short, and before 3.14 the walk reads the thread's stack before it calls a
+predicate and raises it there, with 32 KiB left. Before 3.14 the question is
+the predicate's alone: an `__eq__` or an `isinstance` hook that re-enters is
+not asked. On musl neither check stands: the walk does not read the stack,
+whose reading for the main thread is the stack mapped so far, and CPython
+3.15.2's own check ended in a segmentation fault on a thread of 128 KiB. On PyPy the process ends in PyPy's own stack check, inside
+`cpyext`, with no nesting between the calls. No check reads the walk between
+two calls, though, so where each re-entry walks levels of nesting near the end
+of the stack, the walk's own frames can run past it and the process ends:
+CPython 3.15 did, re-entering under sixty levels of lists on a 1 MiB thread.
+Give a re-entering predicate a base case, and run it on a thread of 1 MiB or
+more.
 
 A fatal signal is **not** turned into a verdict: a base
 exception that is not an ordinary `Exception` (`KeyboardInterrupt`,

@@ -25,6 +25,7 @@ import itertools
 import json
 import subprocess
 import sys
+import sysconfig
 import textwrap
 import time
 import types
@@ -661,6 +662,103 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
         why = (limit, result.stderr[-400:])
         assert result.returncode == 0, why
         assert result.stdout.split() == ["True", "False", "raised", "explained"], why
+
+
+# BOUND: MAX_WALK_DEPTH
+def test_a_value_past_the_walk_bound_names_the_bound() -> None:
+    """A value refused at the walk's own bound says how deep the bound is.
+
+    The body of three records meets the walk's bound before the unfolding
+    bound, so the refusal is the walk's: `recursion_limit`, expecting a value
+    at most 384 levels deep. A level refused for the interpreter's stack, as
+    PyPy's check refuses one under a lowered limit, names the stack instead,
+    since the value need not be that deep.
+    """
+    records = Validator(recursive(lambda t: union(int, {"a": {"b": {"c": t}}})))
+    value: object = 0
+    for _ in range(200):
+        value = {"a": {"b": {"c": value}}}
+    with pytest.raises(ValidationError) as info:
+        records.validate(value)
+    assert [(e["code"], e["expected"]) for e in info.value.errors] == [
+        ("recursion_limit", "a value at most 384 levels deep")
+    ]
+
+
+#: Whether the interpreter links musl, where no check stops a re-entering
+#: predicate: before 3.14 the walk reads no stack there, since musl gives the
+#: main thread the stack mapped so far, and 3.15.2's own check ended in a
+#: segmentation fault on a thread of 128 KiB in the release smoke.
+_musl = "musl" in (sysconfig.get_config_var("HOST_GNU_TYPE") or "")
+
+
+# BOUND: CALL_OUT_RESERVE
+@pytest.mark.skipif(
+    sys.implementation.name == "pypy",
+    reason="PyPy ends a re-entering chain in its own stack check (boundaries.md)",
+)
+@pytest.mark.skipif(_musl, reason="on musl no check stops the chain (boundaries.md)")
+def test_a_predicate_reentering_its_validator_raises_rather_than_crashing() -> None:
+    """A predicate calling its own validator ends in `RecursionError`.
+
+    Each call re-enters the walk with nothing between two of them that
+    CPython 3.12 or 3.13 checks against the native stack: about 3 KiB a call
+    beside one unit of a C-recursion limit of thousands, so the chain ended
+    3.12.16 in a segmentation fault on every thread of 1 MiB or less under the
+    default recursion limit, and on the main thread under a limit of 10,000.
+    Before 3.14 the walk reads the thread's stack before it calls a predicate
+    and raises with less than `CALL_OUT_RESERVE` left; 3.14 and later raise at
+    the Python frame between two calls. In a child, on threads of 128 KiB,
+    256 KiB and 1 MiB under the default limit, and on the main thread under
+    10,000. On musl neither check stops it, and the chain is the thread's to
+    bound.
+    """
+    program = textwrap.dedent(
+        """
+        import sys
+        import threading
+        from typing import Annotated
+
+        from annotated_types import Predicate
+
+        from valgebra import Validator
+
+        kib, limit = int(sys.argv[1]), int(sys.argv[2])
+        holder = []
+        holder.append(
+            Validator(Annotated[object, Predicate(lambda x: holder[0].is_valid(x))])
+        )
+        found = []
+
+        def run():
+            try:
+                found.append(holder[0].is_valid(1))
+            except RecursionError:
+                found.append("RecursionError")
+
+        if limit:
+            sys.setrecursionlimit(limit)
+        if kib:
+            threading.stack_size(kib * 1024)
+            worker = threading.Thread(target=run)
+            worker.start()
+            worker.join()
+        else:
+            run()
+        print(*found)
+        """
+    )
+    for kib, limit in ((128, 0), (256, 0), (1024, 0), (0, 10_000)):
+        result = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+            [sys.executable, "-c", program, str(kib), str(limit)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        why = (kib, limit, result.stderr[-400:])
+        assert result.returncode == 0, why
+        assert result.stdout.split() == ["RecursionError"], why
 
 
 # BOUND: MAX_DECISION_DEPTH

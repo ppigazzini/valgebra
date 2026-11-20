@@ -30,6 +30,12 @@ pub mod workload;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyModule, PyTuple, PyType};
+// The thread's stack bounds are read on `CPython` before 3.14 alone, off musl
+// (`room_for_python` in `check/ctx.rs`), where no interpreter check stops a
+// predicate re-entering its validator; elsewhere the crate is linked and
+// nothing of it read.
+#[cfg(any(PyPy, Py_3_14, target_env = "musl"))]
+use stacker as _;
 use valgebra_core::{DefIx, Guarded, Schema, fresh_self_token};
 
 use crate::errors::install_lazy_attributes;

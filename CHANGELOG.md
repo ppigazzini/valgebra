@@ -17,6 +17,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the walk asks PyPy for room before its question can overflow
 - feat: a pair the deciders decline is refuted on a value guessed from the subject
 - fix: a float meets a Decimal bound as the Decimal it equals
+- fix: a predicate re-entering its validator raises RecursionError before 3.14
 
 -->
 
@@ -74,6 +75,23 @@ answer of its own, or a repair to a change not yet released.
   exact and silent under the trap, so every answer is the one Python's exact comparison gives
   outside it, whatever the context. pydantic 2.14 admits `0.75` under the trap too; msgspec
   refuses a `Decimal` bound.
+
+- **A predicate re-entering its validator raises `RecursionError` on CPython 3.12 and 3.13.** A
+  predicate that calls its own validator re-enters the walk with nothing between two calls that
+  those interpreters check against the native stack: about 3 KiB a call beside one unit of a
+  C-recursion limit of thousands, so the chain ended CPython 3.12.16 in a segmentation fault on
+  every thread of 1 MiB or less under the default recursion limit, and on the main thread under a
+  limit of 10,000. Before 3.14 the walk reads the thread's own stack bounds before it calls a
+  predicate -- once a thread, through the `stacker` crate, as 3.14 reads them for its own check --
+  and with less than 32 KiB left raises `RecursionError("Stack overflow (N kB of the thread's stack
+  left)")` instead of calling it, which 3.14 and later raise at the Python frame between two calls.
+  It costs about 20 instructions a predicate on 3.12 and nothing on 3.14 and later. Not on musl,
+  whose `pthread_getattr_np` reports the main thread's stack mapped so far, and where 3.15.2's own
+  check also lets the chain end the process on a 128 KiB thread, and not for an `__eq__`
+  or `isinstance` hook that re-enters; a walk between two re-entries still needs the stack it
+  uses, so deep values on a thread under 1 MiB keep the limits page's floor. A level refused on
+  PyPy for PyPy's stack rather than the walk's bound is reported as "a value the thread's stack
+  has room to walk" rather than as past the 384-level bound.
 
 ## [0.0.30] - 2026-11-19
 

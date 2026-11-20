@@ -30,7 +30,7 @@ use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
     reads_its_length, record_fatal, record_if_fatal, record_stop, stop, stopped,
 };
-use crate::check::ctx::{Ctx, MAX_RECURSION_DEPTH};
+use crate::check::ctx::{Ctx, MAX_RECURSION_DEPTH, WalkState};
 use crate::check::index::{Exact, LeafPlan, Number, matches_unindexed, ordered};
 use crate::check::violation::{mismatch, summarize_in, summarize_value};
 use crate::codes::{
@@ -494,8 +494,18 @@ fn is_multiple_of(value: &Bound<'_, PyAny>, operand: &Bound<'_, PyAny>) -> PyRes
     value.rem(operand)?.eq(0)
 }
 
-/// Run a user predicate and report whether it returned a truthy result.
-fn predicate_passes(value: &Bound<'_, PyAny>, predicate: &Bound<'_, PyAny>) -> PyResult<bool> {
+/// Run a user predicate and report whether it returned a truthy result,
+/// where the thread's stack has room for the Python it runs: before 3.14, off
+/// musl, `WalkState::room_for_python` asks.
+fn predicate_passes(
+    value: &Bound<'_, PyAny>,
+    predicate: &Bound<'_, PyAny>,
+    state: &WalkState,
+) -> PyResult<bool> {
+    #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+    state.room_for_python()?;
+    #[cfg(any(PyPy, Py_3_14, target_env = "musl"))]
+    let _ = state;
     predicate.call1((value,))?.is_truthy()
 }
 
@@ -1173,7 +1183,7 @@ fn check_predicate(index: PredIx, value: &Bound<'_, PyAny>, frame: &mut Frame<'_
     let Some(predicate) = predicate_at(ctx, index, py) else {
         return false;
     };
-    let (ok, code, expected) = match predicate_passes(value, predicate) {
+    let (ok, code, expected) = match predicate_passes(value, predicate, ctx.state) {
         Ok(passed) => (
             passed,
             PREDICATE_FAILED,

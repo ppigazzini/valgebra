@@ -1082,16 +1082,26 @@ a depth rather than a total because the level is released when the frame that
 took it returns, so a wide value pays for its widest child and not for all of
 them.
 
-**A stack probe of the walk's own is refused.** Levels are not bytes, so a
-thread started with less stack than its platform's default can overflow before
-the bound does, and [the limits page](../guides/limits.md) says so. Reading the
-stack itself -- `stacker::remaining_stack()` beside `descend` -- would turn that
-overflow into `recursion_limit`, and it is not in: it adds a crate that
-assembles for every wheel target, a call on every level of every walk, and a
-reading of each platform's thread-stack bounds that no lane measures, musl and
-Windows arm64 among them. A proposal starts from the test it must pass: a value
-at the depth bound on a 128 KiB thread raises `recursion_limit` on every wheel
-platform, and the walk shapes stay inside the perf gate's band.
+**A stack probe at every level of the walk is refused.** Levels are not
+bytes, so a thread started with less stack than its platform's default can
+overflow before the bound does, and [the limits page](../guides/limits.md) says
+so: explained on a thread of 128 KiB, a value a hundred lists deep ends CPython
+3.15 in a segmentation fault. Reading the stack itself beside `descend`, once a
+step deeper as the walk asks PyPy's check, turns that overflow into
+`recursion_limit`, and it is not in: the stack address taken where a walk is
+entered and compared at each level read the call boundary 14.42% dearer and
+twenty-five nested lists 10.39% on the 3.15 instruction gate
+(`--binding-boundary`, `--binding-deep`), seven times its ceiling. A probe
+asked by level rather than by address -- the depth compared with a ceiling the
+last answer raised -- costs nothing a level and is unsound: a sibling branch
+whose frames are larger reaches the same level deeper on the stack, past what
+the answer read. The thread's bounds are read before a predicate is called,
+on CPython before 3.14 (`room_for_python` in `check/ctx.rs`), where a chain
+of re-entries had no check at all; that question is asked where the walk
+calls into Python, which costs many times more. A proposal starts from the
+test it must pass: a value at the depth bound on a 128 KiB thread raises
+`recursion_limit` on every wheel platform, and the walk shapes stay inside the
+perf gate's band.
 
 **On PyPy the walk asks PyPy's own probe**, because there the stack a C-API
 call may use is the interpreter's to size: `cpyext` sizes it by the recursion
@@ -1103,7 +1113,8 @@ deeper than where the probe last answered that there was room
 `recursion_limit` where PyPy has none: the reserve is the room a level's own
 Python -- a predicate, an `isinstance` hook, the explaining walk's rendering
 -- runs and raises in. Siblings at one depth never ask. On CPython the probe
-compiles to nothing.
+compiles to nothing; before 3.14 the question asked there is the predicate's
+(above).
 `test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room` in
 `tests/test_adversarial_bounds.py` holds it.
 

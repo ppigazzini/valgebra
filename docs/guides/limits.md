@@ -9,7 +9,9 @@ error-reporting probe is bounded. A pathological input meets a gated limit and i
 rejected cleanly; on a thread with the stack its platform gives one, it never
 overflows the native stack, and a Python `RecursionError` comes only from the
 value's own code: a `__repr__`, an `__eq__` or a predicate that recurses past
-the interpreter's limit raises one, and it propagates as every fatal signal does
+the interpreter's limit raises one, or that re-enters a validator until the
+thread's stack runs short ([re-entry](../explanation/boundaries.md#your-code-runs-inside-the-check-and-may-call-back-in)), and it
+propagates as every fatal signal does
 ([when a comparison raises](error-model.md#when-a-comparison-raises)). On
 PyPy under a lowered recursion limit the explaining walk's own rendering can
 raise one too (the value-walk depth entry below). The

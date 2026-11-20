@@ -175,6 +175,11 @@ pub(crate) struct WalkState {
     /// ([`the_interpreter_has_room`]).
     #[cfg(PyPy)]
     room_at: Cell<usize>,
+    /// The lowest stack address this walk calls a predicate from, read from
+    /// the thread's at the first predicate it calls, and `usize::MAX` before
+    /// ([`WalkState::room_for_python`]).
+    #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+    call_out_floor: Cell<usize>,
 }
 
 /// The pointer [`WalkState`] holds what a walk rarely holds behind, released
@@ -247,6 +252,36 @@ impl WalkState {
             memo: Memo::default(),
             #[cfg(PyPy)]
             room_at: Cell::new(stack_address()),
+            #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+            call_out_floor: Cell::new(usize::MAX),
+        }
+    }
+
+    /// Whether Python called from the walk has room on the native stack, or
+    /// the `RecursionError` that ends the chain where it has not
+    /// ([`CALL_OUT_RESERVE`]).
+    ///
+    /// The floor is the walk's after its first predicate, so a predicate after
+    /// it reads a local's address against a field: about 20 instructions a
+    /// predicate on 3.12, 4% of one that returns at once, read as whole runs of
+    /// a thousand-element list under cachegrind. Asked of the thread every time
+    /// -- `stacker::remaining_stack()`, a lazily built thread-local behind a
+    /// call to an assembled routine -- it read about 40, and about 30 with the
+    /// floor in a thread-local of its own. A shortcut for an address above the
+    /// floor read about 10, and is not in: answering as the reading after it
+    /// does, it is a branch no test can tell from its absence.
+    #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+    #[inline]
+    pub(crate) fn room_for_python(&self) -> PyResult<()> {
+        let here = stack_address();
+        let mut floor = self.call_out_floor.get();
+        if floor == usize::MAX {
+            floor = thread_floor(here);
+            self.call_out_floor.set(floor);
+        }
+        match short_of_the_reserve(here, floor) {
+            None => Ok(()),
+            Some(left) => Err(stack_overflow(left)),
         }
     }
 
@@ -477,9 +512,87 @@ const ROOM_STEP: usize = 1_024;
 #[cfg(PyPy)]
 const ROOM_RESERVE: usize = 12_288;
 
+/// The lowest stack address a predicate is called from on this thread: its
+/// stack's limit plus [`CALL_OUT_RESERVE`], or `0` where the limit cannot be
+/// read, which leaves every address room.
+///
+/// On `CPython` before 3.14 a predicate that calls a validator re-enters the
+/// walk with no frame between the two that the interpreter checks against the
+/// stack: 3.12 counts each such call against a C-recursion limit of thousands
+/// and spends about 3 KiB of native stack on it, so a predicate calling its own
+/// validator ended 3.12.16 in a segmentation fault on every thread of 1 MiB or
+/// less under the default recursion limit, and on the main thread under a limit
+/// of 10,000. So the walk reads the thread's own bounds before it calls a
+/// predicate, and with less than [`CALL_OUT_RESERVE`] left raises what 3.14 and
+/// later raise at the Python frame between two re-entries, where they read the
+/// same bounds and need no question here. The bounds are read once a thread
+/// through `stacker` -- `pthread_getattr_np`, `pthread_get_stackaddr_np`,
+/// `GetCurrentThreadStackLimits` -- since reading them needs `unsafe`, and not
+/// on musl, whose `pthread_getattr_np` gives the main thread the stack mapped
+/// so far rather than the stack it may grow to.
+///
+/// At the predicate rather than at every entry: asked where a walk is entered,
+/// the question read the call boundary 31.73% dearer on the 3.12 instruction
+/// gate, and a predicate is a call into Python many times its price. `PyPy`
+/// stops such a chain in a check of its own, which ends the process
+/// (`docs/explanation/boundaries.md`).
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+fn thread_floor(here: usize) -> usize {
+    thread_local! {
+        static FLOOR: Cell<usize> = const { Cell::new(usize::MAX) };
+    }
+    let mut floor = FLOOR.get();
+    if floor == usize::MAX {
+        floor = stacker::remaining_stack()
+            .and_then(|left| here.checked_sub(left))
+            .map_or(0, |limit| limit.saturating_add(CALL_OUT_RESERVE));
+        FLOOR.set(floor);
+    }
+    floor
+}
+
+/// The bytes left above the thread's limit at `here`, where they are fewer
+/// than [`CALL_OUT_RESERVE`], read against `floor`, the limit plus the
+/// reserve; `None` where a predicate called from `here` has room. An address
+/// below the limit is on a stack other than the thread's own, which a
+/// coroutine library switches to, and has room, and so has every address
+/// where the limit is not read and `floor` is `0`.
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+#[inline]
+fn short_of_the_reserve(here: usize, floor: usize) -> Option<usize> {
+    let limit = floor.saturating_sub(CALL_OUT_RESERVE);
+    (limit..=floor).contains(&here).then(|| here - limit)
+}
+
+/// The `RecursionError` the walk raises with `left` bytes of the thread's
+/// stack left ([`overflow_message`]).
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+#[cold]
+#[inline(never)]
+fn stack_overflow(left: usize) -> PyErr {
+    pyo3::exceptions::PyRecursionError::new_err(overflow_message(left))
+}
+
+/// What the error says with `left` bytes of the thread's stack left, worded
+/// as the one `CPython` 3.14 raises where the same bounds run out.
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+fn overflow_message(left: usize) -> String {
+    format!(
+        "Stack overflow ({} kB of the thread's stack left)",
+        left / 1024
+    )
+}
+
+/// The native stack a predicate is called with on `CPython` before 3.14:
+/// room for the Python frame it runs, a walk of its own validator at the root,
+/// and raising the error that ends the chain. 3.15 raises at about 35 KiB from
+/// the end of a thread in the same chain.
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+const CALL_OUT_RESERVE: usize = 32_768;
+
 /// An address on the current native stack: a local's, in the frame it is
 /// inlined into.
-#[cfg(PyPy)]
+#[cfg(any(PyPy, all(not(Py_3_14), not(target_env = "musl"))))]
 #[inline]
 fn stack_address() -> usize {
     let marker = 0_u8;

@@ -379,6 +379,7 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-py/src/check/walk.rs` | `MAX_LABEL_UNFOLDS` | `4` | shape | a union's branch label following a chain of references, where a definition naming another names one forever | `tests/test_union_messages.py` |
 | `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `3 * MAX_RECURSION_DEPTH` | shape | a walk overflowing a 1 MiB thread stack on the profile-guided wheel; three levels an unfolding, so the smallest recursive body is walked to the unfolding bound | its own tests, and `tests/test_adversarial_bounds.py` on a 1 MiB thread, which the release smoke runs on every wheel it loads |
 | `crates/valgebra-py/src/check/ctx.rs` | `MAX_RECURSION_DEPTH` | `128` | shape | a pathologically deep *value* overflowing the stack | its own tests, and `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/check/ctx.rs` | `CALL_OUT_RESERVE` | `32_768` | shape | on CPython before 3.14 and off musl, a predicate called with less native stack left, read from the thread's own bounds, is not called and the walk raises `RecursionError`: the room the predicate's Python frame, a walk of its validator at the root and the error that ends a chain of re-entries need, where no interpreter check stands between two re-entries | `tests/test_adversarial_bounds.py`, a predicate re-entering its validator on threads of 128 KiB to 1 MiB and on the main thread under a limit of 10,000, in a child; `a_predicate_is_called_only_with_the_reserve_left` in `check/ctx/descent_tests.rs` |
 | `crates/valgebra-py/src/check/ctx.rs` | `ROOM_RESERVE` | `12_288` | shape | on PyPy, a walk reaching the stack PyPy sizes by the recursion limit, past which a C-API call fails and ends the process: the stack kept free below the walk for a level's Python and the errors it raises | `tests/test_adversarial_bounds.py`, under every recursion limit from 37 to 64 and under 200 in a PyPy child; its doc comment's readings at 32 KiB and 16 KiB |
 | `crates/valgebra-py/src/check/ctx.rs` | `ROOM_STEP` | `1_024` | not a bound | how much deeper the walk goes on PyPy between two asks of PyPy's stack check, so siblings at one depth never ask and the frame the question is asked from lands short of PyPy's threshold | `tests/test_adversarial_bounds.py`, beside `ROOM_RESERVE`; its doc comment's readings at 2 KiB and 512 bytes |
 | `crates/valgebra-py/src/check/index.rs` | `PATTERN_SIZE_LIMIT` | `32 << 20` | cost | the memory a validator keeps for one pattern's program, which a counted Unicode class multiplies, the class copied once a repetition; three times the `regex` crate's default, which refused `\w{1,255}` | its own tests, and `tests/test_adversarial_bounds.py` |
@@ -589,10 +590,11 @@ calls, which the recursion limit does not count, and on CPython 3.12 and 3.13
 past a raised limit, or on a small thread at the default one, the stack runs
 out before the limit does. `Py_EnterRecursiveCall` would count each call-out
 against the interpreter's own guard, but `pyo3` 0.29 offers no safe wrapper for
-it, and calling it through `pyo3-ffi` is `unsafe`, which both crates forbid; the
-limit and the 1 MiB thread [the boundaries page](../explanation/boundaries.md)
-names are what a caller has instead. Held by `test_no_source_file_writes_unsafe`
-in `tests/test_crate_attributes.py`.
+it, and calling it through `pyo3-ffi` is `unsafe`, which both crates forbid.
+Before 3.14 the walk reads the thread's own stack bounds before it calls a
+predicate instead (`CALL_OUT_RESERVE`, read through `stacker`), as 3.14 reads
+them at a Python frame. Held by `test_no_source_file_writes_unsafe` in
+`tests/test_crate_attributes.py`.
 
 ## Where to look next
 

@@ -552,7 +552,13 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
             frame.out.push(Violation {
                 code: RECURSION_LIMIT.as_str(),
                 path: frame.path.clone(),
-                expected: format!("a value at most {MAX_WALK_DEPTH} levels deep"),
+                // The walk refuses a level past its bound, or, on PyPy, one the
+                // interpreter's stack has no room for, which it can meet first.
+                expected: if ctx.state.depth.get() >= MAX_WALK_DEPTH {
+                    format!("a value at most {MAX_WALK_DEPTH} levels deep")
+                } else {
+                    "a value the thread's stack has room to walk".to_owned()
+                },
                 value_summary: summarize_value(value, ctx),
             });
         }

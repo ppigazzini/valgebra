@@ -44,6 +44,15 @@ rustc-hash = { workspace = true }
 # fraction of std's SipHash; jiter already depends on it with these features,
 # so it adds no crate to the build.
 ahash = "0.8"
+# How much of the thread's native stack is left, which a walk entered on
+# CPython before 3.14 asks (`check/ctx.rs`). The limit is the thread's own --
+# `pthread_getattr_np` on Linux, `pthread_get_stackaddr_np` on macOS,
+# `GetCurrentThreadStackLimits` on Windows -- read once a thread, as CPython
+# 3.14 reads it for its own recursion check; reading it needs `unsafe`, which
+# both crates forbid. rustc asks the same crate before its own deep recursions.
+# Its `psm` dependency assembles the stack-pointer read with the C toolchain
+# Rust already links the extension with.
+stacker = "0.1.25"
 # Native string-pattern refinements: the `regex` crate compiles a `Pattern(...)`
 # marker once and matches on the Rust path, off the Python-predicate slow path.
 # Its linear-time guarantee (no catastrophic backtracking) matches valgebra's
