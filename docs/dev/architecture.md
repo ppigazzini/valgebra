@@ -583,6 +583,17 @@ number a caller may not import is not published. Held by
 `test_the_construction_limits_are_importable_from_the_package` in
 `tests/test_public_surface.py`.
 
+**CPython's recursion guard around a call into Python.** A predicate that asks
+its own validator again stacks the walk's native frames between two Python
+calls, which the recursion limit does not count, and on CPython 3.12 and 3.13
+past a raised limit, or on a small thread at the default one, the stack runs
+out before the limit does. `Py_EnterRecursiveCall` would count each call-out
+against the interpreter's own guard, but `pyo3` 0.29 offers no safe wrapper for
+it, and calling it through `pyo3-ffi` is `unsafe`, which both crates forbid; the
+limit and the 1 MiB thread [the boundaries page](../explanation/boundaries.md)
+names are what a caller has instead. Held by `test_no_source_file_writes_unsafe`
+in `tests/test_crate_attributes.py`.
+
 ## Where to look next
 
 A change to what a schema *means* is [the schema IR page](schema-ir.md) and
