@@ -163,6 +163,21 @@ caller's handling turns on, a walk that stopped against a value refused, is
 in the code already: `docs/guides/error-model.md` names the five codes a stopped
 walk raises.
 
+**A report that grows fallibly, raising `MemoryError` where the next slot will
+not fit.** Under a memory limit (`RLIMIT_AS`) the report of a value with ten
+million failures ends the process when its vector doubles past the limit, and
+reserving each slot fallibly would raise `MemoryError` there instead. It fails
+on what it leaves: every site that records a failure grows the report, and each
+failure allocates its path and two strings besides its slot, so a fallible
+vector converts the one large allocation and leaves every small one aborting
+where the limit falls on it, and a process near its limit still ends. pydantic
+2.14's `validate_python` ends the same way on the same value under the same
+limit: a Rust allocation fails and the process aborts. A caller that bounds the
+report asks for `fail_fast=True`, which
+collects one failure (`test_fail_fast_stops_at_the_first_failure` in
+`tests/test_error_aggregation.py`), and the limits page says a Rust allocation
+that fails ends the process.
+
 ## The limit
 
 **A summary is a summary.** `value_summary` truncates, and a long or exotic
