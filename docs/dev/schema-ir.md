@@ -387,6 +387,28 @@ covering every region -- is a decision, and the relations make it without
 rewriting the term. `test_no_method_reduces_a_schema` in
 `tests/test_public_surface.py` fails if one named `simplify` is added.
 
+**An `open` or a `close` of the placeholder, held until its builder returns.**
+Refused. Held as a marker and rewritten once the definition exists, it would
+give the reading after the builder everywhere. It is a third build marker, and
+`AGENTS.md` admits two, `Ref` and `SelfRef`; the case for a third would be a set
+no spelling reaches without it, and each is reached in two calls. The fixpoint
+of a body that opens its placeholder is the body around the fixpoint already
+opened: `recursive(lambda t: union(None, {"k": t})).open()` built first, then a
+record holding it. `test_what_opening_a_placeholder_meant_is_written_another_way`
+in `tests/test_recursion.py` builds it.
+
+**`open` and `close` stopping at a reference, as a declared class's openness
+does.** Refused. pydantic's `extra` and msgspec's `forbid_unknown_fields` are
+settings of the class declared, and an open model holding a closed one refuses
+an unknown key inside it. Read so, `open` would need no definition and no
+builder would have to refuse it, but it would tell a fixpoint from its
+unfolding: the fixpoint's root is a reference, so it would come out as it went
+in, while its unfolding opens the outer record. That breaks the equirecursive
+reading [AC93, §3.2], under which a reference is the definition it names, and
+the classes of those two libraries are nominal, where a fixpoint is not its own
+unfolding. `test_opening_a_fixpoint_is_opening_its_unfolding` in
+`tests/test_laws.py` fails on it.
+
 ### Arguments for the carrier change, and why each fails
 
 | argument | why it fails |
@@ -990,6 +1012,21 @@ meet of two open records and the open record of their fields are one set, and
 closing them gives an empty meet and a record. What the laws hold is that
 closing commutes with absorption and that a second application gives the set
 the first did ([the theory page](theory.md)).
+
+Neither is defined inside a `recursive` builder. The rewrite reaches a
+fixpoint's records through the reference to its definition, and the placeholder
+a builder holds names a definition not built yet. Read as a term declaring no
+record, the placeholder would come out of the rewrite as it went in, and
+`recursive(lambda t: union(None, {"k": Validator(t).open()}))` would be the
+fixpoint built without `.open()`, which refuses `{"k": {"k": None, "z": 1}}`
+where its body written out around it admits that value. So both ask
+`Schema::holds_a_self_ref` of the root and of every definition first, and refuse
+a schema holding one (`refuse_a_placeholder` in
+`crates/valgebra-py/src/validator.rs`). The refusal is wider than the failures:
+a body whose opened part reaches no record outside the call would keep its
+unfolding, and no rewrite can tell it apart before the builder returns. Each set
+it refuses is written another way, by opening the validator `recursive` returns
+or by writing `anything: anything` where a record is declared.
 
 `ensure` is `validate(x); return x` and is kept for what it reads as, typed as
 the identity it is. That is a judgment about the surface rather than about the

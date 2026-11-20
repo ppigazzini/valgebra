@@ -19,6 +19,7 @@ from valgebra import (
     complement,
     instance_of,
     intersection,
+    nothing,
     recursive,
     union,
 )
@@ -324,6 +325,162 @@ def test_a_placeholder_does_not_cross_a_thread_into_another_definition() -> None
         "an escaped placeholder built a schema on another thread"
     )
     assert "unresolved recursive placeholder" in str(outcome[0])
+
+
+#: Builders that open or close a term holding the placeholder. Opening reaches a
+#: fixpoint's records through the reference to its definition, which inside the
+#: builder is not built; read as a term declaring no record, the placeholder
+#: would come out as it went in, and the first, the record beside a closed one
+#: and the record closed would each build a fixpoint other than its body written
+#: out around it. The last three would not, and are refused all the same: no
+#: rewrite can tell them apart before the builder returns.
+_REWRITING_BUILDERS: dict[str, Callable[[Validator], object]] = {
+    "the placeholder opened": lambda t: union(None, {"k": Validator(t).open()}),
+    "the placeholder closed": lambda t: union(None, {"k": Validator(t).close()}),
+    "a union holding it opened": lambda t: union(None, {"k": union(t, int).open()}),
+    "a record holding it opened beside a closed one": lambda t: union(
+        None, {"a": Validator({"k": t}).open(), "b": t}
+    ),
+    "a record holding it closed": lambda t: union(
+        None, {"c": Validator({"k": t}).close()}
+    ),
+    "an inner fixpoint naming it opened": lambda t: union(
+        None, {"k": recursive(lambda u: union(None, {"a": u, "b": t})).open()}
+    ),
+    "the whole body opened": lambda t: Validator(union(None, {"k": t})).open(),
+    "a record opened beside no other record": lambda t: union(
+        int, [t], Validator({"k": t}).open()
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "builder", _REWRITING_BUILDERS.values(), ids=_REWRITING_BUILDERS.keys()
+)
+def test_opening_or_closing_a_placeholder_is_refused(
+    builder: Callable[[Validator], object],
+) -> None:
+    with pytest.raises(ValueError, match=r"holds a recursive\(\.\.\.\) placeholder"):
+        recursive(builder)
+
+
+def test_a_placeholder_kept_past_its_builder_is_not_opened_either() -> None:
+    kept: list[Validator] = []
+
+    def keep(placeholder: Validator) -> object:
+        kept.append(placeholder)
+        return union(None, [placeholder])
+
+    recursive(keep)
+    with pytest.raises(ValueError, match="placeholder"):
+        kept[0].open()
+    with pytest.raises(ValueError, match="placeholder"):
+        kept[0].close()
+
+
+def test_what_opening_a_placeholder_meant_is_written_another_way() -> None:
+    # Read after the builder, opening a reference opens the definition it names,
+    # so the record a body opens around the placeholder is built in two calls:
+    # the fixpoint, then its opened copy inside a record that stays closed.
+    closed = recursive(lambda t: union(None, {"k": t}))
+    outer_closed = union(None, {"k": closed.open()})
+    assert outer_closed.is_valid({"k": {"k": None, "z": 1}})
+    assert not outer_closed.is_valid({"k": None, "z": 1})
+    assert not closed.is_valid({"k": {"k": None, "z": 1}})
+    # A record opened where it is declared is the record `open` writes.
+    assert closed.open() == recursive(
+        lambda t: union(None, {"k": t, anything: anything})
+    )
+    assert Validator({"k": int}).open() == Validator({"k": int, anything: anything})
+
+
+#: Leaves of the terms drawn below, and the finished sets a placeholder is
+#: replaced by to read what a term asked inside a builder would answer about it.
+_TERM_ATOMS: tuple[object, ...] = (
+    int,
+    str,
+    None,
+    bool,
+    Literal[1],
+    Literal["a"],
+    Annotated[int, at.Ge(0)],
+    list[int],
+    {"k": int},
+)
+_VALUATIONS: tuple[Validator, ...] = (
+    Validator(nothing),
+    Validator(anything),
+    Validator(int),
+    Validator(str),
+    Validator(list[int]),
+    Validator(Literal[1]),
+    recursive(lambda x: union(int, [x])),
+    recursive(lambda x: union(None, {"k": x})),
+)
+_terms = st.recursive(
+    st.one_of(
+        st.just(("t",)),
+        st.integers(0, len(_TERM_ATOMS) - 1).map(lambda at_: ("atom", at_)),
+    ),
+    lambda inner: st.one_of(
+        st.tuples(st.just("union"), inner, inner),
+        st.tuples(st.just("meet"), inner, inner),
+        st.tuples(st.just("not"), inner),
+        st.tuples(st.just("list"), inner),
+        st.tuples(st.just("record"), inner),
+    ),
+    max_leaves=6,
+)
+
+
+def _built(term: tuple[Any, ...], placeholder: object) -> Validator:
+    """Build a drawn term with `placeholder` where it says `t`."""
+    head, *parts = term
+    if head == "t":
+        return Validator(placeholder)
+    if head == "atom":
+        return Validator(_TERM_ATOMS[parts[0]])
+    built = [_built(part, placeholder) for part in parts]
+    around: dict[str, Callable[[], Validator]] = {
+        "union": lambda: union(*built),
+        "meet": lambda: intersection(*built),
+        "not": lambda: complement(built[0]),
+        "list": lambda: Validator([built[0]]),
+        "record": lambda: Validator({"k": built[0]}),
+    }
+    return around[head]()
+
+
+@given(a=_terms, b=_terms)
+def test_a_question_inside_a_builder_is_answered_where_it_holds_of_every_set(
+    a: tuple[Any, ...], b: tuple[Any, ...]
+) -> None:
+    """A definite answer about the placeholder is the answer for each set it may become.
+
+    Asked inside a builder, a relation between two terms holding the placeholder
+    is decided only where the answer holds whatever set the placeholder comes to
+    denote; so wherever the same terms, built around a finished set instead, are
+    decided too, the two answers agree, and a meet proved empty inside is empty
+    around every set. A sample of sets checks what the rules guarantee by
+    construction: a decider reads the placeholder as a stop or cuts it by
+    polarity, and the constructors fold only identities that hold of every set.
+    """
+    inside: dict[str, object] = {}
+
+    def body(placeholder: Validator) -> object:
+        subject = _built(a, placeholder)
+        inside["relation"] = subject.relation_to(_built(b, placeholder))
+        inside["empty"] = subject.is_empty()
+        return union(int, [placeholder])
+
+    recursive(body)
+    for value in _VALUATIONS:
+        subject = _built(a, value)
+        relation = subject.relation_to(_built(b, value))
+        if "undecided" not in (inside["relation"], relation):
+            assert inside["relation"] == relation, (a, b, value)
+        if inside["empty"]:
+            assert subject.relation_to(nothing) != "not_subset", (a, value)
 
 
 # Leaves whose set is the one constant they name, so a relation of one to the

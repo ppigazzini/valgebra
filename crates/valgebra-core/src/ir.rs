@@ -1986,6 +1986,25 @@ impl Schema {
         false
     }
 
+    /// Whether a `recursive` placeholder is reachable from here: a marker for a
+    /// definition its builder has not returned, open or outlived alike.
+    ///
+    /// A rewrite that reaches a fixpoint's records through the reference to its
+    /// definition has nothing to reach behind one, so the binding asks this
+    /// before it opens or closes a schema. A `Ref` is not followed: the
+    /// definition it names is in the caller's table, which the caller asks too.
+    #[must_use]
+    pub fn holds_a_self_ref(&self) -> bool {
+        let mut pending = vec![self];
+        while let Some(node) = pending.pop() {
+            if matches!(node, Schema::SelfRef(_)) {
+                return true;
+            }
+            node.push_children(&mut pending);
+        }
+        false
+    }
+
     /// Push every schema this one holds onto `out`, one level down.
     ///
     /// The read-only companion of [`map_children`](Self::map_children): a walk

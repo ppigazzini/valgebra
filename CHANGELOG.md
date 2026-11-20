@@ -13,7 +13,21 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: opening or closing a recursive placeholder is refused
+
 -->
+
+### Fixed
+
+- **Opening or closing a `recursive` placeholder is refused.** `open()` and `close()` reach a
+  fixpoint's records through the reference to its definition, and the placeholder a builder is
+  handed names a definition not built until the builder returns. Both left the placeholder as it
+  was, so `recursive(lambda t: union(None, {"k": Validator(t).open()}))` was the fixpoint built
+  without `.open()`, refusing `{"k": {"k": None, "z": 1}}`, which its body written out around it
+  admits; a record holding the placeholder, opened or closed beside a record left as declared,
+  built another set the same way. Both now raise `ValueError` on a schema holding a placeholder,
+  in its root or in a definition. **A call that returned now raises:** open the validator
+  `recursive` returns, or write `anything: anything` into the record where it is declared.
 
 ## [0.0.30] - 2026-11-19
 

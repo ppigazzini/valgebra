@@ -167,29 +167,46 @@ assert not node.is_valid(Node(1, Node(2)))  # an instance is not a dict
 ## Inside the builder
 
 The placeholder stands for a definition the builder has not returned yet, so it
-denotes no set while the builder runs, and nothing asked of it there is an
-answer about the fixpoint. A relation to it is `"undecided"`, `is_empty()` of a
-schema holding it is `False`, and a walk that meets it stops with
+denotes no set while the builder runs. A question asked of it is answered only
+where the answer holds whatever set it comes to denote -- `nothing` is below it,
+and `int` is not below `intersection(str, t)` -- and is `"undecided"` where the
+answer turns on that set. A walk that meets it stops with
 `unresolved_recursion`, which refuses the value from the placeholder and from
 its complement alike. Ask the validator `recursive` returns:
 
 ```python
 from typing import Literal
 
-from valgebra import Validator, complement, recursive, union
+from valgebra import Validator, complement, intersection, recursive, union
 
 asked: list[object] = []
 
 
 def body(t: Validator[object]) -> object:
     asked.append(Validator(Literal[1]).relation_to(t))
+    asked.append(Validator(int).relation_to(intersection(str, t)))
     asked.append(complement(t).is_valid(1))
     return union(int, [t])
 
 
 tree = recursive(body)
-assert asked == ["undecided", False]
+assert asked == ["undecided", "not_subset", False]
 assert Validator(Literal[1]).relation_to(tree) == "subset"
+```
+
+`open()` and `close()` refuse a schema holding the placeholder, with
+`ValueError`. Both reach a fixpoint's records through the reference to its
+definition, and inside the builder that definition is not built. Open the
+validator `recursive` returns, or write the clause that opens a record where you
+declare it; the two are one schema:
+
+```python
+from valgebra import anything, recursive, union
+
+opened = recursive(lambda t: union(None, {"k": t})).open()
+declared = recursive(lambda t: union(None, {"k": t, anything: anything}))
+assert opened == declared
+assert opened.is_valid({"k": {"k": None, "z": 1}})
 ```
 
 A placeholder kept past its builder is refused when it is composed into a new

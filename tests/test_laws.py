@@ -467,6 +467,68 @@ def test_a_fixpoint_and_its_unfolding_are_one_set(
     assert fixpoint.is_equivalent(unfolded), "the unfolding is not decided one set"
 
 
+# THEORY: a-reference-denotes-its-definition
+@given(
+    body=st.sampled_from(_FIXPOINT_BODIES),
+    leaf=st.sampled_from(ATOM_SCHEMAS),
+    vals=value_lists,
+)
+def test_opening_a_fixpoint_is_opening_its_unfolding(
+    body: Callable[[object], Callable[[Validator], object]],
+    leaf: object,
+    vals: list[object],
+) -> None:
+    """`open` and `close` give one set for a fixpoint and for its unfolding.
+
+    Both read the term, so they could tell two spellings apart; a reference and
+    the definition it names are not two spellings but one schema, and the
+    rewrite reaches the definition through the reference. Read per declaration
+    instead, stopping at a reference as a class's own openness does, `open` of a
+    fixpoint would leave it as it is while `open` of its unfolding opens the
+    outer record.
+    """
+    build = body(leaf)
+    fixpoint = recursive(build)
+    unfolded = Validator(build(fixpoint))
+    for rewrite in (Validator.open, Validator.close):
+        assert equivalent(rewrite(fixpoint), rewrite(unfolded), vals)
+        assert rewrite(fixpoint).is_equivalent(rewrite(unfolded))
+
+
+#: Bodies that open or close a term holding the placeholder. Inside a builder
+#: the definition such a rewrite reaches is not built, so each is refused: read
+#: as a term declaring no record, the placeholder would come out of the rewrite
+#: as it went in, and the first three would build a fixpoint that is not their
+#: body written out around it. The last would not, and is refused all the same.
+_REWRITING_BODIES: list[Callable[[object], Callable[[Validator], object]]] = [
+    lambda leaf: lambda t: union(leaf, {"k": Validator(t).open()}),
+    lambda leaf: lambda t: union(leaf, {"k": Validator(t).close()}),
+    lambda leaf: lambda t: union(leaf, {"a": Validator({"k": t}).open(), "b": t}),
+    lambda leaf: lambda t: union(leaf, [t], Validator({"k": t}).open()),
+]
+
+
+# THEORY: a-reference-denotes-its-definition
+@given(
+    body=st.sampled_from(_REWRITING_BODIES),
+    leaf=st.sampled_from(ATOM_SCHEMAS),
+)
+def test_a_builder_rewriting_its_placeholder_as_a_term_is_refused(
+    body: Callable[[object], Callable[[Validator], object]],
+    leaf: object,
+) -> None:
+    """A builder may apply constructors to its placeholder, and not `open` or `close`.
+
+    A constructor folds only identities that hold whatever set the placeholder
+    comes to denote, so the fixpoint is the body written out around it. `open`
+    and `close` reach a fixpoint's records through the reference to its
+    definition, which a builder does not have yet, so neither has a reading
+    there that keeps that law, and both refuse.
+    """
+    with pytest.raises(ValueError, match="placeholder"):
+        recursive(body(leaf))
+
+
 # THEORY: lattice-theory
 @given(a=schemas, vals=value_lists)
 def test_the_complement_laws_hold_of_every_drawn_schema(

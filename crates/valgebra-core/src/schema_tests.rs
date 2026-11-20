@@ -1347,6 +1347,21 @@ fn resolve_self_replaces_only_the_matching_token() {
     ));
 }
 
+#[test]
+fn a_self_reference_is_found_at_any_depth_and_a_finished_reference_is_not() {
+    let marker = Schema::SelfRef(7);
+    let nested = Schema::Complement(Arc::new(Schema::list(SeqShape::homogeneous(
+        Schema::Union(vec![Schema::Int, marker.clone()].into()),
+    ))));
+    assert!(marker.holds_a_self_ref());
+    assert!(nested.holds_a_self_ref());
+    // A reference names a finished definition, which the caller's table holds
+    // and the caller asks; the walk does not follow it.
+    let finished = Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0))));
+    assert!(!finished.holds_a_self_ref());
+    assert!(!Schema::Int.holds_a_self_ref());
+}
+
 // THEORY: guarded-recursion
 #[test]
 fn contractivity_requires_a_structural_guard() {

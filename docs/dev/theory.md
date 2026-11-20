@@ -465,14 +465,20 @@ unfolding each below the other [AC93, §3.2], and it is a choice: the
 isorecursive one makes the two distinct types with a coercion between them, and
 every relation is then about which side of that coercion a value sits on.
 Pierce, *TAPL* ch. 20--21 is where the two are set beside each other; the
-definitions table is the same shape pydantic-core's `definition-ref` has.
+definitions table is the same shape pydantic-core's `definition-ref` has. So a
+builder may apply to its placeholder only what commutes with putting the
+fixpoint in its place. The constructors do, folding only identities that hold
+whatever set the placeholder comes to denote. `open` and `close` reach a
+fixpoint's records through the reference to its definition, which inside the
+builder is not built, so they refuse a schema holding the placeholder, and give
+one set for a fixpoint and for its unfolding.
 **[LOAD-BEARING: a-reference-denotes-its-definition]**
 
 SOURCE: §4 "an **equirecursive** reading"
 
 IMPLEMENTED-BY: ir/transform.rs::Schema::unfolded, valgebra-py/src/check/walk.rs::check_ref
 
-HELD-BY: test_a_reference_denotes_the_definition_it_names, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, a_reference_and_its_definition_are_one_set_over_drawn_definitions, test_a_fixpoint_and_its_unfolding_are_one_set
+HELD-BY: test_a_reference_denotes_the_definition_it_names, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, a_reference_and_its_definition_are_one_set_over_drawn_definitions, test_a_fixpoint_and_its_unfolding_are_one_set, test_opening_a_fixpoint_is_opening_its_unfolding, test_a_builder_rewriting_its_placeholder_as_a_term_is_refused
 
 **A descent past the bound is an error, never a crash.** The walk unfolds to
 `MAX_RECURSION_DEPTH` and reports `recursion_limit` past it, which converts any

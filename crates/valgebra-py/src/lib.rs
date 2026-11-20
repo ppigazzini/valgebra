@@ -45,8 +45,11 @@ use crate::build::{Pool, build_instances, build_root, combine};
 /// defined and returns its body. The placeholder's self-reference is resolved
 /// to a back edge, and a non-contractive body — one whose recursive reference
 /// is not under a structural constructor — is rejected. Until the builder
-/// returns, the placeholder denotes no set: a relation to it is
-/// `"undecided"`, and a walk that meets it stops with `unresolved_recursion`.
+/// returns, the placeholder denotes no set yet: a question asked of it is
+/// answered only where the answer holds whatever set it comes to denote, and is
+/// `"undecided"` where the answer turns on that set; a walk that meets it stops
+/// with `unresolved_recursion`; and `open()` and `close()` refuse a schema
+/// holding it, since the definition they would rewrite is not built.
 ///
 /// Args:
 ///     builder: Called with a placeholder validator, and returns the body of
