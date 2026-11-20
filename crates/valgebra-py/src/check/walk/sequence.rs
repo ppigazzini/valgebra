@@ -14,7 +14,7 @@ use pyo3::prelude::*;
 #[cfg(not(any(Py_3_12, PyPy)))]
 use pyo3::sync::PyOnceLock;
 use pyo3::sync::critical_section::with_critical_section;
-use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
+use pyo3::types::{PyFloat, PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
 use valgebra_core::{
     Attribute, ClassIx, Constraint, Field, MapClause, PathSegment, Schema, SeqKind, SeqShape,
     Violation,
@@ -24,9 +24,10 @@ use valgebra_core::{
 use super::reads_its_length;
 use super::record::{RecordReading, check_attr_record, check_keyed_map};
 use super::scalar::{
-    Scalar, admitted_quietly, check_refine, constraints_hold, exact_of, exact_text_length,
-    homogeneous_scalar_union, json_leaf_admits, leaf_admits, leaf_reads_here, length_range,
-    machine_range, machine_word, scalar_union_admits, tree_json_leaf_admits, tree_leaf_admits,
+    FloatRange, Scalar, admitted_quietly, check_refine, constraints_hold, exact_of,
+    exact_text_length, float_range, homogeneous_scalar_union, json_leaf_admits, leaf_admits,
+    leaf_reads_here, length_range, machine_range, machine_word, scalar_union_admits,
+    tree_json_leaf_admits, tree_leaf_admits,
 };
 use super::tree::tree_list_read;
 use super::{
@@ -1251,7 +1252,10 @@ pub(super) fn refined_scalar_list(
             Some(range) => machine_range_list(list, range, base, constraints, value, frame),
             None => refined_list_loop(list, |v| v.is_int(), base, constraints, value, frame),
         },
-        Schema::Float => refined_list_loop(list, |v| v.is_float(), base, constraints, value, frame),
+        Schema::Float => match float_range(constraints, frame.ctx) {
+            Some(range) => float_range_list(list, range, base, constraints, value, frame),
+            None => refined_list_loop(list, |v| v.is_float(), base, constraints, value, frame),
+        },
         Schema::Str => refined_str_list(list, base, constraints, value, frame),
         _ => return None,
     })
@@ -1303,6 +1307,7 @@ fn refined_list_loop(
 /// so the readers of the other kinds keep their layout: inlined beside them,
 /// the range took the floats' loop to 2.4% more instructions on the build
 /// without a profile (`--binding-refined-float`).
+#[inline(never)]
 fn refined_str_list(
     list: &Bound<'_, PyList>,
     base: &Schema,
@@ -1387,6 +1392,41 @@ fn machine_range_list(
         ok &= match word {
             Some(word) => least <= word && word <= most,
             None => check_refine(base, constraints, &Value::Py(item), frame),
+        };
+        if ok {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    }
+}
+
+/// [`refined_list_loop`] over floats under bounds the index holds as floats.
+///
+/// An exact `float` is in the set exactly when it lies in the range
+/// ([`float_range`]), read off the object where the constraints' loop
+/// dispatched on each bound and read its operand from the index again at every
+/// element. Any other element is [`check_refine`]'s. A float runs no Python and
+/// records no signal, so the range answers with none recorded.
+#[inline(never)]
+fn float_range_list(
+    list: &Bound<'_, PyList>,
+    range: FloatRange,
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        ok &= match item.cast_exact::<PyFloat>() {
+            Ok(float) => range.holds(float.value()),
+            Err(_) => check_refine(base, constraints, &Value::Py(item), frame),
         };
         if ok {
             ControlFlow::Continue(())

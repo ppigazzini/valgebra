@@ -750,6 +750,11 @@ most of what they cost, and each asks the test directly:
   code of its own, so each is the rich comparison's, and a slot the index does not
   hold reads as one the comparison answers, so no verdict depends on the table.
   `an_order_bound_over_a_float_reads_as_the_comparison_reads_it` holds the two.
+  A float those two floats admit is admitted where the constraint is read
+  (`check_constraint`), with no call into `order_bound`, which a refusal, for
+  its report, and every other value still take: a record of three refined
+  fields reads 0.7% to 1% fewer instructions on the profiled wheels than
+  0.0.30's.
   Under the standard library's `Decimal`, which the index marks, the float is
   compared as the `Decimal` it equals (`compared`): Python's comparison of
   the two reads the thread's `decimal` context, whose `FloatOperation` trap
@@ -896,7 +901,17 @@ with no list to hold the operands across, the range would be a read per operand
 and a raise per value past the word, which `Comparing an order bound` under
 [Measured and not taken](../guides/performance.md#measured-and-not-taken) counts.
 `a_list_of_bounded_integers_reads_as_the_comparisons_read_it` holds the range to
-the comparisons at every edge of the word. Where every constraint of a `str` is a
+the comparisons at every edge of the word. Where every constraint of a `float` is
+an order bound whose operand the index holds as a float, the bounds are one
+interval read once for the list, each end open or closed (`float_range`), and an
+exact `float` is its two comparisons (`float_range_list`), where it went through
+the constraints' loop and read its operand from the index at every element: a
+thousand floats under one bound read 43% to 49% fewer instructions on the
+profiled wheels than 0.0.30's. A float is a field read off the object, so the
+read cannot raise, as an integer past the word's does.
+`a_list_of_floats_under_bounds_reads_as_each_element_reads` holds the interval
+to each element's own reading over every pair of bounds, two at one operand
+among them. Where every constraint of a `str` is a
 length bound, the bounds are one inclusive range of lengths read once for the
 list (`length_range`), and an exact `str`'s length, its count of code points,
 is compared with it (`length_range_list`): a lone surrogate and a character

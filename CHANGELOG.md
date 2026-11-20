@@ -65,6 +65,18 @@ answer of its own, or a repair to a change not yet released.
   supertype. Of the 28 undecided questions the suite labels refutations, 17 remain, each against a
   supertype the companion spells with a predicate, whose code the reading does not run.
 
+### Changed
+
+- **A list of floats under order bounds is read as one interval.** Where every constraint of a
+  `float` element is an order bound whose operand a float holds exactly, the bounds are read once
+  for the list, each end open or closed, and an exact `float` is its two comparisons, where it went
+  through the constraints' loop and read its operand at every element: a thousand floats under one
+  bound read 43% to 49% fewer instructions on the profiled wheels of CPython 3.11 to 3.15 than
+  0.0.30's. A single float under such a bound is admitted where the constraint is read, with no
+  call into the bound's own reading, which a refusal and every other value still take: a record of
+  three refined fields reads 0.7% to 1% fewer. Every answer and every report is the one the
+  comparisons give.
+
 ### Fixed
 
 - **Opening or closing a `recursive` placeholder is refused.** `open()` and `close()` reach a

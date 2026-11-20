@@ -750,6 +750,9 @@ program that builds validators per request, and to no validation call.
   without a profile, and a record of two such fields beside a refined `int` 18%. Any
   other value pays a load and a comparison, and a test holds the reading to the
   comparison over every bound, a value of every kind and an operand of every kind.
+  A float the two floats admit is admitted where the constraint is read, with no
+  call into the bound's own reading, which a refusal and every other value still
+  take: a record of three refined fields reads 0.7% to 1% fewer instructions.
 - **An error the walk answers with is dropped out of line.** Dropping one asks
   whether the thread is attached to the interpreter, a thread-local the
   extension reaches through a call into the dynamic linker, and inlined into a
@@ -933,7 +936,11 @@ program that builds validators per request, and to no validation call.
   (`machine_range_list`): a thousand integers under one bound read 74% fewer
   instructions there, and 77% on the build without a profile (`--binding-refined`).
   A value past the word is read by the comparisons, once its read has raised, and
-  that ends the range for the list. Length bounds on a `str` are one range of code
+  that ends the range for the list. Order bounds on a `float` whose operands a float
+  holds are one interval read once for the list, each end open or closed, and an
+  exact `float` is compared with it where it lies (`float_range_list`): a thousand
+  floats under one bound read 43% to 49% fewer instructions on the profiled wheels
+  of CPython 3.11 to 3.15 than 0.0.30's. Length bounds on a `str` are one range of code
   points read once for the list, and an exact `str`'s length is compared with it
   (`length_range_list`): a thousand strings under a minimum and a maximum length
   read 77% fewer instructions on the profiled CPython 3.15 wheel. Any other element

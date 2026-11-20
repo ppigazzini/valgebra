@@ -16,7 +16,7 @@ use super::record::{
     RecordReading, SMALL_OBJECT, Undeclared, keyed_map_matches_json, resolves_through_the_plan,
     scan_dict,
 };
-use super::scalar::{floats_compared, machine_range};
+use super::scalar::{float_range, floats_compared, machine_range};
 use super::sequence::{leaf_array_read, leaf_list_read, refined_scalar_list, scan_list};
 use super::tree::TO_AN_ELEMENT;
 use super::*;
@@ -7104,7 +7104,8 @@ fn a_list_of_refined_scalars_is_read_by_its_kind() {
 /// An order bound over a float answers what the rich comparison answers, for
 /// every bound, a value of every kind and an operand of every kind, those the
 /// index holds and those it leaves to the comparison, at the edges where a float
-/// stops holding every integer.
+/// stops holding every integer and an integer stops fitting a word, and for an
+/// `int` that compares by its own code.
 #[test]
 fn an_order_bound_over_a_float_reads_as_the_comparison_reads_it() {
     Python::attach(|py| {
@@ -7121,8 +7122,13 @@ fn an_order_bound_over_a_float_reads_as_the_comparison_reads_it() {
               OPERANDS = [0.0, -0.0, 1.5, -1.5, NAN, INF, -INF, 5e-324, 1.7976931348623157e308,\n\
               \x20           float(TOP), 0, 1, -1, TOP, -TOP, TOP + 1, -TOP - 1, TOP + 2,\n\
               \x20           2 ** 200, True, False, Fraction(3, 2), Float(1.5)]\n\
+              class Int(int):\n\
+              \x20   def __ge__(self, other):\n\
+              \x20       return True\n\
+              \x20   __gt__ = __le__ = __lt__ = __ge__\n\
               VALUES = [0.0, -0.0, 1.0, 1.5, -1.5, NAN, INF, -INF, 5e-324, 1.7976931348623157e308,\n\
-              \x20         float(TOP), float(TOP + 2), -float(TOP), 0, 1, TOP, TOP + 1, True,\n\
+              \x20         float(TOP), float(TOP + 2), -float(TOP), 0, 1, -1, 2, TOP, TOP + 1,\n\
+              \x20         -TOP, -TOP - 1, 2 ** 63 - 1, -2 ** 63, 2 ** 70, True, Int(1),\n\
               \x20         Float(1.5), Fraction(3, 2), 'x', None]\n",
             c"float_bounds.py",
             c"float_bounds",
@@ -11669,5 +11675,133 @@ fn a_level_refused_at_the_bound_names_the_bound() {
             labels,
             [("recursion_limit", "a value at most 384 levels deep")]
         );
+    });
+}
+
+/// A list of floats under order bounds reads each element as the element read
+/// alone does: the range the bounds make, open or closed at each end, answers
+/// what each bound's comparison answers, over every pair of bounds -- two at one
+/// operand among them, where one end is open and the other closed -- and every
+/// value of the corpus, alone in a list and all together.
+#[test]
+fn a_list_of_floats_under_bounds_reads_as_each_element_reads() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"TOP = 2 ** 53\n\
+              NAN = float('nan')\n\
+              INF = float('inf')\n\
+              OPERANDS = [0.0, -0.0, 1.5, -1.5, INF, -INF, 0, 2, TOP, TOP + 1]\n\
+              VALUES = [0.0, -0.0, 1.0, 1.5, 2.0, -1.5, NAN, INF, -INF, 5e-324,\n\
+              \x20         float(TOP), 1, True, 'x']\n",
+            c"float_ranges.py",
+            c"float_ranges",
+        )
+        .expect("the corpus compiles");
+        let list_of = |name: &str| -> Vec<Bound<'_, PyAny>> {
+            module
+                .getattr(name)
+                .expect("the corpus")
+                .try_iter()
+                .expect("a list")
+                .map(|item| item.expect("an element"))
+                .collect()
+        };
+        let operands = list_of("OPERANDS");
+        let values = list_of("VALUES");
+        let pool: Vec<Py<PyAny>> = operands.iter().map(|o| o.clone().unbind()).collect();
+        let bounds: Vec<Constraint> = (0..operands.len())
+            .flat_map(|at| {
+                let at = OperandIx::new(at);
+                [
+                    Constraint::Ge(at),
+                    Constraint::Gt(at),
+                    Constraint::Le(at),
+                    Constraint::Lt(at),
+                ]
+            })
+            .collect();
+        for first in &bounds {
+            for second in &bounds {
+                let element = Schema::Refine {
+                    base: Arc::new(Schema::Float),
+                    constraints: vec![first.clone(), second.clone()].into(),
+                };
+                let listed = Schema::list(SeqShape::homogeneous(element.clone()));
+                let mut every = true;
+                for value in &values {
+                    let alone = decide(py, &element, value, &pool, &[]);
+                    every &= alone;
+                    let one = PyList::new(py, [value]).expect("a list").into_any();
+                    assert_eq!(
+                        decide(py, &listed, &one, &pool, &[]),
+                        alone,
+                        "[{value:?}] under {first:?} and {second:?}"
+                    );
+                }
+                let all = PyList::new(py, &values).expect("a list").into_any();
+                assert_eq!(
+                    decide(py, &listed, &all, &pool, &[]),
+                    every,
+                    "the corpus under {first:?} and {second:?}"
+                );
+            }
+        }
+    });
+}
+
+/// Order bounds whose operands the index holds as floats are one interval of
+/// floats, each end open or closed, read once for a list; a bound it holds no
+/// float for, and any other constraint, decline the interval to the comparisons.
+#[test]
+fn order_bounds_the_index_holds_as_floats_are_one_interval() {
+    Python::attach(|py| {
+        let pool = vec![
+            PyFloat::new(py, 1.5).into_any().unbind(),
+            evaluate(py, "2").unbind(),
+            evaluate(py, "__import__('decimal').Decimal('0.5')").unbind(),
+        ];
+        let at = OperandIx::new;
+        let schema = Schema::Refine {
+            base: Arc::new(Schema::Float),
+            constraints: vec![
+                Constraint::Ge(at(0)),
+                Constraint::Lt(at(1)),
+                Constraint::Gt(at(2)),
+            ]
+            .into(),
+        };
+        let index = build_index(py, &schema, &[], &pool);
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &pool,
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let holds = |constraints: &[Constraint], number: f64| {
+            float_range(constraints, ctx).map(|range| range.holds(number))
+        };
+        assert_eq!(holds(&[Constraint::Ge(at(0))], 1.5), Some(true));
+        assert_eq!(holds(&[Constraint::Ge(at(0))], 1.25), Some(false));
+        assert_eq!(holds(&[Constraint::Gt(at(0))], 1.5), Some(false));
+        assert_eq!(holds(&[Constraint::Gt(at(0))], 1.75), Some(true));
+        assert_eq!(holds(&[Constraint::Le(at(1))], 2.0), Some(true));
+        assert_eq!(holds(&[Constraint::Le(at(1))], 2.5), Some(false));
+        assert_eq!(holds(&[Constraint::Lt(at(1))], 2.0), Some(false));
+        assert_eq!(holds(&[Constraint::Lt(at(1))], 1.75), Some(true));
+        let between = [Constraint::Ge(at(0)), Constraint::Lt(at(1))];
+        assert_eq!(holds(&between, 1.5), Some(true));
+        assert_eq!(holds(&between, 2.0), Some(false));
+        assert_eq!(holds(&between, f64::NAN), Some(false));
+        let open_and_closed = [Constraint::Ge(at(0)), Constraint::Gt(at(0))];
+        assert_eq!(holds(&open_and_closed, 1.5), Some(false));
+        assert_eq!(
+            holds(&[Constraint::Gt(at(2))], 1.0),
+            None,
+            "a Decimal operand"
+        );
+        assert_eq!(holds(&[Constraint::MinLen(1)], 1.0), None, "a length bound");
     });
 }

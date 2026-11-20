@@ -11,6 +11,7 @@
 //! see the note there for what routing the arms through here costs and what
 //! test holds the two statements together.
 
+use std::cmp::Ordering;
 use std::ops::ControlFlow;
 
 use jiter::JsonValue;
@@ -621,6 +622,92 @@ pub(super) fn machine_range(
     Some((least, most))
 }
 
+/// The floats every one of `constraints` admits, where each is an order bound
+/// whose operand the index holds as a float ([`float_operand`]), and `None`
+/// elsewhere: a bound the rich comparison must read.
+///
+/// An exact `float` under such a bound is the two floats compared
+/// ([`floats_compared`]), so the bounds together are an interval of floats,
+/// each end open or closed. Read once for a list ([`float_range_list`]), as
+/// [`machine_range`] is for integers: an element is then its two comparisons,
+/// with no constraint's dispatch and no read of the index around them.
+///
+/// [`float_operand`]: crate::check::index::ValidatorIndex::float_operand
+/// [`float_range_list`]: super::sequence
+#[inline(never)]
+pub(super) fn float_range(constraints: &[Constraint], ctx: Ctx<'_>) -> Option<FloatRange> {
+    let float = |index: &OperandIx| {
+        ctx.index
+            .float_operand(index.get())
+            .filter(|operand| !operand.is_nan())
+    };
+    let mut range = FloatRange::EVERY;
+    for constraint in constraints {
+        match constraint {
+            Constraint::Ge(i) => range.raise_floor(float(i)?, false),
+            Constraint::Gt(i) => range.raise_floor(float(i)?, true),
+            Constraint::Le(i) => range.lower_ceiling(float(i)?, false),
+            Constraint::Lt(i) => range.lower_ceiling(float(i)?, true),
+            _ => return None,
+        }
+    }
+    Some(range)
+}
+
+/// An interval of floats, each end open or closed ([`float_range`]).
+#[derive(Clone, Copy)]
+pub(super) struct FloatRange {
+    floor: f64,
+    floor_open: bool,
+    ceiling: f64,
+    ceiling_open: bool,
+}
+
+impl FloatRange {
+    /// Every float but `nan`, which no order bound admits.
+    const EVERY: Self = Self {
+        floor: f64::NEG_INFINITY,
+        floor_open: false,
+        ceiling: f64::INFINITY,
+        ceiling_open: false,
+    };
+
+    /// The range narrowed by a lower bound at `floor`, open where it is `>`.
+    fn raise_floor(&mut self, floor: f64, open: bool) {
+        match floor.partial_cmp(&self.floor) {
+            Some(Ordering::Greater) => (self.floor, self.floor_open) = (floor, open),
+            Some(Ordering::Equal) => self.floor_open |= open,
+            _ => {}
+        }
+    }
+
+    /// The range narrowed by an upper bound at `ceiling`, open where it is `<`.
+    fn lower_ceiling(&mut self, ceiling: f64, open: bool) {
+        match ceiling.partial_cmp(&self.ceiling) {
+            Some(Ordering::Less) => (self.ceiling, self.ceiling_open) = (ceiling, open),
+            Some(Ordering::Equal) => self.ceiling_open |= open,
+            _ => {}
+        }
+    }
+
+    /// Whether `number` lies in the range: each bound's comparison, so `nan`
+    /// lies in none.
+    #[inline]
+    pub(super) fn holds(self, number: f64) -> bool {
+        let above = if self.floor_open {
+            number > self.floor
+        } else {
+            number >= self.floor
+        };
+        let below = if self.ceiling_open {
+            number < self.ceiling
+        } else {
+            number <= self.ceiling
+        };
+        above && below
+    }
+}
+
 /// The lengths every one of `constraints` admits, as an inclusive range, where
 /// each is a length bound, and `None` elsewhere: a bound the range does not say.
 ///
@@ -1058,35 +1145,35 @@ fn check_constraint(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let py = value.py();
-    match constraint {
-        Constraint::Ge(i) => order_bound(value, *i, CompareOp::Ge, frame),
-        Constraint::Gt(i) => order_bound(value, *i, CompareOp::Gt, frame),
-        Constraint::Le(i) => order_bound(value, *i, CompareOp::Le, frame),
-        Constraint::Lt(i) => order_bound(value, *i, CompareOp::Lt, frame),
+    let (index, op) = match constraint {
+        Constraint::Ge(i) => (*i, CompareOp::Ge),
+        Constraint::Gt(i) => (*i, CompareOp::Gt),
+        Constraint::Le(i) => (*i, CompareOp::Le),
+        Constraint::Lt(i) => (*i, CompareOp::Lt),
         Constraint::MinLen(n) => {
             let len = stored_len(value, &frame.ctx);
             let ok = decided(len.map(|len| len >= *n), py, &frame.ctx);
-            explained(ok, TOO_SHORT, || Expected::Length(">=", *n), value, frame)
+            return explained(ok, TOO_SHORT, || Expected::Length(">=", *n), value, frame);
         }
         Constraint::MaxLen(n) => {
             let len = stored_len(value, &frame.ctx);
             let ok = decided(len.map(|len| len <= *n), py, &frame.ctx);
-            explained(ok, TOO_LONG, || Expected::Length("<=", *n), value, frame)
+            return explained(ok, TOO_LONG, || Expected::Length("<=", *n), value, frame);
         }
         Constraint::MultipleOf(i) => {
             let Some(operand) = operand_at(frame.ctx, *i, py) else {
                 return false;
             };
             let ok = decided(is_multiple_of(value, operand), py, &frame.ctx);
-            explained(
+            return explained(
                 ok,
                 MULTIPLE_OF,
                 || Expected::Multiple(operand),
                 value,
                 frame,
-            )
+            );
         }
-        Constraint::Predicate(i) => check_predicate(*i, value, frame),
+        Constraint::Predicate(i) => return check_predicate(*i, value, frame),
         Constraint::Regex(pattern) => {
             // Native fast path: the precompiled, anchored pattern matches the
             // borrowed string UTF-8 in Rust. A non-string never matches (the base
@@ -1110,15 +1197,22 @@ fn check_constraint(
                     Some(compiled) => compiled.is_match(text),
                     None => matches_unindexed(pattern, text),
                 });
-            explained(
+            return explained(
                 matched,
                 STRING_PATTERN_MISMATCH,
                 || Expected::Pattern(pattern),
                 value,
                 frame,
-            )
+            );
         }
+    };
+    // A float under a bound the index holds as a float, which admits it, pays
+    // no call: the two floats are compared here, and `order_bound` is asked
+    // only where they decline or refuse, for the report.
+    if floats_compared(value, index, op, &frame.ctx) == Some(true) {
+        return true;
     }
+    order_bound(value, index, op, frame)
 }
 
 /// What one constraint asks, as its own failure names it, for a label naming the
