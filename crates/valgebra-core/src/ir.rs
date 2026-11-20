@@ -40,6 +40,8 @@ use crate::oracle::{
 mod intern;
 mod transform;
 
+#[cfg(test)]
+pub(crate) use transform::BODIES_UNFOLDED;
 pub(crate) use transform::Polarity;
 pub use transform::pruned;
 

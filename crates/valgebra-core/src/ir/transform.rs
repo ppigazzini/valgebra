@@ -25,6 +25,15 @@ use super::{
     with_field_buffer, with_member_buffer,
 };
 
+#[cfg(test)]
+thread_local! {
+    /// The bodies [`Schema::unfolded`] has built on this thread. The interner
+    /// hands two equal constructions one handle, so the tree an unfolding
+    /// returns looks alike with its memo or without; what the memo saves is the
+    /// constructions, and this count is how a test reads them.
+    pub(crate) static BODIES_UNFOLDED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Move a constraint list's indices, rebuilding it only where one moves -- and
 /// rebuilding it in the order [`Schema::refine`] gives it.
 ///
@@ -344,6 +353,8 @@ impl Schema {
                         return done.clone();
                     }
                     let done = body.unfolded_sharing(definitions, unfolds - 1, polarity, bodies);
+                    #[cfg(test)]
+                    BODIES_UNFOLDED.with(|built| built.set(built.get() + 1));
                     bodies.borrow_mut().insert(key, done.clone());
                     done
                 }

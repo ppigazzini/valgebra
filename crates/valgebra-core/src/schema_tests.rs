@@ -1847,6 +1847,27 @@ fn unfolding_reads_the_body_then_stands_in_the_bound_the_position_makes_sound() 
     assert_eq!(Schema::Int.unfolded(&defs, 1, Polarity::Widen), Schema::Int);
 }
 
+/// An unfolding builds one body for each definition, unfoldings left and
+/// polarity, however many references name it: forty references to one
+/// definition, unfolded twice, build the body once at each of the two depths
+/// and once more under the complement, where the polarity flips. A copy per
+/// reference builds forty-two. The tree is the same either way, since the
+/// interner hands equal constructions one handle, so the count is what tells
+/// the two apart.
+#[test]
+fn an_unfolding_builds_one_body_a_definition_depth_and_polarity() {
+    let reference = || Schema::Ref(DefIx::new(0));
+    let mut elements: Vec<Schema> = (0..40).map(|_| reference()).collect();
+    elements.push(Schema::Complement(Arc::new(reference())));
+    let defs = vec![Schema::Union(
+        vec![Schema::Int, Schema::tuple(SeqShape::fixed(elements))].into(),
+    )];
+    crate::ir::BODIES_UNFOLDED.with(|built| built.set(0));
+    let unfolded = reference().unfolded(&defs, 2, Polarity::Widen);
+    let built = crate::ir::BODIES_UNFOLDED.with(std::cell::Cell::get);
+    assert_eq!(built, 3, "{built} bodies built for {unfolded:?}");
+}
+
 /// A reference is found under every variant that holds a child, so the caller
 /// that skips the rebuild for reference-free schemas skips none that need it.
 #[test]
