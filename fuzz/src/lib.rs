@@ -16,12 +16,13 @@
 //! law suite. Duplicating it here would only cover the sub-fragment the fuzzer's
 //! wide generator is built to exceed, so the split is intentional, not a gap.
 
+use std::hint::black_box;
 use std::sync::Arc;
 
 use arbitrary::{Arbitrary, Result, Unstructured};
 use valgebra_core::{
-    Attribute, ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, NoLeafRelations, OperandIx,
-    PredIx, Relation, Schema, SeqKind, SeqShape,
+    Attribute, ClassIx, ConstIx, Constraint, DefIx, Field, Guarded, MapClause, NoLeafRelations,
+    OperandIx, PredIx, Relation, Schema, SeqKind, SeqShape,
 };
 
 mod world;
@@ -284,6 +285,16 @@ impl<'a> Arbitrary<'a> for WorldPair {
 /// the rest of the decision gives without them.
 pub fn check_relations_in(a: &Schema, b: &Schema, defs: &[Schema], world: &World) {
     let seeing = |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, world, defs);
+    if !every_definition_is_contractive(defs) {
+        // Asked and kept from the optimizer, so a panic is still found.
+        for (sub, sup) in [(a, b), (b, a), (a, a)] {
+            black_box(seeing(sub, sup));
+            black_box(sub.subtype_relation_under(sup, &NoLeafRelations, defs));
+            black_box(sub.is_equivalent_under(sup, world, defs));
+        }
+        black_box(a.is_empty_with(world, defs));
+        return;
+    }
     let below = |sub: &Schema, sup: &Schema| seeing(sub, sup).holds();
     assert!(below(a, a), "subtyping not reflexive on {a:?} in {world:?}");
     assert!(
@@ -301,7 +312,9 @@ pub fn check_relations_in(a: &Schema, b: &Schema, defs: &[Schema], world: &World
     if a.is_empty_with(world, defs) {
         assert!(below(a, b), "empty {a:?} not below {b:?} in {world:?}");
     }
-    if Schema::Complement(Arc::new(b.clone())).is_empty_with(world, defs) {
+    if !names_no_definition(a, defs)
+        && Schema::Complement(Arc::new(b.clone())).is_empty_with(world, defs)
+    {
         assert!(below(a, b), "{a:?} not below universal {b:?} in {world:?}");
     }
     // Each relation is asked once and read twice: for the order laws here,
@@ -359,9 +372,36 @@ fn names_no_definition(schema: &Schema, defs: &[Schema]) -> bool {
     }
 }
 
+/// Whether every definition in the table is contractive: each reference to it,
+/// in its own body or in another's, sits under a structural constructor.
+///
+/// A table that is not -- `d0 = d0`, or two definitions naming each other with
+/// no constructor between -- has no fixpoint or more than one, and the types a
+/// theory of recursion reasons about are contractive by definition
+/// [LN26, Def. 2.1]: an equation system that is not is rejected rather than read
+/// [LN26, §4.7]. Every producer of a table rejects one too (`recursive` and a
+/// PEP 695 alias ask `Schema::occurs_unguarded_under`), so no law of sets is
+/// about it: the emptiness and the inclusion the rules give it can disagree
+/// without either being wrong. The generator draws such tables all the same,
+/// and the checks ask the relations over them for panic-freedom alone.
+fn every_definition_is_contractive(defs: &[Schema]) -> bool {
+    defs.iter()
+        .enumerate()
+        .all(|(at, body)| !body.occurs_unguarded_under(DefIx::new(at), Guarded::No, defs))
+}
+
 /// Sound relational invariants any subtype/equivalence/emptiness procedure must
 /// satisfy. A violation is a defect, not conservatism.
 pub fn check_relations(a: &Schema, b: &Schema, defs: &[Schema]) {
+    if !every_definition_is_contractive(defs) {
+        // Asked and kept from the optimizer, so a panic is still found.
+        for (sub, sup) in [(a, b), (b, a), (a, a)] {
+            black_box(sub.is_subtype_of_under(sup, &NoLeafRelations, defs));
+            black_box(sub.is_equivalent_under(sup, &NoLeafRelations, defs));
+        }
+        black_box(a.is_empty_under(defs));
+        return;
+    }
     // Reflexivity of the order and the equivalence it induces.
     assert!(
         a.is_subtype_of_under(a, &NoLeafRelations, defs),
@@ -465,6 +505,32 @@ mod tests {
             }
             _ => {}
         }
+    }
+
+    /// A table with no fixpoint is asked the relations and no law. Over
+    /// `d0 = d0` the rules read `~d0` as empty and as the universe at once, and
+    /// not below `int`: the emptiness law would report that as a defect where
+    /// no set is there to be wrong about.
+    #[test]
+    fn a_table_with_no_fixpoint_is_asked_no_law() {
+        let first = || Schema::Ref(DefIx::new(0));
+        let not_first = || Schema::Complement(Arc::new(first()));
+        let itself = vec![first()];
+        let each_other = vec![Schema::Ref(DefIx::new(1)), first()];
+        let world = World::arbitrary(&mut Unstructured::new(&[])).expect("the zero world");
+        for defs in [&itself, &each_other] {
+            assert!(!every_definition_is_contractive(defs));
+            for (a, b) in [
+                (not_first(), Schema::Int),
+                (Schema::Int, not_first()),
+                (first(), first()),
+            ] {
+                check_relations(&a, &b, defs);
+                check_relations_in(&a, &b, defs, &world);
+            }
+        }
+        let guarded = vec![Schema::list(SeqShape::homogeneous(first()))];
+        assert!(every_definition_is_contractive(&guarded));
     }
 
     #[test]

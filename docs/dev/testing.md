@@ -687,6 +687,19 @@ preservation is oracle-tested over the decidable fragment in the core law suite.
 Duplicating it in the fuzzer would only cover the sub-fragment its wide generator
 is built to exceed.
 
+**A table with no fixpoint is asked for panic-freedom alone.** The laws are
+about the sets a schema denotes, and a definitions table denotes them only when
+every definition is contractive, the condition the types of a theory of
+recursion meet by definition [LN26, Def. 2.1]. The generator also draws
+`d0 = d0`, or two definitions naming each other with no constructor between,
+and every producer of a table refuses those (`recursive` and a PEP 695 alias
+ask `Schema::occurs_unguarded_under`). Over `d0 = d0` the rules read `~d0` as
+empty and as the universe at once, and not below `int`, which is no defect
+where no set is there to be wrong about. So both checks in `fuzz/src/lib.rs`
+ask the relations over such a table, kept from the optimizer, and assert no law
+of it (`every_definition_is_contractive`;
+`a_table_with_no_fixpoint_is_asked_no_law` holds it).
+
 **Completeness is held by what is known, not by what is drawn.** A pair drawn at
 random has no known answer, so its `undecided` cannot be told from a gap. Three
 things are known: a relation true by construction, which the ledger asserts
