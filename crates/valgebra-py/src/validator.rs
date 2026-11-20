@@ -1154,8 +1154,9 @@ mod tests;
 /// the oracle reads, in three answers: the deciders', and where both decline, the
 /// membership of each value of a subject of finitely many
 /// ([`finite`](crate::finite)), and failing that, a value guessed from the
-/// subject's spelling that it admits and the supertype refuses
-/// ([`witness`](crate::witness)), which refutes and proves nothing.
+/// subject's spelling or aimed outside the supertype's that the subject admits
+/// and the supertype refuses ([`witness`](crate::witness)), which refutes and
+/// proves nothing.
 ///
 /// The value readings ask the walks, which run in Python and spend no decision
 /// step, so the finite one is asked only of a subject of at most
@@ -1192,12 +1193,13 @@ fn relation_between(
         });
     }
     // A subject of more values than the finite reading builds is guessed at
-    // instead: a value it admits and the supertype refuses refutes the pair,
-    // and a pair no guess refutes stays undecided.
+    // instead, from its own spelling and from the supertype's negation: a value
+    // it admits and the supertype refuses refutes the pair, and a pair no guess
+    // refutes stays undecided.
     if !crate::finite::walked_alike(py, subject, literals, definitions) {
         return Ok(relation);
     }
-    let guesses = crate::witness::guesses(py, subject, literals, definitions)?;
+    let guesses = crate::witness::guesses_against(py, subject, supertype, literals, definitions)?;
     let found = oracle.finds_outside(subject, supertype, &guesses);
     oracle.answer(())?;
     Ok(if found { Relation::Fails } else { relation })

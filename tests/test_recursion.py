@@ -573,6 +573,44 @@ def test_a_pair_the_deciders_decline_is_refuted_on_a_guess() -> None:
     assert Validator(dict[float, int]).relation_to(keyed_by_a_float) == "not_subset"
 
 
+def test_a_pair_is_refuted_on_a_value_aimed_outside_the_supertype() -> None:
+    """A value built outside the supertype is the counterexample no guess finds.
+
+    The supertype is JSON Schema's `dependencies` as a translation spells it:
+    a dict holding `"bar"` holds an integer under `"bar"` and `"foo"` when it
+    holds them. Every guess the JSON fixpoint makes of itself meets it, and
+    neither decider refutes the pair. With the negation pushed one constructor
+    in, outside the dependency is a dict holding `"bar"` under a value that is
+    no integer, and `{"bar": None}` is such a dict and a JSON value.
+    """
+    integer = intersection(
+        union(int, Annotated[float, at.MultipleOf(1)]), complement(bool)
+    )
+    present = Validator({"bar": anything, anything: anything})
+    any_dict = Validator({anything: anything})
+    dependent = union(
+        intersection(
+            present,
+            union(
+                Validator({"bar?": integer, "foo?": integer, str: json_value}),
+                complement(any_dict),
+            ),
+            json_value,
+        ),
+        complement(present),
+    )
+    supertype = intersection(
+        union(
+            intersection(Validator({str: json_value}), dependent),
+            complement(any_dict),
+        ),
+        json_value,
+    )
+    assert json_value.is_valid({"bar": None})
+    assert not supertype.is_valid({"bar": None})
+    assert json_value.relation_to(supertype) == "not_subset"
+
+
 # Leaves whose set is the one constant they name, so a relation of one to the
 # finished fixpoint is decided by that constant's membership.
 _CONSTANTS: tuple[object, ...] = (1, 2, "a", "b", True, None, b"x")

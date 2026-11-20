@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a pair the deciders decline is refuted on a value guessed from the subject
 - fix: a float meets a Decimal bound as the Decimal it equals
 - fix: a predicate re-entering its validator raises RecursionError before 3.14
+- feat: a pair is refuted on a value aimed outside the supertype
 
 -->
 
@@ -27,20 +28,42 @@ answer of its own, or a repair to a change not yet released.
   the rules nor the set representation decides a relation and the subject denotes more values
   than the finite reading builds, the relation guesses up to 64 small values from the subject's
   spelling -- a value of each scalar kind it names, each of its constants, the sequences, sets and
-  dicts its items and fields guess, three containers deep, a reference read through its
-  definition, and a value of each kind for a complement -- and walks each through both schemas. A
+  dicts its items and fields guess, three containers deep, and a reference read through its
+  definition -- and walks each through both schemas. A
   value the subject admits and the other schema refuses refutes the pair: the JSON fixpoint is
   `not_subset` of `~list | list[~list | Annotated[list[Any], MaxLen(1)]]` on `[[None, False]]`, a
   fixpoint over `tuple[complement(t), t]` of its swap on `(None, 1)`, and
   `dict[float, int]` of `dict[Literal[1.0], int]` on `{0.5: 0}`, where each stayed `undecided`. The
   guesses prove nothing, so an inclusion is never decided by them. Over 4,000 pairs of recursive
   schemas drawn over eleven leaves, 36 of the 62 relations 0.0.30 left undecided are refuted, and
-  no answer it gave moves.
+  no answer it gave moves. On the containment suite of Attouche et al. read through
+  `valgebra-jsonschema`, 8 more questions are refuted, 5 against the suite's labels: four where
+  draft 4's missing `const` leaves the subject every value, and one 2020-12 pair labeled empty
+  whose refuting value `{"bar": {"baz": {}}}` `jsonschema` and `jsonschema-rs` both admit.
 
   The readings that walk a value -- this one and the finite reading's -- read a bound or a step only
   where its operand is an exact `int`, `bool` or `float`, or the standard library's `Fraction` or
   `Decimal`: a class of the program's own compares by its code, which a second call may answer
   anew.
+
+- **A pair is refuted on a value aimed outside the supertype.** Beside the values it guesses from
+  the subject's spelling, the relation builds values aimed outside the supertype, its negation
+  pushed one constructor in as a witness generator for JSON Schema pushes it through each operator
+  (Attouche et al., *Witness Generation for JSON Schema*, PVLDB 2022, §5.2): outside a list of
+  `X`, a list holding one value outside `X`; outside a sequence no item may follow, one item more;
+  outside a record, a dict lacking a required key,
+  holding a field outside its type, or holding a key the record closes out; outside a bound, a
+  number beside it; outside a constant, the integer or the string beside it; outside a complement,
+  its operand's members; and one value of each other kind. A complement in the subject is guessed
+  the same way. Each is walked through both
+  schemas, so a value wide of the difference refutes nothing, and the relation still walks at most
+  64 values. The JSON value fixpoint is `not_subset` of JSON Schema's `dependencies` as a
+  translation spells it, on `{"bar": None}`. On the containment suite of Attouche et al. read
+  through `valgebra-jsonschema`, 41 more draft-4 questions are refuted, 23 against the suite's
+  labels; in each of those `const`, which draft 4 does not have, leaves the subject every value,
+  and `jsonschema` and `jsonschema-rs` place the refuting value inside it and outside the
+  supertype. Of the 28 undecided questions the suite labels refutations, 17 remain, each against a
+  supertype the companion spells with a predicate, whose code the reading does not run.
 
 ### Fixed
 

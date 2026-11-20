@@ -587,8 +587,17 @@ from the subject's spelling -- a value of each scalar kind, each constant, the
 sequences, sets and dicts its items and fields guess through `WITNESS_DEPTH`
 containers, a reference read through its definition at no cost to that depth
 since a contractive definition names itself only from inside a container, and a
-value of each kind for the top and a complement -- at most `WITNESS_FANOUT` a
-node and `WITNESS_VALUES` a relation. Each is walked through both sides in three
+value of each kind for the top -- at most `WITNESS_FANOUT` a node. Beside them
+come values aimed outside the supertype, its negation pushed one constructor in
+as not-rewriting pushes it [ABC+22, §5.2] (`misses`): outside a sequence, a set
+or a record a container of its kind with one part outside its schema, a
+sequence closed after its positions one item too long, a record lacking a
+required key or holding a key it closes out; outside a refinement a
+number beside each order bound and its base's own guesses; outside a constant
+the value beside it; outside a scalar the other kinds; and outside a
+complement, its operand's members, the negation's negation. A complement is
+guessed the same way, as what its operand misses. The two sides take turns, at most
+`WITNESS_VALUES` a relation. Each is walked through both sides in three
 answers (`PoolRelations::finds_outside`): one the subject admits and the
 supertype refuses refutes, and a stop on either side decides nothing. A guess is
 not a claim, since the subject's own walk keeps only its members, so the builder

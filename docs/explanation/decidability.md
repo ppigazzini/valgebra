@@ -96,6 +96,30 @@ answers `"undecided"`.
     short = Validator(Annotated[list[Any], MaxLen(1)])
     assert short.relation_to(nested) == "not_subset"  # [None] is guessed
     ```
+- **A value aimed outside the other schema.** Beside the subject's guesses,
+  the relation builds values aimed outside the other schema, its negation
+  pushed one constructor in as a witness generator for JSON Schema pushes it
+  through each operator: outside a list of `X`, a list holding one value
+  outside `X`; outside a sequence no item may follow, one item more; outside a
+  record, a dict lacking a required key, holding a
+  field outside its type, or holding a key the record closes out or a clause
+  holds under another value; outside a bound, a number beside it; outside a
+  constant, the integer or the string beside it; outside a complement, its
+  operand's members; and one value of each other kind. A complement in the
+  subject is guessed the same way, as what its operand misses. The subject's walk keeps the ones it admits, and one the
+  other schema refuses refutes the pair as a guess from the subject does, so a
+  pair decided this way is `"not_subset"` and nothing else. Here the key is
+  guessed outside `Literal["a"]` as `"aa"`, and `{"aa": 0}` is refused by the
+  `str` clause.
+
+    ```python
+    from typing import Literal
+
+    from valgebra import Validator, complement
+
+    keyed = Validator({complement(Literal["a"]): int})
+    assert keyed.relation_to({str: str, complement(str): int}) == "not_subset"
+    ```
 - **The scalar Boolean algebra.** Every union, intersection, and complement of the
   scalar atoms (`None`, `bool`, `int`, `float`, `str`, `bytes`), with `bool` a
   subtype of `int`. The complement laws hold: `int & ~int` is empty, `int | ~int`
@@ -1001,8 +1025,11 @@ the shape. What is left below is what the descriptor cannot hold.
   between them, so `dict` is below `{Literal["a"]: anything,
   complement(Literal["a"]): anything}`. What comes back "not proven" is a
   refutation whose supertype reads a key kind in part, or with two clauses at
-  once: `{complement(Literal["a"]): int}` against `{str: str, complement(str):
-  int}`, which `{"b": 1}` refutes.
+  once, where no guess holds the key that refutes it:
+  `{complement(Literal["a"]): int}` against `{Literal["b"]: str,
+  complement(Literal["b"]): int}`, which `{"b": 1}` refutes. A refutation a
+  guess does reach is decided, by the value aimed outside the other schema
+  that the decided list names.
 
     The partition is the source's: it treats a record as a quasi-`K`-step
     function, where `K` is a *predefined finite partition* of the key domain
@@ -1042,11 +1069,16 @@ the shape. What is left below is what the descriptor cannot hold.
     long_way = Validator({Literal["a"]: anything, not_a: anything})
     assert long_way.is_equivalent(dict)
 
-    # A refutation needs the part a key falls in: `{"b": 1}` is in one, not the other.
+    # A refutation needs the part a key falls in: `{"b": 1}` is in one, not the
+    # other, and no guess holds the key "b".
     part_of_str = Validator({not_a: int})
+    not_b = complement(Validator(Literal["b"]))
+    by_b = Validator({Literal["b"]: str, not_b: int})
+    assert part_of_str.is_valid({"b": 1}) and not by_b.is_valid({"b": 1})
+    assert part_of_str.relation_to(by_b) == "undecided"
+    # Where a guess holds the key, the pair is refuted: `{"aa": 0}`.
     by_kind = Validator({str: str, not_str: int})
-    assert part_of_str.is_valid({"b": 1}) and not by_kind.is_valid({"b": 1})
-    assert part_of_str.relation_to(by_kind) == "undecided"
+    assert part_of_str.relation_to(by_kind) == "not_subset"
     ```
 
     This is the shape `open` writes on a **mapping**: freeing the key-types a

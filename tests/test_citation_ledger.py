@@ -124,6 +124,7 @@ SCOPE = (
     "crates/valgebra-py/src/check/walk.rs",
     "crates/valgebra-py/src/check/walk/record.rs",
     "crates/valgebra-py/src/check/walk/scalar.rs",
+    "crates/valgebra-py/src/witness.rs",
     "tests/test_*.py",
 )
 
@@ -143,6 +144,7 @@ _TEST_MODULE = re.compile(r"(?:^|/)(?:(?:\w+_)?tests|laws)\.rs$")
 #: work. The page cannot name the file -- the shelf is not in a clone -- so the
 #: pairing lives here, beside the check that reads it.
 LABELS: dict[str, str] = {
+    "ABC+22": "attouche-et-al-2022-witness-generation-json-schema",
     "AC93": "amadio-cardelli-1993-subtyping-recursive-types",
     "BBC+26": "baazizi-et-al-2026-json-schema-inclusion-refutational-normalization",
     "CD24": "castagna-duboc-2024-guard-analysis-safe-erasure-elixir",

@@ -50,6 +50,7 @@ preprint and the published version can number a result apart.
 
 | Label | Work | Owns here | Read in | Identifier |
 |---|---|---|---|---|
+| `ABC+22` | Attouche, Baazizi, Colazzo, Ghelli, Sartiani & Scherzinger, "Witness Generation for JSON Schema", *PVLDB* 15(13), 2022 | a value outside a schema built by pushing its negation through each operator | the published article | [doi:10.14778/3565838.3565852](https://doi.org/10.14778/3565838.3565852) |
 | `AC93` | Amadio & Cardelli, "Subtyping Recursive Types", *TOPLAS* 15(4), 1993 | the trail of recursive subtyping, the unfolding of a reference | the published article | [doi:10.1145/155183.155231](https://doi.org/10.1145/155183.155231) |
 | `BBC+26` | Baazizi, Ben Ali, Colazzo, Ghelli, Klessinger, Sartiani & Scherzinger, "JSON Schema Inclusion through Refutational Normalization" | the rules of a structural inclusion: the uninhabited subject, the unions on either side, the arrays | the preprint, v4 of 10 August 2026 | [arXiv:2603.25306v4](https://arxiv.org/abs/2603.25306v4) |
 | `Cas23` | Castagna, "Typing Records, Maps, and Structs", *PACMPL* 7(ICFP), Article 196, 2023 | records and maps: the atoms, their operations, the backtrack-free rules | the published article, with its appendices | [doi:10.1145/3607838](https://doi.org/10.1145/3607838) |
@@ -171,11 +172,18 @@ it holds, a complement holding every value outside the base besides
 intervals and a meet of them is empty where its intervals are. A meet holding
 a class is empty where the bindings place the class below the complement of
 the other members' meet, the identity of [FCB08, §4.1] with `¬¬R` the set `R`
-[FCB08, Def. 4.1], asked of an enumeration a member at a time.
+[FCB08, Def. 4.1], asked of an enumeration a member at a time. Where every
+reading declines, a value the subject admits and the supertype refuses is a
+member of `a ∧ ¬b` and refutes the pair [FCB08, §4.1], and the values tried are
+built to land there: from the subject's spelling, and from the supertype's with
+its negation pushed one constructor in, as not-rewriting pushes it through each
+operator [ABC+22, §5.2], so outside a list of `X` is a list holding one value
+outside `X`. The walks judge every value, so a guess wide of the difference
+refutes nothing.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision/emptiness.rs::a_class_below_the_complement_beside_it, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs, decision.rs::Schema::union_below, decision.rs::Schema::below_each_member, decision.rs::Schema::below_the_branches_it_can_meet, decision/lengths.rs::lengths_of, decision/lengths.rs::ByLength::relation_to, decision.rs::Schema::or_bounded, decision/readings.rs::one_item_outside, decision.rs::Schema::a_side_with_no_value, valgebra-py/src/oracle.rs::PoolRelations::finds_outside
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision/emptiness.rs::a_class_below_the_complement_beside_it, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs, decision.rs::Schema::union_below, decision.rs::Schema::below_each_member, decision.rs::Schema::below_the_branches_it_can_meet, decision/lengths.rs::lengths_of, decision/lengths.rs::ByLength::relation_to, decision.rs::Schema::or_bounded, decision/readings.rs::one_item_outside, decision.rs::Schema::a_side_with_no_value, valgebra-py/src/oracle.rs::PoolRelations::finds_outside, valgebra-py/src/witness.rs, valgebra-py/src/witness.rs::misses, valgebra-py/src/witness.rs::Reading::missed, valgebra-py/src/witness.rs::Reading::sequences_missed, valgebra-py/src/witness.rs::Reading::records_missed
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, a_meet_holding_a_class_is_empty_below_the_complement_beside_it, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time, a_meet_supertype_is_decided_a_member_at_a_time, test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads, a_pair_declined_as_written_is_asked_in_its_other_spellings, a_meet_disjoint_from_a_meet_is_refuted, a_value_refutes_only_from_inside_the_subject
 

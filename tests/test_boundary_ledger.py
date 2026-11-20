@@ -187,6 +187,15 @@ ROWS: dict[str, Row] = {
         recursive(lambda t: [t]),
         "not_subset",
     ),
+    "A value aimed outside the other schema.": Decides(
+        # The subject's key is guessed outside `Literal["a"]`, and the first
+        # value there is the string beside it: `{"aa": 0}`, which the `str`
+        # clause refuses. Read as one value of each kind, the key was `None`,
+        # which the other clause admits under an `int`.
+        {complement(Literal["a"]): int},
+        {str: str, complement(str): int},
+        "not_subset",
+    ),
     "The scalar Boolean algebra.": Decides(
         intersection(int, complement(int)), nothing, "subset"
     ),
@@ -338,7 +347,7 @@ ROWS: dict[str, Row] = {
     # -- sound but conservative ----------------------------------------------
     "A clause keyed by part of a kind.": Declines(
         Validator({complement(Literal["a"]): int}),
-        {str: str, complement(str): int},
+        {Literal["b"]: str, complement(Literal["b"]): int},
         "a part of the key partition for a key-type holding part of a kind",
         # The entry's own contrast: a complement of a whole kind is the other
         # parts, and the same two clauses over `str` decide.
