@@ -580,6 +580,27 @@ each other. Each value is asked in three answers, as a literal's membership is
 stopped on one -- past the depth bound -- decides nothing, so a stop read as a
 refusal would refute an inclusion that holds.
 
+**Past that, a value guessed from the subject refutes** (`crates/valgebra-py/src/witness.rs`):
+a subject of more values than the finite reading builds is guessed at, and
+`t ⊆ s` fails on one value of `t` outside `s` [FCB08, §4.1]. The guesses come
+from the subject's spelling -- a value of each scalar kind, each constant, the
+sequences, sets and dicts its items and fields guess through `WITNESS_DEPTH`
+containers, a reference read through its definition at no cost to that depth
+since a contractive definition names itself only from inside a container, and a
+value of each kind for the top and a complement -- at most `WITNESS_FANOUT` a
+node and `WITNESS_VALUES` a relation. Each is walked through both sides in three
+answers (`PoolRelations::finds_outside`): one the subject admits and the
+supertype refuses refutes, and a stop on either side decides nothing. A guess is
+not a claim, since the subject's own walk keeps only its members, so the builder
+guesses loosely, and a refinement is guessed as its base. It proves nothing: a
+pair no guess refutes stays undecided. Both sides must walk alike, as the
+finite reading's supertype must, and that guard reads a bound or a step as
+alike only where its operand is an exact `int`, `bool` or `float`: a class of
+the program's own compares by its code, and a `Decimal` through the thread's
+context, whose `FloatOperation` trap turns a float's comparison into a refusal.
+`test_a_guess_refutes_only_where_a_value_says_so` in `tests/test_recursion.py`
+holds that no guess refutes an inclusion that holds by construction.
+
 ## Why every rule stays
 
 A rule earns its place by reaching a shape the descriptor refuses, or by

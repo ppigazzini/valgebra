@@ -146,6 +146,46 @@ fn a_value_the_walk_stopped_on_is_neither_admitted_nor_refused() {
     });
 }
 
+// THEORY: semantic-subtyping
+/// A value refutes an inclusion only where the subject admits it and the
+/// supertype refuses it, each walk finishing: a guess outside the subject is no
+/// value of the difference, and one a walk stopped on is no value outside.
+#[test]
+fn a_value_refutes_only_from_inside_the_subject() {
+    Python::attach(|py| {
+        let five = 5i64.into_pyobject(py).unwrap().into_any().unbind();
+        asking(py, vec![five], |oracle| {
+            let from_five = Schema::Refine {
+                base: Schema::Int.into(),
+                constraints: vec![valgebra_core::Constraint::Ge(OperandIx::new(0))].into(),
+            };
+            let zero = 0i64.into_pyobject(py).unwrap().into_any();
+            let six = 6i64.into_pyobject(py).unwrap().into_any();
+            // `0` is refused by both sides, so it refutes nothing; `6` is a
+            // member refused by the bottom.
+            assert!(!oracle.finds_outside(
+                &from_five,
+                &Schema::Nothing,
+                std::slice::from_ref(&zero)
+            ));
+            assert!(oracle.finds_outside(&from_five, &Schema::Nothing, &[zero, six.clone()]));
+            // A supertype admitting it is no refutation, and neither is one that
+            // stops on it.
+            assert!(!oracle.finds_outside(&from_five, &Schema::Int, std::slice::from_ref(&six)));
+            let stopping = Schema::Union(
+                vec![
+                    Schema::Str,
+                    Schema::list(valgebra_core::SeqShape::homogeneous(Schema::SelfRef(0))),
+                ]
+                .into(),
+            );
+            let listed = PyList::new(py, [1i64]).unwrap().into_any();
+            let any_list = Schema::list(valgebra_core::SeqShape::homogeneous(Schema::ANYTHING));
+            assert!(!oracle.finds_outside(&any_list, &stopping, &[listed]));
+        });
+    });
+}
+
 /// Each constant of a table is asked of one pattern the probe compiles once:
 /// the query keeps it for every constant after the first, and drops it with
 /// the oracle.

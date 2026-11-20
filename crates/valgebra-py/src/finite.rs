@@ -13,7 +13,9 @@
 //! `==`"): an exact `int`, `bool`, `str`, `bytes`, `None`, or a nonzero finite
 //! `float`; a float zero is read as its two values. And the walk reads the supertype as the relation would only where
 //! no atom of it runs code a second call may answer differently: no
-//! predicate, no class, no attribute, and no constant past those types. A pair
+//! predicate, no class, no attribute, no constant past those types, and no
+//! bound or step but an exact `int`, `bool` or `float`, since another number's
+//! comparison runs code or reads the thread's `Decimal` context. A pair
 //! holding either is left to the deciders, which decline it.
 
 use pyo3::prelude::*;
@@ -282,9 +284,23 @@ fn a_whole_set(constant: &Bound<'_, PyAny>) -> bool {
     })
 }
 
+/// Whether `operand` is a bound or a step a walk compares every value with
+/// alike on every call: an exact `int`, `bool` or `float`. Another number's
+/// comparison runs code -- a class of the program's own -- or reads the
+/// thread's `Decimal` context, whose `FloatOperation` trap makes comparing a
+/// float with a `Decimal` raise, and the walk refuses the value it raised on:
+/// under the trap `0.75` is refused by `Ge(Decimal("0.25"))`, and outside it
+/// admitted.
+fn a_plain_number(operand: &Bound<'_, PyAny>) -> bool {
+    operand.is_exact_instance_of::<PyInt>()
+        || operand.is_exact_instance_of::<PyBool>()
+        || operand.is_exact_instance_of::<PyFloat>()
+}
+
 /// Whether a walk of `schema` reads every atom as a proof through it would:
-/// no predicate, no class, no attribute, and no constant but one that is its
-/// whole set, through every definition a reference reaches.
+/// no predicate, no class, no attribute, no constant but one that is its whole
+/// set, and no bound or step but a plain number ([`a_plain_number`]), through
+/// every definition a reference reaches.
 pub(crate) fn walked_alike(
     py: Python<'_>,
     schema: &Schema,
@@ -304,12 +320,25 @@ pub(crate) fn walked_alike(
                     return false;
                 }
             }
-            Schema::Refine { constraints, .. }
-                if constraints
-                    .iter()
-                    .any(|constraint| matches!(constraint, Constraint::Predicate(_))) =>
-            {
-                return false;
+            Schema::Refine { constraints, .. } => {
+                for constraint in constraints.iter() {
+                    match constraint {
+                        Constraint::Predicate(_) => return false,
+                        Constraint::Ge(at)
+                        | Constraint::Gt(at)
+                        | Constraint::Le(at)
+                        | Constraint::Lt(at)
+                        | Constraint::MultipleOf(at) => {
+                            let plain = literals
+                                .get(at.get())
+                                .is_some_and(|operand| a_plain_number(operand.bind(py)));
+                            if !plain {
+                                return false;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
             }
             Schema::Ref(at) => {
                 let Some(slot) = seen.get_mut(at.get()) else {

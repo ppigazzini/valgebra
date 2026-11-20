@@ -158,8 +158,11 @@ def test_a_bound_past_the_carrier_is_proved_by_the_order() -> None:
         )
         == "subset"
     )
-    # And the refutation is what declines, in either direction it is asked.
-    assert Validator(Annotated[int, at.Ge(0)]).relation_to(wide) == "undecided"
+    # And the refutation is what declines, in either direction it is asked,
+    # where no value the subject's spelling guesses is one of it: `0` refutes
+    # `Ge(0)` below the wide bound, and no guess is a member past the carrier.
+    assert Validator(Annotated[int, at.Ge(0)]).relation_to(wide) == "not_subset"
+    assert Validator(Annotated[int, at.Ge(2**121 - 5)]).relation_to(wide) == "undecided"
     assert Validator(wide).relation_to(wider) == "undecided"
     # A pair that cannot hold together holds nothing, however large the bounds.
     assert Validator(Annotated[int, at.Gt(2**121), at.Lt(2**121 + 1)]).is_empty()

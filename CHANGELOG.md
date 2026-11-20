@@ -15,8 +15,30 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: opening or closing a recursive placeholder is refused
 - fix: the walk asks PyPy for room before its question can overflow
+- feat: a pair the deciders decline is refuted on a value guessed from the subject
 
 -->
+
+### Added
+
+- **A pair the deciders decline is refuted on a value guessed from the subject.** Where neither
+  the rules nor the set representation decides a relation and the subject denotes more values
+  than the finite reading builds, the relation guesses up to 64 small values from the subject's
+  spelling -- a value of each scalar kind it names, each of its constants, the sequences, sets and
+  dicts its items and fields guess, three containers deep, a reference read through its
+  definition, and a value of each kind for a complement -- and walks each through both schemas. A
+  value the subject admits and the other schema refuses refutes the pair: the JSON fixpoint is
+  `not_subset` of `~list | list[~list | Annotated[list[Any], MaxLen(1)]]` on `[[None, False]]`, a
+  fixpoint over `tuple[complement(t), t]` of its swap on `(None, 1)`, and
+  `dict[float, int]` of `dict[Literal[1.0], int]` on `{0.5: 0}`, where each stayed `undecided`. The
+  guesses prove nothing, so an inclusion is never decided by them. Over 4,000 pairs of recursive
+  schemas drawn over eleven leaves, 36 of the 62 relations 0.0.30 left undecided are refuted, and
+  no answer it gave moves.
+
+  The readings that walk a value -- this one and the finite reading's -- read a bound or a step only
+  where its operand is an exact `int`, `bool` or `float`: a `Decimal` compares through the
+  thread's context, whose `FloatOperation` trap turns a float's comparison into a refusal, and a
+  class of the program's own by its code.
 
 ### Fixed
 

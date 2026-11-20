@@ -311,7 +311,8 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
     # A bound is held within `2**120` of zero and Python's integers are unbounded, so a
     # bound past that is held as the widest set the carrier spells: the direction
     # the widening proves comes back `subset`, and the one a value refutes
-    # declines rather than reporting a value the procedure never found.
+    # declines rather than reporting a value the procedure never found, unless a
+    # value the subject's spelling guesses is that value.
     (
         "a bound past the carrier proves in the direction the widening gives",
         Annotated[int, at.Ge(2**121 + 1)],
@@ -337,8 +338,17 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         "and the kind is not below it",
         int,
         Annotated[int, at.Gt(2**121 - 1)],
-        "undecided",
+        "not_subset",
         [0, 2**121 - 1, 2**121],
+    ),
+    # The kind is refuted on `0`, a value its spelling guesses; a subject past
+    # the carrier's end holds no value a guess builds, and declines below it.
+    (
+        "and a subject past the carrier's end declines below it",
+        Annotated[int, at.Ge(2**121 - 5)],
+        Annotated[int, at.Gt(2**121 - 1)],
+        "undecided",
+        [2**121 - 5, 2**121 - 1, 2**121],
     ),
     # A modulus is materialized per residue up to a recorded period, so two
     # moduli the representation builds decide and two above it decline. The
@@ -512,6 +522,7 @@ def test_every_edge_of_the_integer_carrier_has_a_row() -> None:
         "and declines in the direction a value would refute",
         "a strict bound past the carrier's end is below the kind",
         "and the kind is not below it",
+        "and a subject past the carrier's end declines below it",
         "a modulus the period holds is decided",
         "and one above it is decided by the steps themselves",
         "and one above it is refuted by the subject's own multiple",

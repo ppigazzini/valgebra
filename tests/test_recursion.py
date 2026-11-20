@@ -4,6 +4,7 @@ import math
 import sys
 import threading
 from collections.abc import Callable
+from decimal import Decimal, FloatOperation, localcontext
 from typing import Annotated, Any, Literal, Protocol
 
 import annotated_types as at
@@ -425,6 +426,8 @@ _TERM_ATOMS: tuple[object, ...] = (
     Annotated[int, at.Ge(0)],
     list[int],
     {"k": int},
+    Annotated[str, at.Len(1, 3)],
+    Annotated[int, at.Ge(5)],
 )
 _VALUATIONS: tuple[Validator, ...] = (
     Validator(nothing),
@@ -500,6 +503,93 @@ def test_a_question_inside_a_builder_is_answered_where_it_holds_of_every_set(
             assert inside["relation"] == relation, (a, b, value)
         if inside["empty"]:
             assert subject.relation_to(nothing) != "not_subset", (a, value)
+
+
+@given(a=_terms, b=_terms)
+def test_a_guess_refutes_only_where_a_value_says_so(
+    a: tuple[Any, ...], b: tuple[Any, ...]
+) -> None:
+    """No inclusion that holds whatever the sets are is refuted.
+
+    A pair the deciders decline is refuted on a value guessed from the subject
+    that the subject admits and the other schema refuses; a guess outside the
+    subject is refused by the subject's own walk and decides nothing. A set is
+    below the union of its meets with another set and with that set's
+    complement, and so is each of those meets: the decomposition the deciders
+    often leave undecided, which is where the guesses are asked. None is ever
+    `not_subset`, whatever the terms around the finished sets, the recursive
+    ones among them.
+    """
+    for value in _VALUATIONS:
+        left, right = _built(a, value), _built(b, value)
+        split = union(intersection(left, right), intersection(left, complement(right)))
+        assert left.relation_to(split) != "not_subset", (a, b, value)
+        assert intersection(left, right).relation_to(split) != "not_subset", (
+            a,
+            b,
+            value,
+        )
+        assert (
+            intersection(left, complement(right)).relation_to(split) != "not_subset"
+        ), (
+            a,
+            b,
+            value,
+        )
+
+
+def test_a_pair_the_deciders_decline_is_refuted_on_a_guess() -> None:
+    """A value guessed from the subject is the counterexample neither decider finds.
+
+    `[[None, False]]` is a JSON value whose item is a list of two, and the
+    guesses build it; `(None, 1)` is in a fixpoint over a pair of its complement
+    and itself, and not in the pair's swap; `[None]` is a short list and no
+    list of lists; `{0.5: 0}` is a map keyed by a float and no map keyed by
+    `Literal[1.0]`.
+    """
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    short_items = union(
+        complement(list),
+        Validator([union(complement(list), Annotated[list[Any], at.MaxLen(1)])]),
+    )
+    assert json.is_valid([[None, False]])
+    assert not short_items.is_valid([[None, False]])
+    assert json.relation_to(short_items) == "not_subset"
+    first = recursive(
+        lambda t: union(int, Validator(tuple[complement(t), t]))  # ty: ignore[invalid-type-form]
+    )
+    second = recursive(
+        lambda t: union(int, Validator(tuple[t, complement(t)]))  # ty: ignore[invalid-type-form]
+    )
+    assert first.is_valid((None, 1))
+    assert not second.is_valid((None, 1))
+    assert first.relation_to(second) == "not_subset"
+    assert second.relation_to(first) == "not_subset"
+    nested = recursive(lambda t: [t])
+    assert (
+        Validator(Annotated[list[Any], at.MaxLen(1)]).relation_to(nested)
+        == "not_subset"
+    )
+    keyed_by_a_float = Validator(dict[Literal[1.0], int])  # ty: ignore[invalid-type-form]
+    assert Validator(dict[float, int]).relation_to(keyed_by_a_float) == "not_subset"
+
+
+def test_a_bound_compared_through_a_context_is_not_guessed_against() -> None:
+    """A `Decimal` bound leaves the guesses out, since its comparison reads a context.
+
+    Under a `FloatOperation` trap comparing a float with a `Decimal` raises,
+    and the walk refuses the value it raised on: `0.75` is outside
+    `Ge(Decimal("0.25"))` under the trap and inside it outside. Read through
+    such a walk, the guess `0.5` would refute `Ge(0.5)` below `Ge(Decimal("0.25"))`,
+    an inclusion that holds wherever the comparison runs.
+    """
+    above = Validator(Annotated[float, at.Ge(Decimal("0.25"))])
+    with localcontext() as context:
+        context.traps[FloatOperation] = True
+        assert not above.is_valid(0.75)
+        assert (
+            Validator(Annotated[float, at.Ge(0.5)]).relation_to(above) != "not_subset"
+        )
 
 
 # Leaves whose set is the one constant they name, so a relation of one to the

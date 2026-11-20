@@ -735,6 +735,27 @@ impl PoolRelations<'_, '_> {
         every
     }
 
+    /// Whether one of `values` is a member of `subject` and not of `supertype`,
+    /// each walk finishing without a stop: a value of the difference, which
+    /// refutes `subject <= supertype` [FCB08, §4.1].
+    ///
+    /// Asked in three answers as [`Self::admits_every`] asks: a value the
+    /// subject's walk stopped on is no member of it, and one the supertype's
+    /// walk stopped on is no value outside it, so neither refutes.
+    pub(crate) fn finds_outside(
+        &self,
+        subject: &Schema,
+        supertype: &Schema,
+        values: &[Bound<'_, PyAny>],
+    ) -> bool {
+        let inside = build_index(self.py, subject, self.definitions, self.literals);
+        let outside = build_index(self.py, supertype, self.definitions, self.literals);
+        values.iter().any(|value| {
+            self.is_member_under(supertype, value, &outside) == Some(false)
+                && self.is_member_under(subject, value, &inside) == Some(true)
+        })
+    }
+
     /// [`Self::is_member`] under an `index` built for `schema`, for a probe
     /// that walks several values through it.
     ///

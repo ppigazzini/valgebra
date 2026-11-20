@@ -181,6 +181,12 @@ ROWS: dict[str, Row] = {
         list[list[int]],
         "not_subset",
     ),
+    "A value guessed from the subject.": Decides(
+        # `[None]` is a guess at the short list, and no list of lists.
+        Annotated[list[Any], at.MaxLen(1)],
+        recursive(lambda t: [t]),
+        "not_subset",
+    ),
     "The scalar Boolean algebra.": Decides(
         intersection(int, complement(int)), nothing, "subset"
     ),
@@ -339,7 +345,8 @@ ROWS: dict[str, Row] = {
         beside=(dict, {str: anything, complement(str): anything}, "subset"),
     ),
     "A clause keyed by a float literal.": Declines(
-        dict[float, int],
+        # `{0.5: 5}` refutes it, and the guess at the bounded value is `0`.
+        dict[float, Annotated[int, at.Ge(5)]],
         dict[Literal[1.0], int],  # ty: ignore[invalid-type-form]
         "a label of the key partition for a float value",
         # The entry's own contrast: a literal key of another kind lands in its
@@ -347,7 +354,14 @@ ROWS: dict[str, Row] = {
         beside=(dict[Literal[1], int], dict[int, int], "subset"),
     ),
     "Recursion, past one unfolding.": Declines(
-        {"next": intersection(dict, complement(_CHAIN))},
+        # Its refutation lies past the depth a guess is built to.
+        {
+            "next": {
+                "next": {
+                    "next": {"next": {"next": intersection(dict, complement(_CHAIN))}}
+                }
+            }
+        },
         _CHAIN,
         "an unfolding of the supertype past one level before the reference is cut",
         # What one unfolding does reach: the kinds a fixpoint admits. A value of

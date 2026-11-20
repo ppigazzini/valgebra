@@ -1153,12 +1153,16 @@ mod tests;
 /// The inclusion of `subject` in `supertype` over the pool and the definitions
 /// the oracle reads, in three answers: the deciders', and where both decline, the
 /// membership of each value of a subject of finitely many
-/// ([`finite`](crate::finite)).
+/// ([`finite`](crate::finite)), and failing that, a value guessed from the
+/// subject's spelling that it admits and the supertype refuses
+/// ([`witness`](crate::witness)), which refutes and proves nothing.
 ///
-/// The value reading asks the walk of the supertype, which runs in Python and
-/// spends no decision step, so it is asked only of a subject of at most
+/// The value readings ask the walks, which run in Python and spend no decision
+/// step, so the finite one is asked only of a subject of at most
 /// [`FINITE_VALUES`](crate::finite::FINITE_VALUES) constants each its whole
-/// set, and of a supertype whose walk reads every atom as the relation would.
+/// set, the guessing one of at most
+/// [`WITNESS_VALUES`](crate::witness::WITNESS_VALUES) guesses, and both only
+/// where every walk they ask reads every atom as the relation would.
 /// Each value is asked in three answers, as a literal's membership is: a walk
 /// that stopped on one -- past the depth bound, say -- has not put it outside
 /// the supertype, and read as a refusal it would refute an inclusion that
@@ -1178,14 +1182,23 @@ fn relation_between(
     {
         return Ok(relation);
     }
-    let Some(values) = crate::finite::values_of(py, subject, literals)? else {
+    if let Some(values) = crate::finite::values_of(py, subject, literals)? {
+        let admitted = oracle.admits_every(supertype, &values);
+        oracle.answer(())?;
+        return Ok(match admitted {
+            Some(true) => Relation::Holds,
+            Some(false) => Relation::Fails,
+            None => Relation::Unknown,
+        });
+    }
+    // A subject of more values than the finite reading builds is guessed at
+    // instead: a value it admits and the supertype refuses refutes the pair,
+    // and a pair no guess refutes stays undecided.
+    if !crate::finite::walked_alike(py, subject, literals, definitions) {
         return Ok(relation);
-    };
-    let admitted = oracle.admits_every(supertype, &values);
+    }
+    let guesses = crate::witness::guesses(py, subject, literals, definitions)?;
+    let found = oracle.finds_outside(subject, supertype, &guesses);
     oracle.answer(())?;
-    Ok(match admitted {
-        Some(true) => Relation::Holds,
-        Some(false) => Relation::Fails,
-        None => Relation::Unknown,
-    })
+    Ok(if found { Relation::Fails } else { relation })
 }

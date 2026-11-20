@@ -24,6 +24,7 @@ mod input;
 mod oracle;
 mod render;
 mod validator;
+mod witness;
 pub mod workload;
 
 use pyo3::exceptions::{PyTypeError, PyValueError};

@@ -70,6 +70,31 @@ answers `"undecided"`.
   answer two calls differently, and neither is a constant whose class `==`
   widens past itself. It is the shape a translation from JSON Schema writes for
   `const` and `enum`.
+- **A value guessed from the subject.** Where neither the rules nor the sets
+  decide a pair, the relation guesses a few small values from the subject's
+  spelling -- a value of each scalar kind it names, each of its constants, the
+  sequences, sets and dicts its items and fields guess, three containers deep,
+  a reference read through its definition, and one value of each kind for a
+  complement -- and walks each through both schemas. A value the subject admits
+  and the other schema refuses, both walks finishing without a stop, refutes the
+  pair: `"not_subset"`. The guesses prove nothing, so a pair none refutes stays
+  `"undecided"`, and a guess reads a refinement as its base, so a value inside a
+  bound is one it can miss. A schema holding what the subject of constants above
+  may not, or a bound or a step that is not an exact `int`, `bool` or `float`,
+  is not read this way: a `Decimal` compares through the thread's context, whose
+  `FloatOperation` trap turns a comparison with a float into a refusal.
+
+    ```python
+    from typing import Annotated, Any
+
+    from annotated_types import MaxLen
+
+    from valgebra import Validator, recursive
+
+    nested = recursive(lambda t: [t])
+    short = Validator(Annotated[list[Any], MaxLen(1)])
+    assert short.relation_to(nested) == "not_subset"  # [None] is guessed
+    ```
 - **The scalar Boolean algebra.** Every union, intersection, and complement of the
   scalar atoms (`None`, `bool`, `int`, `float`, `str`, `bytes`), with `bool` a
   subtype of `int`. The complement laws hold: `int & ~int` is empty, `int | ~int`
@@ -1034,18 +1059,25 @@ the shape. What is left below is what the descriptor cannot hold.
   its value, and it holds no float value: the typing spec admits none in a
   `Literal`. A map keyed by `Literal[1.0]` is left to the rules, which read a
   key by whole kinds: they refute where the literal holds none of a kind the
-  other map's key holds, and a pair they do not decide comes back "not proven"
-  although `{0.5: 0}` refutes it. A key literal of any other kind lands in its
-  part.
+  other map's key holds. A pair they do not decide is refuted where a value
+  guessed from the subject is the counterexample -- `{0.5: 0}` for
+  `dict[float, int]` -- and comes back "not proven" where none is, since a
+  guess reads a refinement as its base: `{0.5: 5}` refutes the bounded map
+  below, and the guess `{0.5: 0}` is no value of it. A key literal of any other
+  kind lands in its part.
 
     ```python
-    from typing import Literal
+    from typing import Annotated, Literal
+
+    from annotated_types import Ge
 
     from valgebra import Validator
 
     keyed_by_a_float = Validator(dict[Literal[1.0], int])
     assert Validator(dict[int, int]).relation_to(keyed_by_a_float) == "not_subset"
-    assert Validator(dict[float, int]).relation_to(keyed_by_a_float) == "undecided"
+    assert Validator(dict[float, int]).relation_to(keyed_by_a_float) == "not_subset"
+    bounded = Validator(dict[float, Annotated[int, Ge(5)]])
+    assert bounded.relation_to(keyed_by_a_float) == "undecided"
     assert Validator(dict[Literal[1], int]).relation_to(dict[int, int]) == "subset"
     ```
 
@@ -1054,8 +1086,9 @@ the shape. What is left below is what the descriptor cannot hold.
   is `a ∧ ¬b = ∅`, so the supertype is where a schema stands under a
   complement, and a reference there is lowered to the bottom. The difference
   then contains the value that refutes the inclusion without being proved to
-  contain it, so the answer is "not proven" where a value says plainly that it
-  is false:
+  contain it. A value guessed from the subject refutes it where the guesses
+  reach, three containers deep; past them the answer is "not proven" where a
+  value says plainly that it is false:
 
     ```python
     from valgebra import Validator, complement, intersection, recursive, union
@@ -1064,8 +1097,11 @@ the shape. What is left below is what the descriptor cannot hold.
     off_chain = Validator({"next": intersection(dict, complement(chain))})
     assert not Validator(chain).is_valid({"next": {}})  # the walk is exact
     assert off_chain.is_valid({"next": {}})
-    # and the relation declines rather than refuting
-    assert off_chain.relation_to(chain) == "undecided"
+    assert off_chain.relation_to(chain) == "not_subset"  # {"next": {}} is guessed
+    deeper = Validator({"next": {"next": {"next": {"next": off_chain}}}})
+    assert deeper.is_valid({"next": {"next": {"next": {"next": {"next": {}}}}}})
+    # and past the guesses' depth the relation declines rather than refuting
+    assert deeper.relation_to(chain) == "undecided"
     ```
 
     One unfolding does reach the kinds a fixpoint admits, and a subject that

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use pyo3::types::PyList;
-use valgebra_core::{ConstIx, DefIx, Field, PredIx, SeqShape, Spelling};
+use valgebra_core::{ConstIx, DefIx, Field, OperandIx, PredIx, SeqShape, Spelling};
 
 use super::*;
 
@@ -235,7 +235,7 @@ fn a_value_past_the_bound_on_its_parts_is_not_built() {
 #[test]
 fn a_supertype_with_code_of_its_own_is_not_walked() {
     Python::attach(|py| {
-        let literals = pool(py, "[1, __import__('decimal').Decimal(1)]");
+        let literals = pool(py, "[1, __import__('decimal').Decimal(1), 0.5, True]");
         let alike = |schema: &Schema, defs: &[Schema]| walked_alike(py, schema, &literals, defs);
         let plain = Schema::Union(vec![Schema::Int, Schema::Str, literal(0)].into());
         assert!(alike(&plain, &[]));
@@ -246,6 +246,20 @@ fn a_supertype_with_code_of_its_own_is_not_walked() {
         ));
         let bounded = Schema::refine(Schema::Int, vec![Constraint::MinLen(0)]);
         assert!(alike(&bounded, &[]));
+        // A bound is walked alike where its operand is an exact `int`, `bool`
+        // or `float`: a `Decimal`'s comparison reads the thread's context, and
+        // a `FloatOperation` trap there turns a refusal on.
+        let from_one = Schema::refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))]);
+        assert!(alike(&from_one, &[]));
+        let from_a_half = Schema::refine(Schema::Float, vec![Constraint::Ge(OperandIx::new(2))]);
+        assert!(alike(&from_a_half, &[]), "a float bound");
+        let from_true = Schema::refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(3))]);
+        assert!(alike(&from_true, &[]), "a bool bound");
+        let from_a_decimal = Schema::refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(1))]);
+        assert!(!alike(&from_a_decimal, &[]), "a Decimal bound");
+        let by_a_decimal =
+            Schema::refine(Schema::Int, vec![Constraint::MultipleOf(OperandIx::new(1))]);
+        assert!(!alike(&by_a_decimal, &[]), "a Decimal step");
         assert!(!alike(
             &Schema::Instance(valgebra_core::ClassIx::new(0)),
             &[]
