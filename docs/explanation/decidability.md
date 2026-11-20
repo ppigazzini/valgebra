@@ -80,9 +80,10 @@ answers `"undecided"`.
   pair: `"not_subset"`. The guesses prove nothing, so a pair none refutes stays
   `"undecided"`, and a guess reads a refinement as its base, so a value inside a
   bound is one it can miss. A schema holding what the subject of constants above
-  may not, or a bound or a step that is not an exact `int`, `bool` or `float`,
-  is not read this way: a `Decimal` compares through the thread's context, whose
-  `FloatOperation` trap turns a comparison with a float into a refusal.
+  may not, or a bound or a step that is neither an exact `int`, `bool` or
+  `float` nor the standard library's `Fraction` or `Decimal`, is not read this
+  way: a class of the program's own compares by its code, which a second call
+  may answer anew.
 
     ```python
     from typing import Annotated, Any

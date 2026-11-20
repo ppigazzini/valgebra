@@ -146,6 +146,48 @@ fn a_value_the_walk_stopped_on_is_neither_admitted_nor_refused() {
     });
 }
 
+/// A float bound and a `Decimal` one are ordered as the `Decimal` the float
+/// equals, so a `FloatOperation` trap in the thread's context moves no order;
+/// and a `Decimal` bound is read into the floats beside it under the trap as
+/// outside it.
+#[test]
+fn a_float_and_a_decimal_bound_are_ordered_whatever_the_context() {
+    Python::attach(|py| {
+        let decimal = py.import("decimal").unwrap();
+        let five_eighths = decimal
+            .getattr("Decimal")
+            .unwrap()
+            .call1(("0.625",))
+            .unwrap()
+            .unbind();
+        let quarter = 0.25_f64.into_pyobject(py).unwrap().into_any().unbind();
+        let context = decimal.call_method0("localcontext").unwrap();
+        let trapped = context.call_method0("__enter__").unwrap();
+        trapped
+            .getattr("traps")
+            .unwrap()
+            .set_item(decimal.getattr("FloatOperation").unwrap(), true)
+            .unwrap();
+        asking(py, vec![quarter, five_eighths], |oracle| {
+            assert_eq!(
+                oracle.compare(OperandIx::new(0), OperandIx::new(1)),
+                Some(core::cmp::Ordering::Less)
+            );
+            assert_eq!(
+                oracle.compare(OperandIx::new(1), OperandIx::new(0)),
+                Some(core::cmp::Ordering::Greater)
+            );
+            assert!(
+                oracle.rational(1).is_some(),
+                "the Decimal is read under the trap"
+            );
+        });
+        context
+            .call_method1("__exit__", (py.None(), py.None(), py.None()))
+            .unwrap();
+    });
+}
+
 // THEORY: semantic-subtyping
 /// A value refutes an inclusion only where the subject admits it and the
 /// supertype refuses it, each walk finishing: a guess outside the subject is no

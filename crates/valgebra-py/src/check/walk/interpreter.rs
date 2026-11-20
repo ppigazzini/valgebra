@@ -9,7 +9,7 @@ use pyo3::types::{
     PyTuple,
 };
 use valgebra_core::{
-    Attribute, Constraint, DefIx, Field, MapClause, Openness, PathSegment, SeqShape,
+    Attribute, Constraint, DefIx, Field, MapClause, Openness, OperandIx, PathSegment, SeqShape,
 };
 
 use super::record::{
@@ -11539,5 +11539,103 @@ fn a_leaf_is_decided_by_its_type_and_its_number() {
             None,
         ];
         assert_eq!((read, parsed), (from_one, from_one));
+    });
+}
+
+/// A float meets the standard library's `Decimal` bound as the `Decimal` it
+/// equals, so a `FloatOperation` trap in the thread's context moves no answer:
+/// through a built index, which marks the operand, and through the empty index
+/// a transient probe walks with, which asks the operand itself.
+#[test]
+fn a_float_meets_a_decimal_bound_as_the_decimal_it_equals() {
+    Python::attach(|py| {
+        let decimal = py.import("decimal").unwrap();
+        let quarter = decimal
+            .getattr("Decimal")
+            .unwrap()
+            .call1(("0.25",))
+            .unwrap()
+            .unbind();
+        let pool = vec![quarter];
+        let schema = Schema::Refine {
+            base: Arc::new(Schema::Float),
+            constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+        };
+        let unindexed = |value: &Bound<'_, PyAny>| {
+            let index = ValidatorIndex::default();
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &pool,
+                defs: &[],
+                index: &index,
+                state: &state,
+                mode: WalkMode::Fast,
+            };
+            member(
+                &schema,
+                &Value::Py(value),
+                &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
+            )
+        };
+        let context = decimal.call_method0("localcontext").unwrap();
+        let trapped = context.call_method0("__enter__").unwrap();
+        trapped
+            .getattr("traps")
+            .unwrap()
+            .set_item(decimal.getattr("FloatOperation").unwrap(), true)
+            .unwrap();
+        for (value, expected) in [(0.75, true), (0.25, true), (0.1, false)] {
+            let float = PyFloat::new(py, value).into_any();
+            assert_eq!(
+                holds(py, &schema, &float, &pool, &[]),
+                expected,
+                "{value}, indexed"
+            );
+            assert_eq!(unindexed(&float), expected, "{value}, unindexed");
+        }
+        context
+            .call_method1("__exit__", (py.None(), py.None(), py.None()))
+            .unwrap();
+    });
+}
+
+/// The index marks an order bound's operand as the standard library's `Decimal`
+/// exactly where it is one, holds every other operand it reads as not, and
+/// holds nothing of a slot no order bound reads, which the walk asks itself.
+#[test]
+fn an_operand_is_held_as_a_decimal_only_where_it_is_one() {
+    Python::attach(|py| {
+        let pool = vec![
+            evaluate(py, "__import__('decimal').Decimal('0.25')").unbind(),
+            evaluate(py, "__import__('fractions').Fraction(1, 4)").unbind(),
+            evaluate(py, "2 ** 64").unbind(),
+            evaluate(py, "1.0").unbind(),
+            evaluate(py, "'unread'").unbind(),
+        ];
+        let at = OperandIx::new;
+        let schema = Schema::Refine {
+            base: Arc::new(Schema::Float),
+            constraints: vec![
+                Constraint::Ge(at(0)),
+                Constraint::Gt(at(1)),
+                Constraint::Le(at(2)),
+                Constraint::Lt(at(3)),
+            ]
+            .into(),
+        };
+        let index = build_index(py, &schema, &[], &pool);
+        assert_eq!(index.decimal_operand(0), Some(true));
+        assert_eq!(index.decimal_operand(1), Some(false));
+        assert_eq!(index.decimal_operand(2), Some(false));
+        assert_eq!(index.decimal_operand(3), Some(false));
+        assert_eq!(index.decimal_operand(4), None);
+        assert_eq!(index.float_operand(3), Some(1.0));
+        assert_eq!(index.float_operand(0), None);
+        // A float under each bound compares as Python compares it outside any
+        // context: the `Fraction` and the integer past `2 ** 53` as they stand.
+        for (value, expected) in [(0.5, true), (0.25, false), (2.0_f64.powi(65), false)] {
+            let float = PyFloat::new(py, value).into_any();
+            assert_eq!(holds(py, &schema, &float, &pool, &[]), expected, "{value}");
+        }
     });
 }

@@ -235,7 +235,10 @@ fn a_value_past_the_bound_on_its_parts_is_not_built() {
 #[test]
 fn a_supertype_with_code_of_its_own_is_not_walked() {
     Python::attach(|py| {
-        let literals = pool(py, "[1, __import__('decimal').Decimal(1), 0.5, True]");
+        let literals = pool(
+            py,
+            "[1, __import__('decimal').Decimal(1), 0.5, True, type('Own', (), {'__ge__': lambda s, o: True})()]",
+        );
         let alike = |schema: &Schema, defs: &[Schema]| walked_alike(py, schema, &literals, defs);
         let plain = Schema::Union(vec![Schema::Int, Schema::Str, literal(0)].into());
         assert!(alike(&plain, &[]));
@@ -247,8 +250,8 @@ fn a_supertype_with_code_of_its_own_is_not_walked() {
         let bounded = Schema::refine(Schema::Int, vec![Constraint::MinLen(0)]);
         assert!(alike(&bounded, &[]));
         // A bound is walked alike where its operand is an exact `int`, `bool`
-        // or `float`: a `Decimal`'s comparison reads the thread's context, and
-        // a `FloatOperation` trap there turns a refusal on.
+        // or `float`, or the standard library's `Fraction` or `Decimal`; a class
+        // of the program's own compares by code a second call may answer anew.
         let from_one = Schema::refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))]);
         assert!(alike(&from_one, &[]));
         let from_a_half = Schema::refine(Schema::Float, vec![Constraint::Ge(OperandIx::new(2))]);
@@ -256,10 +259,15 @@ fn a_supertype_with_code_of_its_own_is_not_walked() {
         let from_true = Schema::refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(3))]);
         assert!(alike(&from_true, &[]), "a bool bound");
         let from_a_decimal = Schema::refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(1))]);
-        assert!(!alike(&from_a_decimal, &[]), "a Decimal bound");
+        assert!(alike(&from_a_decimal, &[]), "a Decimal bound");
         let by_a_decimal =
             Schema::refine(Schema::Int, vec![Constraint::MultipleOf(OperandIx::new(1))]);
-        assert!(!alike(&by_a_decimal, &[]), "a Decimal step");
+        assert!(alike(&by_a_decimal, &[]), "a Decimal step");
+        let from_its_own = Schema::refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(4))]);
+        assert!(
+            !alike(&from_its_own, &[]),
+            "a bound of a class of the program's own"
+        );
         assert!(!alike(
             &Schema::Instance(valgebra_core::ClassIx::new(0)),
             &[]

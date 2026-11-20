@@ -595,9 +595,15 @@ not a claim, since the subject's own walk keeps only its members, so the builder
 guesses loosely, and a refinement is guessed as its base. It proves nothing: a
 pair no guess refutes stays undecided. Both sides must walk alike, as the
 finite reading's supertype must, and that guard reads a bound or a step as
-alike only where its operand is an exact `int`, `bool` or `float`: a class of
-the program's own compares by its code, and a `Decimal` through the thread's
-context, whose `FloatOperation` trap turns a float's comparison into a refusal.
+alike only where its operand is an exact `int`, `bool` or `float`, or the
+standard library's `Fraction` or `Decimal`: a class of the program's own
+compares by its code, which a second call may answer anew. A float meets a
+`Decimal` bound as the `Decimal` it equals (`Decimal.from_float`, exact), in the
+walk and in the oracle's ordering and reading of bounds alike, so a
+`FloatOperation` trap in the thread's context, which makes the comparison of a
+float with a `Decimal` raise, moves no answer
+(`test_a_decimal_bound_reads_the_same_under_any_context` in
+`tests/test_constraints.py`).
 `test_a_guess_refutes_only_where_a_value_says_so` in `tests/test_recursion.py`
 holds that no guess refutes an inclusion that holds by construction.
 

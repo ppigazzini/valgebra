@@ -371,7 +371,30 @@ pub(crate) fn is_exact_rational(ty: &Bound<'_, PyType>) -> PyResult<bool> {
 /// where `module` is not imported. Asked of every bound a refinement over the
 /// integers compares, a `KeyError` made and dropped a bound was a third of
 /// the time an emptiness over the JSON value took.
-fn is_stdlib_class(ty: &Bound<'_, PyType>, module: &'static str, name: &str) -> PyResult<bool> {
+/// `operand` as the walk orders it beside `other`: the `Decimal` an exact float
+/// equals where `other` is the standard library's `Decimal`, and itself
+/// otherwise. `Decimal.from_float` is exact and reads no context, where a float
+/// compared with a `Decimal` reads the thread's, whose `FloatOperation` trap
+/// makes the comparison raise.
+fn as_the_walk_orders<'py>(
+    operand: &Bound<'py, PyAny>,
+    other: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    if operand.is_exact_instance_of::<PyFloat>()
+        && is_stdlib_class(&other.get_type(), "decimal", "Decimal")?
+    {
+        return other
+            .get_type()
+            .call_method1(intern!(operand.py(), "from_float"), (operand,));
+    }
+    Ok(operand.clone())
+}
+
+pub(crate) fn is_stdlib_class(
+    ty: &Bound<'_, PyType>,
+    module: &'static str,
+    name: &str,
+) -> PyResult<bool> {
     let modules = SYS_MODULES
         .import(ty.py(), "sys", "modules")?
         .cast::<PyDict>()?;
@@ -1549,14 +1572,19 @@ impl<'py> PoolRelations<'py, '_> {
     ///
     /// The float is the nearest one, and comparing it with the value says which
     /// side it landed on. So a value below the smallest float is read beside
-    /// zero, and a `Decimal` under the `FloatOperation` trap, which refuses the
-    /// comparison, is not read, as the walk refuses it.
+    /// zero. A float is compared with a `Decimal` as the `Decimal` it equals
+    /// ([`as_the_walk_orders`]), as the walk compares a value with one, so the
+    /// reading is the same under the `FloatOperation` trap as outside it.
     fn rational(&self, slot: usize) -> Option<Operand> {
         let value = self.literals.get(slot)?.bind(self.py);
         let ty = value.get_type();
         if !(ty.is(PyInt::type_object(self.py)) || self.heard(is_exact_rational(&ty))?) {
             return None;
         }
+        let beside = |number: f64| {
+            let float = PyFloat::new(self.py, number).into_any();
+            self.heard(as_the_walk_orders(&float, value))
+        };
         if !self.heard(value.ge(-WIDE))? {
             return None;
         }
@@ -1572,9 +1600,9 @@ impl<'py> PoolRelations<'py, '_> {
             .heard(value.call_method0(intern!(self.py, "__float__")))?
             .extract::<f64>()
             .ok()?;
-        let (below, above) = if self.heard(value.lt(nearest))? {
+        let (below, above) = if self.heard(value.lt(beside(nearest)?))? {
             (nearest.next_down(), nearest)
-        } else if self.heard(value.gt(nearest))? {
+        } else if self.heard(value.gt(beside(nearest)?))? {
             (nearest, nearest.next_up())
         } else {
             (nearest, nearest)
@@ -2073,6 +2101,11 @@ impl LeafRelations for PoolRelations<'_, '_> {
         }) {
             return None;
         }
+        // A float against the standard library's `Decimal` is ordered as the
+        // `Decimal` it equals, as the walk compares a value with such a bound,
+        // so the order does not read the thread's `Decimal` context.
+        let left = self.heard(as_the_walk_orders(left, right))?;
+        let right = self.heard(as_the_walk_orders(right, &left))?;
         self.heard(left.compare(right))
     }
 

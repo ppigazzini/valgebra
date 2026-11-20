@@ -519,6 +519,30 @@ Python orders no value against a complex number, and `1 >= 0j` raises. A
 bound that is empty because the *order* says so — `Gt(inf)` on a float — is kept,
 because emptiness is then an answer rather than the absence of one.
 
+A float under a `Decimal` bound is compared as the `Decimal` it equals,
+`Decimal.from_float`, which is exact. Python compares a float with a `Decimal`
+exactly too, but through the thread's `decimal` context, and a `FloatOperation`
+trap there makes the comparison raise: read through it, `0.75` would be outside
+`Ge(Decimal("0.25"))` in a thread that sets the trap and inside it in one that
+does not. The set is the one the bound writes, whatever the context. A subclass
+of `float` keeps its own comparison, which may be code of its own, so it meets
+the bound as Python compares it, context included:
+
+```python
+from decimal import Decimal, FloatOperation, localcontext
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+at_least = Validator(Annotated[float, at.Ge(Decimal("0.25"))])
+with localcontext() as context:
+    context.traps[FloatOperation] = True
+    assert at_least.is_valid(0.75)
+    assert not at_least.is_valid(0.1)
+```
+
 `MultipleOf(n)` requires a nonzero **number**: no value is a multiple of zero,
 so `MultipleOf(0)` is an unsatisfiable constraint, and a step that is not a
 number is unsatisfiable for the same reason one step further on. The constraint

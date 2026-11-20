@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: opening or closing a recursive placeholder is refused
 - fix: the walk asks PyPy for room before its question can overflow
 - feat: a pair the deciders decline is refuted on a value guessed from the subject
+- fix: a float meets a Decimal bound as the Decimal it equals
 
 -->
 
@@ -36,9 +37,9 @@ answer of its own, or a repair to a change not yet released.
   no answer it gave moves.
 
   The readings that walk a value -- this one and the finite reading's -- read a bound or a step only
-  where its operand is an exact `int`, `bool` or `float`: a `Decimal` compares through the
-  thread's context, whose `FloatOperation` trap turns a float's comparison into a refusal, and a
-  class of the program's own by its code.
+  where its operand is an exact `int`, `bool` or `float`, or the standard library's `Fraction` or
+  `Decimal`: a class of the program's own compares by its code, which a second call may answer
+  anew.
 
 ### Fixed
 
@@ -62,6 +63,17 @@ answer of its own, or a repair to a change not yet released.
   from 12 KiB below it, and under every limit from 37 to 120 no process ends on either; a value deep
   enough to cross a step reads up to 12% slower on PyPy. The limits page's floor is 37, where it was
   45.
+
+- **A float meets a `Decimal` bound as the `Decimal` it equals.** Python compares a float with a
+  `Decimal` exactly and through the thread's `Decimal` context, whose `FloatOperation` trap makes
+  the comparison raise, and the walk read the raise as a refusal: under the trap
+  `Annotated[float, Ge(Decimal("0.25"))]` refused `0.75`, reporting `greater_than_equal` with
+  "expected >= Decimal('0.25'), got 0.75", while outside it admits `0.75`. The relations followed:
+  `Literal[0.75]` was `not_subset` of it under the trap and `subset` outside. The walk, and the
+  relations' ordering and reading of two bounds, compare the float as `Decimal.from_float` makes it,
+  exact and silent under the trap, so every answer is the one Python's exact comparison gives
+  outside it, whatever the context. pydantic 2.14 admits `0.75` under the trap too; msgspec
+  refuses a `Decimal` bound.
 
 ## [0.0.30] - 2026-11-19
 

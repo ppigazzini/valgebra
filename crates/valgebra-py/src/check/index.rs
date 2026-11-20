@@ -14,6 +14,7 @@ use valgebra_core::{Constraint, DefIx, MapClause, OperandIx, Schema, SeqKind};
 
 use super::memo::{self, MemoPlan, for_each_child};
 use crate::input::Value;
+use crate::oracle::is_stdlib_class;
 
 pub(crate) struct RecordPlan {
     pub(crate) by_name: FxHashMap<Arc<str>, usize>,
@@ -1054,6 +1055,12 @@ pub(crate) struct ValidatorIndex {
     /// holds none, and a schema with no order bound has no table, so no answer
     /// depends on it: the rich comparison reads what it does not hold.
     float_operands: Vec<Option<f64>>,
+    /// Whether each order bound's operand is the standard library's `Decimal`,
+    /// at its place in the pool, which a float is compared with as the
+    /// `Decimal` it equals. Beside [`Self::float_operands`] rather than one
+    /// table of both, so the float reading's code is the one it was; the
+    /// measurement is at `compared` in `walk/scalar.rs`.
+    decimal_operands: Vec<bool>,
     /// The readings of leaves and of trees of scalars ([`Readings`]), none
     /// where the validator holds neither, so the reference's arm asks one word
     /// of a validator with no tree. One word, which the table's alignment
@@ -1116,9 +1123,19 @@ impl ValidatorIndex {
         self.float_operands.get(slot).copied().flatten()
     }
 
-    /// Hold what the operand of the order bound `constraint` is as a float, read
-    /// out of the pool. Any other constraint holds none.
-    fn hold_float_operand(&mut self, constraint: &Constraint, pool: &[Py<PyAny>], py: Python<'_>) {
+    /// Whether the order bound's operand at `slot` is the standard library's
+    /// `Decimal`, which a float is compared with as the `Decimal` it equals;
+    /// `None` past the table, as every slot of the empty index a transient
+    /// probe walks with is, where the caller asks the operand.
+    #[inline]
+    pub(crate) fn decimal_operand(&self, slot: usize) -> Option<bool> {
+        self.decimal_operands.get(slot).copied()
+    }
+
+    /// Hold what the operand of the order bound `constraint` is, read out of the
+    /// pool: the float it is exactly, or the standard library's `Decimal`. Any
+    /// other constraint holds none.
+    fn hold_operand(&mut self, constraint: &Constraint, pool: &[Py<PyAny>], py: Python<'_>) {
         let (Constraint::Ge(index)
         | Constraint::Gt(index)
         | Constraint::Le(index)
@@ -1127,17 +1144,21 @@ impl ValidatorIndex {
             return;
         };
         let slot = index.get();
-        let Some(float) = pool
-            .get(slot)
-            .and_then(|operand| float_operand(operand.bind(py)))
-        else {
+        let Some(operand) = pool.get(slot).map(|operand| operand.bind(py)) else {
             return;
         };
+        let float = float_operand(operand);
+        let decimal = float.is_none()
+            && is_stdlib_class(&operand.get_type(), "decimal", "Decimal").unwrap_or(false);
         if self.float_operands.len() <= slot {
             self.float_operands.resize(slot + 1, None);
+            self.decimal_operands.resize(slot + 1, false);
         }
         if let Some(held) = self.float_operands.get_mut(slot) {
-            *held = Some(float);
+            *held = float;
+        }
+        if let Some(held) = self.decimal_operands.get_mut(slot) {
+            *held = decimal;
         }
     }
 
@@ -1321,7 +1342,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
         Schema::Refine { base, constraints } => {
             collect(py, base, pool, index);
             for constraint in constraints.iter() {
-                index.hold_float_operand(constraint, pool, py);
+                index.hold_operand(constraint, pool, py);
                 if let Constraint::Regex(pattern) = constraint
                     && let Entry::Vacant(slot) = index.regexes.entry(pattern.as_ptr() as usize)
                     && let Ok(compiled) = program(pattern)

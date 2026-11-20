@@ -16,6 +16,7 @@ use std::ops::ControlFlow;
 use jiter::JsonValue;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::PyBaseException;
+use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple,
@@ -38,6 +39,7 @@ use crate::codes::{
 };
 use crate::errors::{SUMMARY_CHARS, shorten, stored};
 use crate::input::Value;
+use crate::oracle::is_stdlib_class;
 
 /// A schema whose membership is decided by the value alone.
 ///
@@ -942,9 +944,7 @@ fn order_bound(
     let ok = match floats_compared(value, index, op, &frame.ctx) {
         Some(ok) => ok,
         None => decided(
-            value
-                .rich_compare(bound, op)
-                .and_then(|answer| answer.is_truthy()),
+            compared(value, bound, index, op, &frame.ctx),
             py,
             &frame.ctx,
         ),
@@ -957,6 +957,48 @@ fn order_bound(
         order_refused(op, bound, value, frame);
     }
     ok
+}
+
+/// What the order bound `op` with `bound` makes of `value`, by Python's rich
+/// comparison: of the value itself, or, for an exact `float` under the
+/// standard library's `Decimal`, of the `Decimal` it equals.
+///
+/// Python compares a float with a `Decimal` exactly, and through the thread's
+/// `Decimal` context: a `FloatOperation` trap there makes the comparison raise,
+/// and a raise refuses the value, so compared directly `0.75` would be outside
+/// `Ge(Decimal("0.25"))` under the trap and inside it outside, and the report
+/// would name `0.75` below `0.25`. `Decimal.from_float` is exact and silent
+/// under the trap, and the two `Decimal`s compare as the float and the
+/// `Decimal` do outside it, so the set is the one the bound writes whatever the
+/// context. The index marks such an operand ([`decimal_operand`]), and a slot
+/// it does not hold asks the operand's class.
+///
+/// Out of line, with the index's `Decimal` marks in a table beside its floats:
+/// the question inlined into [`order_bound`] over one table of both read the
+/// refined-float shape 3.19% over its base on the instruction gate, and the
+/// two together read it 0.80% under.
+///
+/// [`decimal_operand`]: crate::check::index::ValidatorIndex::decimal_operand
+#[inline(never)]
+fn compared(
+    value: &Bound<'_, PyAny>,
+    bound: &Bound<'_, PyAny>,
+    index: OperandIx,
+    op: CompareOp,
+    ctx: &Ctx<'_>,
+) -> PyResult<bool> {
+    let decimal = value.is_exact_instance_of::<PyFloat>()
+        && match ctx.index.decimal_operand(index.get()) {
+            Some(held) => held,
+            None => is_stdlib_class(&bound.get_type(), "decimal", "Decimal")?,
+        };
+    if decimal {
+        let exact = bound
+            .get_type()
+            .call_method1(intern!(value.py(), "from_float"), (value,))?;
+        return exact.rich_compare(bound, op)?.is_truthy();
+    }
+    value.rich_compare(bound, op)?.is_truthy()
 }
 
 /// What the order bound `op` makes of `value` as two floats compared, where

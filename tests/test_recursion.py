@@ -4,7 +4,6 @@ import math
 import sys
 import threading
 from collections.abc import Callable
-from decimal import Decimal, FloatOperation, localcontext
 from typing import Annotated, Any, Literal, Protocol
 
 import annotated_types as at
@@ -572,24 +571,6 @@ def test_a_pair_the_deciders_decline_is_refuted_on_a_guess() -> None:
     )
     keyed_by_a_float = Validator(dict[Literal[1.0], int])  # ty: ignore[invalid-type-form]
     assert Validator(dict[float, int]).relation_to(keyed_by_a_float) == "not_subset"
-
-
-def test_a_bound_compared_through_a_context_is_not_guessed_against() -> None:
-    """A `Decimal` bound leaves the guesses out, since its comparison reads a context.
-
-    Under a `FloatOperation` trap comparing a float with a `Decimal` raises,
-    and the walk refuses the value it raised on: `0.75` is outside
-    `Ge(Decimal("0.25"))` under the trap and inside it outside. Read through
-    such a walk, the guess `0.5` would refute `Ge(0.5)` below `Ge(Decimal("0.25"))`,
-    an inclusion that holds wherever the comparison runs.
-    """
-    above = Validator(Annotated[float, at.Ge(Decimal("0.25"))])
-    with localcontext() as context:
-        context.traps[FloatOperation] = True
-        assert not above.is_valid(0.75)
-        assert (
-            Validator(Annotated[float, at.Ge(0.5)]).relation_to(above) != "not_subset"
-        )
 
 
 # Leaves whose set is the one constant they name, so a relation of one to the

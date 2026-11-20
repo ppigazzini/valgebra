@@ -564,8 +564,9 @@ def test_no_float_lies_between_a_decimal_and_the_float_next_to_it() -> None:
         )
         == "subset"
     )
-    # Under the trap the comparison raises, so the operand is not read, and the
-    # relation declines rather than raising. A value no bound above equals, since
+    # Under the trap a float compared with a `Decimal` raises, and the relation
+    # orders the two bounds as the `Decimal` the float equals instead, so it
+    # answers as it does outside the trap. A value no bound above equals, since
     # `typing` caches an `Annotated` by its metadata's `==`, and `Ge(0.5)` is
     # `Ge(Decimal("0.5"))` to that cache.
     with localcontext() as context:
@@ -573,8 +574,45 @@ def test_no_float_lies_between_a_decimal_and_the_float_next_to_it() -> None:
         trapped = Validator(Annotated[float, at.Ge(0.25)])
         assert (
             trapped.relation_to(Annotated[float, at.Ge(Decimal("0.625"))])
-            == "undecided"
+            == "not_subset"
         )
+
+
+def test_a_decimal_bound_reads_the_same_under_any_context() -> None:
+    """A float meets a `Decimal` bound as the `Decimal` it equals, whatever the context.
+
+    Python compares a float with a `Decimal` exactly and through the thread's
+    `Decimal` context, whose `FloatOperation` trap makes the comparison raise.
+    Read through it, `0.75` would be outside `Ge(Decimal("0.25"))` under the trap
+    and inside it outside, and the report would name `0.75` below `0.25`; the
+    walk and the relations compare the float as `Decimal.from_float` makes it,
+    exact and silent, so the set is the one the bound writes.
+    """
+    above = Validator(Annotated[float, at.Ge(Decimal("0.25"))])
+    subjects = (
+        Validator(Literal[0.75]),  # ty: ignore[invalid-type-form]
+        Validator(Literal[0.1]),  # ty: ignore[invalid-type-form]
+        Validator(Annotated[float, at.Ge(0.5)]),
+        Validator(Annotated[float, at.Ge(0.1)]),
+    )
+    values = (0.75, 0.25, 0.1, float("inf"), 2**60 + 0.5)
+
+    def asked() -> tuple[list[bool], list[str]]:
+        return (
+            [above.is_valid(value) for value in values],
+            [subject.relation_to(above) for subject in subjects],
+        )
+
+    outside = asked()
+    with localcontext() as context:
+        context.traps[FloatOperation] = True
+        assert asked() == outside
+        with pytest.raises(ValidationError, match=r"got 0\.1"):
+            above.validate(0.1)
+    assert outside == (
+        [True, True, False, True, True],
+        ["subset", "not_subset", "subset", "not_subset"],
+    )
 
 
 def test_a_decimal_step_divides_integers_and_no_float() -> None:

@@ -749,7 +749,13 @@ most of what they cost, and each asks the test directly:
   `check/index.rs`), an `int` past `2^53` is no float and a subclass may answer with
   code of its own, so each is the rich comparison's, and a slot the index does not
   hold reads as one the comparison answers, so no verdict depends on the table.
-  `an_order_bound_over_a_float_reads_as_the_comparison_reads_it` holds the two. The constraints read the
+  `an_order_bound_over_a_float_reads_as_the_comparison_reads_it` holds the two.
+  Under the standard library's `Decimal`, which the index marks, the float is
+  compared as the `Decimal` it equals (`compared`): Python's comparison of
+  the two reads the thread's `decimal` context, whose `FloatOperation` trap
+  makes it raise, and a raise refuses the value. A slot the index does not
+  hold asks the operand's class, so a transient probe's empty index answers
+  alike (`a_float_meets_a_decimal_bound_as_the_decimal_it_equals`). The constraints read the
   value the walk holds rather than a handle of their own, so a passing check
   writes no reference count on it: refined integers cost 8% fewer instructions
   on the binding gate (`--binding-refined`), and strings matched against a
