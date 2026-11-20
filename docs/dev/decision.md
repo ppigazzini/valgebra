@@ -616,6 +616,21 @@ float with a `Decimal` raise, moves no answer
 `test_a_guess_refutes_only_where_a_value_says_so` in `tests/test_recursion.py`
 holds that no guess refutes an inclusion that holds by construction.
 
+**A guess deeper than `WITNESS_DEPTH` containers is refused.** A witness built
+a pass at a time over the definitions, one pass for each variable, is as deep as
+the spelling's containers [ABC+22, §6.2], where a guess stops at three: the
+decidability page's chain of five records around a dict outside the chain stays
+`undecided`. It is not in. A guess is built of its parts' guesses by reference,
+so a record of `k` fields reaching itself is a tree of `k^d` values at depth
+`d`, each walked twice, and a deeper bound wants a budget on each guess's size,
+which the builder does not keep. And it decides nothing measured: on the
+containment suite of the same authors, read through `valgebra-jsonschema`, each
+of the 17 undecided questions the suite labels a refutation is against a
+supertype spelled with a predicate, which the reading does not walk at any
+depth. A proposal starts from the decidability page's example, a size budget a
+guess keeps with the measurement of what it costs, and a question of the suite
+the deeper guess decides.
+
 ## Why every rule stays
 
 A rule earns its place by reaching a shape the descriptor refuses, or by
