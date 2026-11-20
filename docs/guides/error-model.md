@@ -362,7 +362,11 @@ attribute access included. A base exception that is not an ordinary exception
 (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`), or a `MemoryError` or
 `RecursionError`, means the interpreter is unwinding, not that the value is a
 non-member, so it propagates out of `validate`/`is_valid` rather than being
-reported as "not a member" or a `predicate_error`. Building a message is one of
+reported as "not a member" or a `predicate_error`. On CPython before 3.14 the
+walk raises one itself where a predicate would run with less than 32 KiB of the
+thread's stack left, as 3.14 raises one at the Python frame a predicate runs
+in: a predicate that re-enters its validator without a base case ends there
+([re-entry](../explanation/boundaries.md#your-code-runs-inside-the-check-and-may-call-back-in)). Building a message is one of
 those sites: a `__repr__` of the value or of an element of it, of a constant
 or bound the message names, or of a key in the path, and a class's `__name__`,
 raise the signal out of `validate` rather than reading as `<unrepresentable>`,

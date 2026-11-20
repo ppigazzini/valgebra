@@ -128,7 +128,8 @@ struct Reading<'py, 'a> {
 
 impl<'py> Reading<'py, '_> {
     /// At most [`WITNESS_FANOUT`] guesses at a member of `schema`, built
-    /// through at most `depth` more levels of containers and references.
+    /// through at most `depth` more levels of containers and references, a
+    /// complement guessed as what its operand misses [ABC+22, §5.2].
     fn guessed(&self, schema: &Schema, depth: usize) -> PyResult<Vec<Bound<'py, PyAny>>> {
         let py = self.py;
         let mut guesses = match schema {
@@ -158,7 +159,7 @@ impl<'py> Reading<'py, '_> {
             // guess is one value of each kind; the subject's walk keeps the
             // ones it holds.
             Schema::Anything(_) => one_of_each_kind(py)?,
-            // A complement holds what its operand misses.
+            // A complement holds what its operand misses [ABC+22, §5.2].
             Schema::Complement(inner) => return self.outside(inner, depth),
             // A union or a meet hands up what its members do, each already
             // bounded, so a branch past the first few keeps its guesses: a
@@ -202,7 +203,8 @@ impl<'py> Reading<'py, '_> {
 
     /// At most [`WITNESS_VALUES`] guesses at a value outside `schema`: the
     /// values of its own kinds it refuses ([`Self::missed`]), then one value of
-    /// each kind, which a schema of one kind refuses but for its own. Outside
+    /// each kind, which a schema of one kind refuses but for its own, as a
+    /// typed operator's negation holds the other types [ABC+22, §5.2]. Outside
     /// the top there is nothing, and outside a complement what its operand
     /// holds.
     fn outside(&self, schema: &Schema, depth: usize) -> PyResult<Vec<Bound<'py, PyAny>>> {
@@ -397,7 +399,8 @@ impl<'py> Reading<'py, '_> {
     }
 
     /// Sets or frozensets holding one element outside `element`, of those that
-    /// hash.
+    /// hash, as outside an array's items is an array holding one item outside
+    /// them [ABC+22, §5.2].
     fn collections_missed(
         &self,
         container: CollKind,
