@@ -4,9 +4,12 @@
 
 [advisories]
 # RustSec advisories and yanked crates fail the check. cargo-deny 0.18+ denies
-# vulnerabilities and unmaintained crates by default under this version.
+# vulnerabilities and unmaintained crates by default under this version; 0.22
+# reads an unmaintained crate only where a workspace crate names it, and `all`
+# holds every crate of the tree to it, transitive ones included.
 version = 2
 yanked = "deny"
+unmaintained = "all"
 
 [licenses]
 # The workspace and its dependencies are permissively licensed; allow the
