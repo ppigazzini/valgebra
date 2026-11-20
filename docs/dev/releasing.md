@@ -431,6 +431,16 @@ surface, and each holds answers this tree's gates do not. What that asks of a re
   path is compiled and tested once by the workflow, on Linux, and
   `--no-binary valgebra` locally is the only way to reach it on another
   platform.
+- **A wheel built twice, byte for byte.** Two builds of one commit differ: the
+  CycloneDX bill of materials maturin writes into `dist-info/sboms/` carries a
+  random `serialNumber` and the time of the build, and the extension's panic
+  locations name the dependency sources by the build machine's cargo home
+  (`$CARGO_HOME/registry/src/...`), which is the runner's path in a release.
+  Nothing here promises a reproducible wheel. `--remap-path-prefix` would take
+  the paths out, but a `RUSTFLAGS` the workflow set would replace the `pyo3`
+  flags `.cargo/config.toml` passes rather than add to them, and that file
+  names no machine's path; Cargo's `trim-paths` is unstable on the toolchain the
+  tree builds with.
 - **A published version that is wrong.** It cannot be replaced, only yanked, and
   the workflow refuses a version the index already serves. The remedy is the next
   patch version, which is why step 4 exists before step 5, and step 1 before
