@@ -408,10 +408,14 @@ answers `"undecided"`.
     partition does not hold, beside an emptiness the set representation
     reads of the rest. The meet holds a value where every
     field it requires does -- the dict of those fields is in each record -- so
-    a refutation of it stands on that value.
+    a refutation of it stands on that value. A field's meet is a question of
+    its own: a field one record guards to its kind over the JSON values,
+    `[T] | ~list` met with `json`, the form a translation from JSON Schema
+    writes for an `allOf` member narrowing an array's items, meets a field
+    `[str]` in `[str] & [T]`, since a list of strings is no value of `~list`.
 
     ```python
-    from typing import Literal
+    from typing import Any, Literal
 
     from valgebra import complement, intersection, recursive, union
 
@@ -423,6 +427,9 @@ answers `"undecided"`.
     assert intersection(user, required, complement(pro)).is_empty()
     free = {"tier": Literal["free"], str: json}
     assert intersection(user, required).relation_to(free) == "not_subset"
+    guarded = intersection(union([Literal["a"]], complement(list[Any])), json)
+    tags = intersection({"tags": [str], str: json}, {"tags?": guarded, str: json})
+    assert tags.relation_to({"tags": [Literal["a"]], str: json}) == "subset"
     ```
 
     A clause keyed by **literals** is read one constant at a time, each
@@ -1209,7 +1216,8 @@ the shape. What is left below is what the descriptor cannot hold.
     regions, and a cut reference is one, so `str & ~(str & json)` is proved as
     `str & ~json` is. The regions are intervals over the reals, so an integer
     bound past the depth is not rounded in a reading of the pair whole; a goal
-    with no reference on either side is read alone where everything else declined,
+    is read alone where everything else declined, one holding a reference where
+    a meet, a union or a complement tops it,
     so `Annotated[int, Gt(4), Lt(7)]` is `subset` of `Annotated[int, Ge(5), Le(6)]`
     at any depth. A container past the depth is not built: beside the members a proof needs,
     its member is left out of the reading and the proof stands, as a

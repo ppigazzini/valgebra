@@ -19,6 +19,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a float meets a Decimal bound as the Decimal it equals
 - fix: a predicate re-entering its validator raises RecursionError before 3.14
 - feat: a pair is refuted on a value aimed outside the supertype
+- feat: a goal holding a reference is read by the sets where a connective tops it
 
 -->
 
@@ -64,6 +65,21 @@ answer of its own, or a repair to a change not yet released.
   and `jsonschema` and `jsonschema-rs` place the refuting value inside it and outside the
   supertype. Of the 28 undecided questions the suite labels refutations, 17 remain, each against a
   supertype the companion spells with a predicate, whose code the reading does not run.
+
+- **Records met over a guarded fixpoint are related as one record.** Two records met are their
+  field-by-field meet, and a field's meet is now decided where a reference stands in it: a field
+  one record guards to its kind over the JSON values, `([T] | ~list) & json`, met with `[str]`, is
+  below `[T]`, since a list of strings is no value of `~list`. That is the field a translation
+  from JSON Schema writes for an `allOf` member narrowing an array's items, and `{"tags": [str]}`
+  met with `{"tags?": ([Literal["a"]] | ~list) & json}` is `subset` of `{"tags": [Literal["a"]]}`,
+  where it was `undecided`. A goal the rules decline is read by the set representation where it
+  holds a reference and a meet, a union or a complement tops one side; one a constructor or a
+  reference tops on both sides is left to the rules, which take it apart. Against 0.0.30's
+  recording, two more decisions are made, none is lost and none is slower. On the containment
+  suite read through `valgebra-jsonschema`, 15 more draft-4 questions over `uniqueItems` are
+  refuted, 8 against the suite's labels: in each `const`, which draft 4 does not have, leaves the
+  subject every value, and `jsonschema` and `jsonschema-rs` admit `[1]` there and refuse it in the
+  supertype.
 
 ### Changed
 

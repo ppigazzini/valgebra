@@ -13619,6 +13619,10 @@ mod leaves {
         subject.subtype_relation_under(other, &Pure, defs)
     }
 
+    fn list_of(item: Schema) -> Schema {
+        Schema::list(SeqShape::homogeneous(item))
+    }
+
     /// A list of itself, `μt. list[t]`, which the sets cut.
     fn lists() -> ([Schema; 1], Schema) {
         let at = Schema::Ref(DefIx::new(0));
@@ -13653,8 +13657,12 @@ mod leaves {
         );
     }
 
+    /// A goal holding a reference with a constructor or a reference at its top
+    /// on both sides is the rules' to take apart, so the sets do not read it: a
+    /// cut reading of `μt. list[t]` against `int` spends no step and answers
+    /// nothing here. Against a union the sets read it, and prove it.
     #[test]
-    fn a_goal_holding_a_reference_is_not_read_by_the_sets() {
+    fn a_goal_holding_a_reference_is_read_by_the_sets_where_a_connective_tops_it() {
         let (defs, at) = lists();
         let budget = Budget::new(DECISION_BUDGET);
         let mut cx = Cx::new(&Pure, &defs, &budget);
@@ -13663,10 +13671,88 @@ mod leaves {
         assert_eq!(
             goal.a_goal_declined(&Schema::Int, &mut cx),
             Relation::Unknown,
-            "a cut reading refutes nothing here"
+            "a constructor tops the goal"
         );
         assert_eq!(budget.left(), DECISION_BUDGET, "and spends no step");
         assert_eq!(Schema::Int.a_goal_declined(&at, &mut cx), Relation::Unknown);
+        // A connective on the other side is read: every value is `int` or not.
+        let every =
+            Schema::Union(vec![Schema::Int, Schema::Complement(Arc::new(Schema::Int))].into());
+        assert_eq!(goal.a_goal_declined(&every, &mut cx), Relation::Holds);
+        assert_eq!(budget.left(), DECISION_BUDGET - LEAF_READING);
+    }
+
+    // THEORY: a-cut-reference-proves
+    /// A meet the rules decline whose branch a member's kind empties, beside a
+    /// fixpoint: `list[int] & (list[bool] | ~list) & J` is `list[bool]`'s, `J`
+    /// being `μt. int | list[t]`. The rules read the union beside the list by
+    /// its spelling alone, and the sets read `list[int] & ~list` empty by kind
+    /// [FCB08, (5)], with `J` cut to every value, which only widens the
+    /// subject.
+    #[test]
+    fn a_goal_the_rules_decline_beside_a_fixpoint_is_proved_by_the_sets() {
+        let defs = [Schema::union([
+            Schema::Int,
+            list_of(Schema::Ref(DefIx::new(0))),
+        ])];
+        let goal = Schema::Intersection(
+            vec![
+                list_of(Schema::Int),
+                Schema::union([
+                    list_of(Schema::Bool),
+                    Schema::Complement(Arc::new(list_of(Schema::ANYTHING))),
+                ]),
+                Schema::Ref(DefIx::new(0)),
+            ]
+            .into(),
+        );
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &defs, &budget);
+        assert_eq!(
+            goal.is_subtype_rec(&list_of(Schema::Bool), &mut cx),
+            Relation::Unknown,
+            "the rules decline it"
+        );
+        cx.reads_leaves = true;
+        assert_eq!(
+            goal.a_goal_declined(&list_of(Schema::Bool), &mut cx),
+            Relation::Holds
+        );
+    }
+
+    // THEORY: a-record-splits-across-a-union, a-cut-reference-proves
+    /// Two records met are related as one record, their field-by-field meet
+    /// [Cas23, (12)], where the field's meet holds a fixpoint: `{tags:
+    /// list[int]}` met with `{tags: (list[bool] | ~list) & J}` is below `{tags:
+    /// list[bool]}`, as the one record holding the field's meet is. The pair is
+    /// past the sets' depth whole, the outer meet a level of it, and the field
+    /// is not.
+    #[test]
+    fn records_met_over_a_fixpoint_are_related_as_their_one_record() {
+        let defs = [Schema::union([
+            Schema::Int,
+            list_of(Schema::Ref(DefIx::new(0))),
+        ])];
+        let guard = Schema::meet([
+            Schema::union([
+                list_of(Schema::Bool),
+                Schema::Complement(Arc::new(list_of(Schema::ANYTHING))),
+            ]),
+            Schema::Ref(DefIx::new(0)),
+        ]);
+        let record =
+            |tags: Schema| Schema::record(vec![field("tags", tags, true)], Openness::Closed);
+        let met =
+            Schema::Intersection(vec![record(list_of(Schema::Int)), record(guard.clone())].into());
+        let one = record(Schema::meet([list_of(Schema::Int), guard]));
+        let supertype = record(list_of(Schema::Bool));
+        assert_eq!(below(&one, &supertype, &defs), Relation::Holds);
+        assert_eq!(below(&met, &supertype, &defs), Relation::Holds);
+        assert_eq!(
+            met.descriptor_contained_in(&supertype, &Pure, &defs),
+            Relation::Unknown,
+            "the whole pair is past the depth"
+        );
     }
 
     #[test]
@@ -15329,7 +15415,16 @@ mod a_name_as_a_word {
             Relation::Holds
         );
         let pattern = Schema::refine(Schema::Str, vec![Constraint::Regex("a".into())]);
-        assert_eq!(below(&record(&["a"]), vec![pattern]), Relation::Holds);
+        assert_eq!(
+            below(&record(&["a"]), vec![pattern.clone()]),
+            Relation::Holds
+        );
+        // A record two levels down is read past the one unfolding the sets
+        // take, so its outer field is read by the record rule reading the name
+        // and by nothing else.
+        let nested = Schema::keyed_map(vec![field("a", record(&["a"]), true)], Vec::new());
+        assert_eq!(below(&nested, vec![short()]), Relation::Holds);
+        assert_eq!(below(&nested, vec![pattern]), Relation::Holds);
     }
 
     #[test]

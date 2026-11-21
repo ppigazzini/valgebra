@@ -852,6 +852,32 @@ def test_two_open_records_met_are_one_record() -> None:
     assert apart.is_empty()
 
 
+# THEORY: a-record-splits-across-a-union, a-cut-reference-proves
+def test_records_met_over_a_guarded_fixpoint_are_related_as_one_record() -> None:
+    """A field one record guards to its kind over a fixpoint meets the other's.
+
+    A translation from JSON Schema reads an `allOf` member narrowing an array
+    field's items as the field `([T] | ~list) & json`: the items keyword applies
+    to an array alone, in the universe of JSON values. Met with a record whose
+    field is `list[str]`, the field is `list[str] & ([T] | ~list) & json`, whose
+    clause `list[str] & ~list` is empty by kind, so the meet is below the record
+    whose field is `list[T]`, open, closed and with the universe's clause alike.
+    """
+    tag = Literal["a", "b"]
+    guard = intersection(union([tag], complement(list[Any])), _JSON)
+    narrowed = Validator({"tags": [tag]})
+    met = intersection({"tags": [str]}, {"tags?": guard})
+    assert met.relation_to(narrowed) == "subset"
+    assert met.relation_to({"tags": [Literal["a"]]}) == "not_subset"
+    opened = intersection(
+        Validator({"tags": [str]}).open(), Validator({"tags?": guard}).open()
+    )
+    assert opened.relation_to(narrowed.open()) == "subset"
+    clauses = intersection({"tags": [str], str: _JSON}, {"tags?": guard, str: _JSON})
+    assert clauses.relation_to(narrowed.open()) == "subset"
+    assert clauses.is_valid({"tags": ["a"], "other": [None]})
+
+
 class _WeirdInt(int):
     """An `int` subclass whose comparisons answer `True` whatever they are asked."""
 

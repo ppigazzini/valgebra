@@ -1217,15 +1217,17 @@ impl Schema {
         Relation::Fails
     }
 
-    /// The rules asked once more, a goal they decline read by the sets where no
-    /// reference stands in the way.
+    /// The rules asked once more, a goal they decline read by the sets where
+    /// [`Self::a_goal_declined`] reads it.
     ///
     /// The whole pair's set reading stops at what it cannot lower or at a cut,
     /// and it stops for all of the pair: `tuple[bool, R]` below `tuple[Annotated[int,
     /// Lt(8)], R]` holds a reference at one position, and the leaf at the other is
     /// a question the sets answer on their own. Both deciders are sound, so a
     /// part's answer composes through the rules as any other does. A reference on
-    /// neither side is cut nowhere, so the reading is the set itself.
+    /// neither side is cut nowhere, so the reading is the set itself, and a goal
+    /// holding one is read where a connective tops it, the cut proving it as it
+    /// proves a pair.
     ///
     /// Asked last of a pair everything else declined. A goal the rules decline
     /// is the common case on the way to an answer another rule gives, and asked
@@ -1273,22 +1275,40 @@ impl Schema {
         }
     }
 
-    /// A goal the rules declined: what the sets answer of one with no reference
-    /// on either side where the query reads its leaves, charged [`LEAF_READING`]
-    /// steps, since no step counts a lowering. A difference the sets read inhabited
-    /// holds the value a refutation stands on, so no witness is asked of it. Out of
-    /// line, as a declined goal is the path this is on: the rules' answers read one
-    /// test.
+    /// A goal the rules declined: what the sets answer of it where the query reads
+    /// its leaves, charged [`LEAF_READING`] steps, since no step counts a lowering.
+    /// A difference the sets read inhabited holds the value a refutation stands
+    /// on, so no witness is asked of it. Out of line, as a declined goal is the
+    /// path this is on: the rules' answers read one test.
+    ///
+    /// **A goal holding a reference is read where a connective tops one side.**
+    /// The rules read a meet member by member and a union branch by branch, where
+    /// the sets read the normal form, every union distributed [FCB08, Def. 4.1].
+    /// So `list[int] & (list[bool] | ~list) & J` is below `list[bool]` on the
+    /// clause `list[int] & ~list` being empty by kind, which no member and no
+    /// branch says alone. The sets cut the reference once and prove through the
+    /// cut [AC93, §3.4]. A goal topped by a constructor or a reference is the
+    /// rules' to take apart, into goals of its parts, each read here where it
+    /// declines, and a pair of references is decided on their trail: read whole,
+    /// such goals cost two lists of lists around a back edge, a hundred deep, seven
+    /// times the query's time and gave no answer.
     ///
     /// Read once a query and held ([`Leaves`]), and charged each time it is asked,
     /// so the memo changes no answer and no allowance: a query relating two
     /// recursions over lists of patterns asked the sets of 8 pairs 346 times.
     #[inline(never)]
     fn a_goal_declined(&self, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+        let connective = |schema: &Schema| {
+            matches!(
+                schema,
+                Schema::Intersection(_) | Schema::Union(_) | Schema::Complement(_)
+            )
+        };
         if !cx.reads_leaves
             || (core::ptr::eq(self, cx.read_whole.0) && core::ptr::eq(other, cx.read_whole.1))
-            || self.has_reference()
-            || other.has_reference()
+            || (!connective(self)
+                && !connective(other)
+                && (self.has_reference() || other.has_reference()))
         {
             return Relation::Unknown;
         }
@@ -3340,8 +3360,8 @@ pub(super) struct Cx<'a> {
     /// The number this query's set readings are memoized under, given at the
     /// first one; zero until then ([`Readings`]).
     query: Cell<u64>,
-    /// Whether a goal the rules decline is read by the sets, where no reference
-    /// stands in the way ([`Schema::decided_by_its_leaves`]).
+    /// Whether a goal the rules decline is read by the sets
+    /// ([`Schema::decided_by_its_leaves`]).
     reads_leaves: bool,
     /// The pair whose whole the sets have read, which a goal read by the sets does
     /// not read again; no pair where null.

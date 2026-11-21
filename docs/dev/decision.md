@@ -1462,9 +1462,20 @@ a whole kind's key, which needs no such question.
 a pair stops for the whole pair: at a cut, at what it cannot lower, past the depth.
 So `bool` below `Annotated[int, Lt(8)]` decides alone and declined beside a recursion,
 a class key or a third attribute record. A pair everything else declined is asked of
-the rules again with `reads_leaves` set, and a goal they decline, with no reference
-on either side, is lowered there (`a_goal_declined`), for `LEAF_READING` steps since
-no step counts a lowering. Asked of every goal the rules decline, the relation matrix
+the rules again with `reads_leaves` set, and a goal they decline is lowered there
+(`a_goal_declined`), for `LEAF_READING` steps since no step counts a lowering.
+
+A goal holding a reference is lowered only where a meet, a union or a complement
+tops one side. The rules read a connective member by member and branch by branch,
+and the sets read its normal form: `list[int] & (list[bool] | ~list) & J` is below
+`list[bool]` on the clause `list[int] & ~list`, empty by kind, which no member and no
+branch says alone, and the cut reference only widens the subject. That is the field
+two records met give when one guards it to its kind over the JSON fixpoint, the form
+a translation from JSON Schema writes for an `allOf` member narrowing an array's
+items, and the pair whole is past the depth, the outer meet a level of it. A goal a
+constructor or a reference tops on both sides is the rules' to take apart, into
+goals of its parts or onto their trail, and lowered whole such goals took two lists
+of lists around a back edge, a hundred deep, from 0.84 ms to 5.9 ms for no answer. Asked of every goal the rules decline, the relation matrix
 read ninety-six times its instructions, because a goal declined on the way to an answer
 another rule gives is the common case. Asked here it pays only on a pair that declines
 and holds a constructor or a reference (`holds_parts`), a pair of leaves being what the
@@ -1558,7 +1569,7 @@ under the same sets shares the number, and the memo is emptied at
 `the_readings_held_are_bounded` in `decision/tests.rs` hold the two claims.
 
 **A goal the last asking hands the sets is read once a query.** `a_goal_declined`
-reads each goal the rules decline with no reference on either side by the sets,
+reads each goal the rules decline by the sets,
 and a query repeats those goals: an equivalence of two recursions over lists of
 patterns asked the sets of 8 pairs 346 times, 160 million instructions where one
 reading apiece takes a few. The pair's answer is a function of the pair, the pool
