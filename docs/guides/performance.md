@@ -1365,11 +1365,17 @@ of the class, and what that instance can carry is read off the namespaces of
 the class's `__mro__`: which names each defines, whether each is a slot or a
 data descriptor, and whether instances carry a `__dict__`. The namespaces of
 `object`, the builtins a kind is read from and `BaseException` are static types
-no assignment reaches, so each is read once for the process; a class's own
-namespace is read once per relation, because an assignment to the class between
-two relations moves what the second one reads. The reading is most of what a
-refutation between two dataclasses costs: twenty thousand of its thirty-two
-thousand instructions on 3.14.
+no assignment reaches, so each is read once for the process. A class's own
+namespace is read once and kept: an assignment to the class between two
+relations moves what the second one reads, so the next relation walks the
+namespace and takes the kept reading only where it holds the same names, in
+their order, each read as the same member, which is the reading a fresh one
+would build. The walk spends what reading the namespace's items spends, and no
+copy of a name, no sort and no `hasattr` on a builtin type: a refutation between
+two dataclasses reads about 40% fewer instructions than with its classes read
+afresh, on CPython 3.15 and 3.12, as `scripts/perf_gate.py --binding-relation`
+counts it. A kept reading holds strings alone, so a class a program drops is
+freed as it would be.
 
 There is no wall-clock gate on this, and that is deliberate: a relation's
 wall-clock cost is a property of the pair, and pinning one would be pinning a

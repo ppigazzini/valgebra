@@ -325,8 +325,21 @@ reading, cached once per class for the query (`oracle.rs`). The names are one
 `Namespace` per class on the `__mro__`, shared by every class standing on it
 rather than copied into each. The namespaces of `object`, of the builtins a kind
 is read from and of `BaseException` are static types no assignment reaches, so
-the bindings read them once per process, and every other namespace once per
-query. A namespace and the order are read through `type`'s own descriptors, as
+the bindings read them once per process. Every other namespace's reading is kept
+across queries by its class's address (`KeptNamespace`) and handed back where
+the namespace still holds the same names, in their order, each read as the same
+member: the reading is built from those alone, so a check that finds them
+unchanged has the reading a fresh one would build, and one that finds an
+assignment, a deletion or a value's type turned into a data descriptor's reads
+the namespace afresh. The check spends what a reading spends on the
+namespace's items, and not a copy of each name, their sort or the namespace
+built from them. It keeps strings alone, so a class a program drops is freed
+as it would be, and a namespace whose `__slots__` is no exact `str` or tuple of
+them, whose iteration runs code, is read afresh every time. Whether a value's
+type is a data descriptor's is read once per process for the builtin types a
+namespace's values most often are (`builtin_descriptor`), static types no
+assignment reaches on any interpreter this builds for, and once per reading
+for any other. A namespace and the order are read through `type`'s own descriptors, as
 `inspect.getattr_static` reads them (`namespace_by_type` and `mro_of` in
 `oracle.rs`), and a hook where Python's special-method lookup finds it
 (`special_lookup`): Python dispatches `isinstance`, `==`, `len` and `iter`

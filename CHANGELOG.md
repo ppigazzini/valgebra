@@ -150,6 +150,13 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- **A relation keeps what it read of a class.** A refutation about a class reads what a direct
+  instance of it can carry off the namespaces of its `__mro__`, and a class's own reading is now
+  kept across relations and taken where the namespace still holds the same names, each read as the
+  same member, so an assignment to the class between two relations is read as it stands. A
+  refutation between two dataclasses reads 40.8% fewer instructions on CPython 3.15 and 3.12. The
+  kept readings hold strings alone, so a class a program drops is freed as it would be.
+
 - **A list of strings under one pattern reads the pattern once.** A list whose element is a `str`
   under one pattern, alone or beside length bounds, finds the pattern's compiled program once for
   the list, where each element's check looked it up: two hundred strings under one pattern read

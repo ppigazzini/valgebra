@@ -15,6 +15,7 @@ import textwrap
 import types
 import typing
 import uuid
+from collections.abc import Iterator
 from typing import (
     Annotated,
     Literal,
@@ -954,6 +955,137 @@ def test_a_dataclass_is_refuted_only_on_an_instance_that_can_carry_it() -> None:
         assert Validator(read).relation_to(Validator(str)) == "undecided"
         assert Validator(read).relation_to(Validator(Other)) == "undecided"
         assert Validator(read).is_subtype_of(read)
+
+
+@dataclasses.dataclass
+class _Unrelated:
+    y: str
+
+
+def _related(model: type) -> str:
+    """How a dataclass relates to one holding another field."""
+    return Validator(model).relation_to(Validator(_Unrelated))
+
+
+def test_a_class_assigned_to_between_two_relations_is_read_as_it_stands() -> None:
+    """A relation reads a class's namespaces as they stand when it is asked.
+
+    The reading of a class is kept from one relation to the next and handed
+    back only where its namespace holds the same names, in their order, each
+    read as the same member. So an assignment, a deletion, a name replacing
+    another and a value replaced by one of another type each move the second
+    relation's answer, as reading the class afresh moves it.
+    """
+
+    @dataclasses.dataclass
+    class Plain:
+        x: int
+
+    assert _related(Plain) == "not_subset"
+    Plain.x = _Stored()  # ty: ignore[invalid-assignment]
+    assert _related(Plain) == "undecided"
+    del Plain.x
+    assert _related(Plain) == "not_subset"
+    # Any `__getattribute__` a class's own namespace holds is read as a hook.
+    Plain.__getattribute__ = object.__getattribute__
+    assert _related(Plain) == "undecided"
+    del Plain.__getattribute__
+    assert _related(Plain) == "not_subset"
+
+    @dataclasses.dataclass
+    class Renamed:
+        x: int
+
+    Renamed.z = _Stored()  # ty: ignore[missing-attribute]
+    assert _related(Renamed) == "not_subset", "a descriptor no field names"
+    del Renamed.z  # ty: ignore[missing-attribute]
+    Renamed.x = _Stored()  # ty: ignore[invalid-assignment]
+    assert _related(Renamed) == "undecided", "the same member under another name"
+
+    @dataclasses.dataclass
+    class Valued:
+        x: int = 0
+
+    assert _related(Valued) == "not_subset"
+    Valued.x = property(lambda _self: 0)  # ty: ignore[invalid-assignment]
+    assert _related(Valued) == "undecided", "a builtin value turned a data descriptor"
+    Valued.x = 0
+    assert _related(Valued) == "not_subset"
+
+
+def test_a_class_changed_past_its_namespace_is_read_as_it_stands() -> None:
+    """A change no name of a class's own namespace shows moves the answer too.
+
+    A value's type gaining `__set__`, a base's namespace changing and a
+    `__slots__` list edited in place each leave every name where it was, and
+    each moves what an instance can carry, which the next relation reads. A
+    `__slots__` whose iteration runs code is read afresh, and run as often as
+    reading it afresh runs it.
+    """
+    related = _related
+
+    class Shifting:
+        """A value the class holds, whose type becomes a data descriptor's."""
+
+    @dataclasses.dataclass
+    class Holding:
+        x: object = dataclasses.field(default_factory=object)
+        shifting: object = Shifting()
+
+    assert related(Holding) == "not_subset"
+    Shifting.__set__ = lambda _self, _instance, _value: None  # ty: ignore[missing-attribute]
+    assert related(Holding) == "undecided"
+    del Shifting.__set__  # ty: ignore[missing-attribute]
+    assert related(Holding) == "not_subset"
+
+    class Base:
+        pass
+
+    @dataclasses.dataclass
+    class Child(Base):
+        x: int
+
+    assert related(Child) == "not_subset"
+    Base.x = _Stored()  # ty: ignore[missing-attribute]
+    assert related(Child) == "undecided"
+    del Base.x  # ty: ignore[missing-attribute]
+    assert related(Child) == "not_subset"
+
+    @dataclasses.dataclass
+    class Listed:
+        __slots__ = ["x"]
+        x: int
+
+    assert related(Listed) == "not_subset"
+    Listed.__slots__.remove("x")
+    assert related(Listed) == "undecided", "a slot no `__slots__` names is a descriptor"
+
+    class Counted(list[str]):
+        """Slots whose reading runs code of the class's, counted."""
+
+        reads = 0
+
+        def __iter__(self) -> Iterator[str]:
+            Counted.reads += 1
+            return super().__iter__()
+
+    class Turning:
+        """A value whose type turns into a data descriptor's."""
+
+    @dataclasses.dataclass
+    class Iterated:
+        __slots__ = Counted(["x"])
+        x: int
+        turning = Turning()
+
+    def reads_per_relation() -> int:
+        before = Counted.reads
+        related(Iterated)
+        return Counted.reads - before
+
+    once = reads_per_relation()
+    Turning.__set__ = lambda _self, _instance, _value: None  # ty: ignore[missing-attribute]
+    assert reads_per_relation() == once, "the class's code runs as often as before"
 
 
 def test_a_getattr_hook_answers_where_a_lookup_finds_nothing() -> None:

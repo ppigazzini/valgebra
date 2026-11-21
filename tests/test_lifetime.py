@@ -83,6 +83,25 @@ def test_the_same_classes_without_the_cycle_are_collected_too() -> None:
     assert _classes_alive(200, own_validator=False) == 0
 
 
+@NEEDS_A_RELEASING_BOUNDARY
+def test_a_class_a_relation_read_is_collected() -> None:
+    """A relation keeps what it read of a class, and not the class.
+
+    A refutation reads what a direct instance can carry off the namespaces of
+    the class's `__mro__`, and the reading is kept for the next relation: as
+    names and what each holds, which reach neither the class nor its values.
+    """
+    gc.collect()
+    watches: list[weakref.ref[type]] = []
+    for _ in range(200):
+        model = type("Model", (), {"__annotations__": {"a": int}, "a": 0})
+        assert Validator(model).relation_to(Validator(str)) == "not_subset"
+        watches.append(weakref.ref(model))
+        del model
+    gc.collect()
+    assert sum(1 for watch in watches if watch() is not None) == 0
+
+
 @pytest.mark.skipif(
     not hasattr(gc, "is_tracked"),
     reason="this collector traces every object, so nothing carries the flag",

@@ -2145,3 +2145,203 @@ rusty_fork_test! {
         });
     }
 }
+
+rusty_fork_test! {
+    /// The namespace readings kept across queries stop at
+    /// `MAX_KEPT_NAMESPACES` classes: one past it empties the table and keeps
+    /// the class that crossed it, which a reading of it then finds. Run in a
+    /// process of its own, since the table is the process's.
+    #[test]
+    fn the_kept_namespaces_stop_at_their_bound() {
+        Python::attach(|py| {
+            let make = py.get_type::<PyType>();
+            let class = |at: usize| {
+                let namespace = PyDict::new(py);
+                namespace.set_item("a", at).expect("a namespace");
+                make.call1((format!("Kept{at}"), PyTuple::empty(py), namespace))
+                    .expect("a class")
+            };
+            let held = || {
+                KEPT_NAMESPACES
+                    .get(py)
+                    .map_or(0, |table| table.lock().expect("not poisoned").len())
+            };
+            let mut classes = Vec::new();
+            for at in 0..=MAX_KEPT_NAMESPACES {
+                if at == MAX_KEPT_NAMESPACES {
+                    assert_eq!(held(), MAX_KEPT_NAMESPACES, "each class kept up to the bound");
+                }
+                let read = class(at);
+                read_namespace(&read, false, &mut Vec::new()).expect("a namespace reads");
+                classes.push(read);
+            }
+            assert_eq!(held(), 1);
+            let (first, last) = (&classes[0], &classes[MAX_KEPT_NAMESPACES]);
+            assert!(KeptNamespace::of(first).is_none());
+            assert!(KeptNamespace::of(last).is_some());
+            let mut descriptors = Vec::new();
+            let kept = KeptNamespace::of(last).expect("kept");
+            assert!(
+                kept.holds(&namespace_by_type(last).expect("read"), last, &mut descriptors)
+                    .expect("read"),
+                "the namespace it was read from holds"
+            );
+            last.setattr("b", 1).expect("an assignment");
+            assert!(
+                !kept
+                    .holds(&namespace_by_type(last).expect("read"), last, &mut descriptors)
+                    .expect("read"),
+                "a namespace missing a name is not the one kept"
+            );
+        });
+    }
+}
+
+rusty_fork_test! {
+    /// A namespace is kept where every name is an exact `str` and its
+    /// `__slots__`, if any, is an exact `str` or tuple of them, and never for a
+    /// generic namespace; a name no slot names, of a builtin value type, is
+    /// marked by its type. Read off the table, since a relation answers alike
+    /// with the reading kept or read again.
+    #[test]
+    fn a_namespace_is_kept_where_its_reading_runs_no_code() {
+        Python::attach(|py| {
+            let module = PyModule::from_code(
+                py,
+                c"class Plain:\n    alpha = 1\n    def f(self):\n        pass\n\
+                  class Slotted:\n    __slots__ = ('x',)\n\
+                  class Listed:\n    __slots__ = ['x']\n\
+                  class Odd(str):\n    pass\n\
+                  Keyed = type('Keyed', (), {Odd('odd'): 1})\n\
+                  class Fresh:\n    pass\n",
+                c"kept.py",
+                c"kept",
+            )
+            .expect("the classes");
+            let class = |name: &str| module.getattr(name).expect("a class");
+            let read = |class: &Bound<'_, PyAny>, generic: bool| {
+                read_namespace(class, generic, &mut Vec::new()).expect("a namespace reads");
+            };
+            let flag = |class: &Bound<'_, PyAny>, name: &str| {
+                KeptNamespace::of(class)
+                    .expect("kept")
+                    .members
+                    .iter()
+                    .find(|(kept, _, _)| kept.bind(py).to_str().is_ok_and(|kept| kept == name))
+                    .expect("the name")
+                    .2
+            };
+            let plain = class("Plain");
+            read(&plain, false);
+            assert!(flag(&plain, "alpha").is_some() && flag(&plain, "f").is_some());
+            let slotted = class("Slotted");
+            read(&slotted, false);
+            assert_eq!(flag(&slotted, "x"), None, "a slot is read off its descriptor");
+            assert_eq!(flag(&slotted, "__slots__"), None);
+            assert!(flag(&slotted, "__module__").is_some());
+            for unkept in ["Listed", "Keyed"] {
+                read(&class(unkept), false);
+                assert!(KeptNamespace::of(&class(unkept)).is_none(), "{unkept}");
+            }
+            read(&class("Fresh"), true);
+            assert!(KeptNamespace::of(&class("Fresh")).is_none(), "a generic namespace");
+        });
+    }
+
+    /// A kept reading holds a namespace with the same names in their order,
+    /// each read as the same member, and no other: a name at another address
+    /// with the same text holds, and another text, a value of another type, a
+    /// name deleted, another class's slot descriptor and other slot names do
+    /// not.
+    #[test]
+    fn a_kept_reading_holds_only_its_own_names_and_members() {
+        Python::attach(|py| {
+            let module = PyModule::from_code(
+                py,
+                c"class Plain:\n    alpha = 1\n    def f(self):\n        pass\n\
+                  class Slotted:\n    __slots__ = ('x',)\n\
+                  class Other:\n    __slots__ = ('x',)\n",
+                c"held.py",
+                c"held",
+            )
+            .expect("the classes");
+            let class = |name: &str| module.getattr(name).expect("a class");
+            let holds = |kept: &KeptNamespace, class: &Bound<'_, PyAny>| {
+                kept.holds(&namespace_by_type(class).expect("read"), class, &mut Vec::new())
+                    .expect("read")
+            };
+            let plain = class("Plain");
+            read_namespace(&plain, false, &mut Vec::new()).expect("a namespace reads");
+            let kept = KeptNamespace::of(&plain).expect("kept");
+            assert!(holds(&kept, &plain), "the namespace it was read from");
+            let respelled = |text: &str| KeptNamespace {
+                members: kept
+                    .members
+                    .iter()
+                    .map(|(name, member, builtin)| {
+                        let named = name.bind(py).to_str().is_ok_and(|name| name == "alpha");
+                        let name = if named {
+                            PyString::new(py, text).unbind()
+                        } else {
+                            name.clone_ref(py)
+                        };
+                        (name, *member, *builtin)
+                    })
+                    .collect(),
+                slots_at: kept.slots_at,
+                slots: kept.slots.clone(),
+                reading: kept.reading.clone(),
+            };
+            assert!(holds(&respelled("alpha"), &plain), "the same text elsewhere");
+            assert!(!holds(&respelled("omega"), &plain), "another text");
+            plain.setattr("alpha", "a").expect("an assignment");
+            assert!(!holds(&kept, &plain), "a value of another type");
+            plain.setattr("alpha", 2).expect("an assignment");
+            assert!(holds(&kept, &plain), "a value of the same builtin type");
+            plain.setattr("omega", 1).expect("an assignment");
+            read_namespace(&plain, false, &mut Vec::new()).expect("a namespace reads");
+            let grown = KeptNamespace::of(&plain).expect("kept");
+            plain.delattr("omega").expect("a deletion");
+            assert!(!holds(&grown, &plain), "the last name deleted");
+            let slotted = class("Slotted");
+            read_namespace(&slotted, false, &mut Vec::new()).expect("a namespace reads");
+            let kept = KeptNamespace::of(&slotted).expect("kept");
+            assert!(holds(&kept, &slotted), "the slots it was read with");
+            let foreign = namespace_by_type(&class("Other"))
+                .and_then(|namespace| namespace.get_item("x"))
+                .expect("Other's slot");
+            slotted.setattr("x", &foreign).expect("an assignment");
+            assert!(!holds(&kept, &slotted), "another class's slot descriptor");
+            let renamed = PyTuple::new(py, ["y"]).expect("a tuple");
+            let slotted = class("Slotted");
+            read_namespace(&slotted, false, &mut Vec::new()).expect("a namespace reads");
+            let kept = KeptNamespace::of(&slotted).expect("kept");
+            slotted.setattr("__slots__", renamed).expect("an assignment");
+            assert!(!holds(&kept, &slotted), "other slot names");
+        });
+    }
+}
+
+/// Slots read without running code are an exact `str` or an exact tuple of
+/// exact strings, and nothing else.
+#[test]
+fn slots_run_no_code_only_as_an_exact_str_or_tuple_of_them() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class T(tuple):\n    pass\nclass S(str):\n    pass\n\
+              SHAPES = ['x', ('x', 'y'), ['x'], T(('x',)), (S('x'),), ('x', 1)]\n",
+            c"slots.py",
+            c"slots",
+        )
+        .expect("the shapes");
+        let shapes: Vec<bool> = module
+            .getattr("SHAPES")
+            .expect("the shapes")
+            .try_iter()
+            .expect("a list")
+            .map(|shape| slots_run_no_code(&shape.expect("a shape")))
+            .collect();
+        assert_eq!(shapes, [true, true, false, false, false, false]);
+    });
+}
