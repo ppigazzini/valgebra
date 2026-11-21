@@ -547,7 +547,17 @@ answers `"undecided"`.
   `not_subset` of `Annotated[dict[str, int], MaxLen(1)]`. A mapping under bounds
   that admit its required fields holds the value with those alone, so
   `Annotated[{"a?": int}, MinLen(0)]` is `not_subset` of `nothing` and of
-  `{"a": int}`, on `{}`. A mapping holds no
+  `{"a": int}`, on `{}`. A record under a length bound that counts its names is
+  read as the record those leave: a least length counting every name of a
+  closed record requires each, and a greatest length counting its required
+  names admits no other key, so `Annotated[{"a?": int}, MinLen(1)]` is `subset`
+  of `{"a": int}`. A bound over every dict, met with records, reads the one
+  record they meet into the same way, which is how a translation from JSON
+  Schema writes `minProperties` and `maxProperties` beside an object:
+  `{"a": int, str: int} & Annotated[dict[str, Any], MaxLen(1)]` is `subset` of
+  the closed `{"a": int}`. A bound counting fewer names than a record has
+  proves nothing of any one of them; a relation takes only proofs through the
+  record, and a refined record's emptiness is read off it. A mapping holds no
   more keys than its fields and those each clause's key type holds apart, so
   `dict[bool, int]` and `dict[Literal["a", "b"], int]` are `subset` of
   `Annotated[dict, MaxLen(2)]`. A set or a dict

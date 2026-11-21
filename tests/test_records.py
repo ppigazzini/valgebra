@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from typing import Annotated, Any, Literal, TypedDict
 
 import pytest
-from annotated_types import MinLen
+from annotated_types import MaxLen, MinLen
 
 from valgebra import (
     ValidationError,
@@ -619,3 +619,38 @@ def test_a_field_s_set_is_asked_of_the_record_holding_it() -> None:
     carries_b = intersection(held, {"tags": Annotated[list[Literal["b"]], MinLen(1)]})
     assert Validator(carries_b).relation_to(nothing) == "not_subset"
     assert held.relation_to({"tags": [complement(Literal["c"])]}) == "subset"
+
+
+# THEORY: a-refinement-narrows-its-base
+def test_a_length_bound_beside_a_record_leaves_the_record_it_counts() -> None:
+    """A length bound over every dict, beside a record, reads the keys it counts.
+
+    A translation from JSON Schema writes `minProperties` and `maxProperties` as a
+    bound over every dict beside the object's record, and a `propertyNames` that
+    spells its names out as the closed record of them. A least length counting
+    every name of a closed record requires each, and a greatest length counting
+    the required names admits no other key, so each object below holds or lacks
+    the key the record below it requires or refuses. A bound counting fewer
+    names than the record has proves nothing of any one of them.
+    """
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    at_least_one = Annotated[dict[str, Any], MinLen(1)]
+    at_most_one = Annotated[dict[str, Any], MaxLen(1)]
+    named = intersection({str: json}, {"k?": json}, at_least_one)
+    assert named.relation_to({"k": anything, str: anything}) == "subset"
+    assert (
+        intersection({"a": json, str: json}, at_most_one).relation_to({"a": anything})
+        == "subset"
+    )
+    assert (
+        intersection(dict[Literal["k"], Any], at_least_one).relation_to(
+            {"k": anything, str: anything}
+        )
+        == "subset"
+    )
+    optional_a = Validator({"a?": json})
+    refined = Validator(Annotated[optional_a, MinLen(1)])  # ty: ignore[invalid-type-form]
+    assert refined.relation_to({"a": anything}) == "subset"
+    either = intersection({"a?": json, "b?": json}, at_least_one)
+    assert either.relation_to({"a": anything, str: anything}) != "subset"
+    assert either.is_valid({"b": 1})

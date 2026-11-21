@@ -1402,7 +1402,17 @@ names (`the_record_a_count_requires`): each value holds each name, so a proof th
 record stands, and the record's plain values, whose keys are exact, are the mapping's, so
 it holds a value and is refuted against the empty set or another kind on one. A refutation
 through the record otherwise may stand on a `str` subclass's key, which a field reads and a
-`Literal` does not, and is not taken. A record below a map is asked of the sets once more
+`Literal` does not, and is not taken. A record under length bounds that count its names is
+the record they leave (`the_record_a_refinement_leaves`), read through the count above, its
+emptiness included, the record being the refinement's own set; and a bound over every mapping met
+with keyed maps narrows the one record R◦ they meet into [Cas23, (12)] the same way
+(`the_record_a_length_leaves`): a least length counting every name of a closed record
+requires each, and a greatest length counting its required names closes it to them
+[JV20, §3.2]. That is a translation's `minProperties` and `maxProperties` beside an object,
+and its `propertyNames` spelled as the closed record of its names. The meet is below the
+record, a member of another shape left out, so the relation takes a proof through it and
+nothing else; one word-keyed mapping beside the bound goes to the count above
+(`a_length_bound_beside_a_record_leaves_the_record_it_counts`). A record below a map is asked of the sets once more
 without the map's clauses of constants the record never spells
 (`a_map_below_its_clauses_the_subject_spells`): a map without a clause is narrower, so the
 proof stands, and the sets read a `Literal` key as every key equal to it, which on the

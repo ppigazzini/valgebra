@@ -420,12 +420,130 @@ pub(super) fn keyed_map_subtype(
     }
 }
 
+/// The one record a meet of keyed maps is under length bounds that count its
+/// names, or `None` where the bounds count none of them. A length bound narrows
+/// what its base holds [JV20, §3.2], and a bound over every mapping met with
+/// keyed maps narrows the one record R◦ they meet into [Cas23, (12)], whose
+/// keys are its names where every part of the key partition admits none. So a
+/// least length counting every name of a closed R◦ leaves each name present,
+/// and a greatest length counting its required names leaves no key beside them:
+/// `{"a?": J} & Annotated[dict[str, Any], MinLen(1)]` is `{"a": J}`, and
+/// `{"a": J, str: J} & Annotated[dict[str, Any], MaxLen(1)]` is the closed
+/// `{"a": J}`. The members are keyed maps and refinements of a map holding every key of a
+/// kind by `MinLen` and `MaxLen` alone, one at least of each; a member of
+/// another shape is left out, the meet being below the record, so a reading
+/// through it is a proof or nothing.
+#[inline(never)]
+pub(super) fn the_record_a_length_leaves(members: &[Schema], cx: &Cx<'_>) -> Option<Schema> {
+    let mut bounds = None;
+    let mut maps = Vec::with_capacity(members.len());
+    for member in members {
+        match member {
+            Schema::KeyedMap { .. } => maps.push(member.clone()),
+            Schema::Refine { base, constraints } if every_mapping(base) => {
+                let (least, most) = bounds.get_or_insert((0, usize::MAX));
+                for constraint in constraints.iter() {
+                    match constraint {
+                        Constraint::MinLen(len) => *least = (*least).max(*len),
+                        Constraint::MaxLen(len) => *most = (*most).min(*len),
+                        _ => return None,
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let (least, most) = bounds?;
+    if least > most {
+        return None;
+    }
+    counted(&maps, least, most, cx).or_else(|| match &maps[..] {
+        // One mapping keyed by words is the record its count requires where the
+        // least length counts every word, a greatest one past it narrowing
+        // nothing more.
+        [map] => the_record_a_count_requires(
+            &Schema::refine(map.clone(), vec![Constraint::MinLen(least)]),
+            cx,
+        ),
+        _ => None,
+    })
+}
+
+/// [`the_record_a_length_leaves`] of one keyed map refined by length bounds
+/// alone, `Annotated[{"a?": J}, MinLen(1)]` being `{"a": J}`.
+#[inline(never)]
+pub(super) fn the_record_a_refinement_leaves(subject: &Schema, cx: &Cx<'_>) -> Option<Schema> {
+    let Schema::Refine { base, constraints } = subject else {
+        return None;
+    };
+    if !matches!(**base, Schema::KeyedMap { .. }) {
+        return None;
+    }
+    let (mut least, mut most) = (0, usize::MAX);
+    for constraint in constraints.iter() {
+        match constraint {
+            Constraint::MinLen(len) => least = least.max(*len),
+            Constraint::MaxLen(len) => most = most.min(*len),
+            _ => return None,
+        }
+    }
+    if least > most {
+        return None;
+    }
+    counted(core::slice::from_ref(&**base), least, most, cx)
+}
+
+/// The record R◦ of `maps` is under a length of `least` to `most`: every name
+/// required where R◦ admits no other key and `least` counts them all, and the
+/// closed record of its required names where `most` counts those.
+fn counted(maps: &[Schema], least: usize, most: usize, cx: &Cx<'_>) -> Option<Schema> {
+    let met = record_of_maps(maps, cx)?;
+    let closed = met.parts.iter().all(Option::is_none);
+    let required = met.named.iter().filter(|(_, slot)| !slot.absent).count();
+    let kept: Vec<Field> = if closed && least == met.named.len() {
+        met.named
+            .iter()
+            .map(|(name, slot)| Field {
+                name: (*name).into(),
+                schema: slot.ty.clone(),
+                required: true,
+            })
+            .collect()
+    } else if most == required {
+        met.named
+            .iter()
+            .filter(|(_, slot)| !slot.absent)
+            .map(|(name, slot)| Field {
+                name: (*name).into(),
+                schema: slot.ty.clone(),
+                required: true,
+            })
+            .collect()
+    } else {
+        return None;
+    };
+    Some(Schema::keyed_map(kept, Vec::new()))
+}
+
+/// Whether `base` is a map holding every key of a kind, or every key, with any
+/// value: `dict[str, Any]` or `dict[Any, Any]`, which a translation's
+/// `minProperties` and `maxProperties` bound.
+fn every_mapping(base: &Schema) -> bool {
+    matches!(base, Schema::KeyedMap { fields, defaults }
+        if fields.is_empty()
+            && matches!(&defaults[..], [clause]
+                if matches!(clause.key, Schema::Str | Schema::Anything(_))
+                    && matches!(clause.value, Schema::Anything(_))))
+}
+
 /// The record a mapping keyed by words is, under a length that counts every word:
 /// each value then holds each name. A `Literal` key is its exact type and a field
 /// reads every key equal to its name, so the mapping is below the record, and a
 /// plain value of the record, whose keys are exact, is a value of the mapping.
-/// `None` for any other subject: a field beside the clauses, a key holding a kind
-/// or a name twice, a key of another kind, or a constraint past the count.
+/// A record refined by lengths alone is the record they leave
+/// ([`the_record_a_refinement_leaves`]). `None` for any other subject: a key
+/// holding a kind or a name twice, a key of another kind, or a constraint past
+/// the count.
 pub(super) fn the_record_a_count_requires(subject: &Schema, cx: &Cx<'_>) -> Option<Schema> {
     let Schema::Refine { base, constraints } = subject else {
         return None;
@@ -434,7 +552,7 @@ pub(super) fn the_record_a_count_requires(subject: &Schema, cx: &Cx<'_>) -> Opti
         return None;
     };
     if !fields.is_empty() || defaults.is_empty() {
-        return None;
+        return the_record_a_refinement_leaves(subject, cx);
     }
     let mut named: Vec<Field> = Vec::new();
     for clause in defaults.iter() {

@@ -14883,8 +14883,19 @@ mod one_member {
         // A maximum past the required fields leaves them the value.
         let at_most = Schema::refine(optional.clone(), vec![Constraint::MaxLen(1)]);
         assert_eq!(holding(&at_most), Relation::Fails);
-        // Past the required fields the bound asks for more than this reads.
-        assert_ne!(holding(&at_least(optional, 1)), Relation::Fails);
+        // A least length counting every name of a closed record leaves the
+        // record requiring them, whose value it holds.
+        assert_eq!(holding(&at_least(optional, 1)), Relation::Fails);
+        // Past the required fields, and short of every name, the bound asks for
+        // more than this reads.
+        let two = Schema::keyed_map(
+            vec![
+                field("a", Schema::Int, false),
+                field("b", Schema::Int, false),
+            ],
+            Vec::new(),
+        );
+        assert_ne!(holding(&at_least(two, 1)), Relation::Fails);
         // A required field with no reading of a value leaves the mapping open.
         let opaque = Schema::refine(
             Schema::ANYTHING,
@@ -16056,6 +16067,164 @@ mod a_part_at_a_time {
     }
 }
 
+// THEORY: a-refinement-narrows-its-base, a-record-splits-across-a-union
+/// A length bound over every mapping, beside keyed maps, leaves the record they
+/// meet into narrowed by the lengths it counts [JV20, §3.2]. A least length
+/// counting every name of a closed record requires each, and a greatest length
+/// counting the required names closes the record to them. A bound counting
+/// fewer names than the record has, a constraint other than a length, or a bound
+/// over part of the mappings leaves nothing to read.
+#[test]
+fn a_length_bound_beside_a_record_leaves_the_record_it_counts() {
+    use super::records::the_record_a_length_leaves;
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let every = |key: Schema| {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key,
+                value: Schema::ANYTHING,
+            }],
+        )
+    };
+    let bounded = |constraint: Constraint| Schema::refine(every(Schema::Str), vec![constraint]);
+    let closed = |fields: Vec<Field>| Schema::keyed_map(fields, Vec::new());
+    let open = |fields: Vec<Field>| {
+        Schema::keyed_map(
+            fields,
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        )
+    };
+    let read = |members: Vec<Schema>| the_record_a_length_leaves(&members, &cx);
+    let optional_a = closed(vec![field("a", Schema::Int, false)]);
+    assert_eq!(
+        read(vec![optional_a.clone(), bounded(Constraint::MinLen(1))]),
+        Some(closed(vec![field("a", Schema::Int, true)]))
+    );
+    assert_eq!(
+        read(vec![
+            open(vec![field("a", Schema::Int, true)]),
+            bounded(Constraint::MaxLen(1))
+        ]),
+        Some(closed(vec![field("a", Schema::Int, true)]))
+    );
+    assert_eq!(
+        read(vec![
+            optional_a.clone(),
+            open(vec![field("b", Schema::Int, false)]),
+            Schema::refine(every(Schema::ANYTHING), vec![Constraint::MaxLen(0)]),
+        ]),
+        Some(closed(Vec::new()))
+    );
+    let two = closed(vec![
+        field("a", Schema::Int, false),
+        field("b", Schema::Int, false),
+    ]);
+    assert_eq!(
+        read(vec![two.clone(), bounded(Constraint::MinLen(1))]),
+        None
+    );
+    assert_eq!(
+        read(vec![two, bounded(Constraint::MinLen(2))]),
+        Some(closed(vec![
+            field("a", Schema::Int, true),
+            field("b", Schema::Int, true)
+        ]))
+    );
+    assert_eq!(
+        read(vec![open(Vec::new()), bounded(Constraint::MinLen(1))]),
+        None
+    );
+    let predicate = Schema::refine(
+        every(Schema::Str),
+        vec![Constraint::Predicate(PredIx::new(0))],
+    );
+    assert_eq!(read(vec![optional_a.clone(), predicate]), None);
+    let part = Schema::refine(
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        ),
+        vec![Constraint::MinLen(1)],
+    );
+    assert_eq!(read(vec![optional_a.clone(), part]), None);
+    assert_eq!(read(vec![optional_a.clone()]), None);
+    assert_eq!(
+        read(vec![
+            optional_a.clone(),
+            bounded(Constraint::MinLen(1)),
+            bounded(Constraint::MaxLen(1))
+        ]),
+        Some(closed(vec![field("a", Schema::Int, true)]))
+    );
+    assert_eq!(
+        read(vec![
+            optional_a.clone(),
+            bounded(Constraint::MinLen(2)),
+            bounded(Constraint::MaxLen(1))
+        ]),
+        None
+    );
+}
+
+// THEORY: a-refinement-narrows-its-base
+/// A record refined by lengths alone is the record they leave: a least length
+/// counting every name of a closed record requires each, a greatest length
+/// counting the required names closes it to them, and bounds that cross leave
+/// nothing to read.
+#[test]
+fn a_record_refined_by_lengths_is_the_record_they_leave() {
+    use super::records::the_record_a_refinement_leaves;
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let closed = |fields: Vec<Field>| Schema::keyed_map(fields, Vec::new());
+    let open = |fields: Vec<Field>| {
+        Schema::keyed_map(
+            fields,
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        )
+    };
+    let optional_a = closed(vec![field("a", Schema::Int, false)]);
+    let refined = |base: Schema, constraints: Vec<Constraint>| {
+        the_record_a_refinement_leaves(&Schema::refine(base, constraints), &cx)
+    };
+    assert_eq!(
+        refined(optional_a.clone(), vec![Constraint::MinLen(1)]),
+        Some(closed(vec![field("a", Schema::Int, true)]))
+    );
+    assert_eq!(
+        refined(
+            optional_a.clone(),
+            vec![Constraint::MinLen(1), Constraint::MaxLen(1)]
+        ),
+        Some(closed(vec![field("a", Schema::Int, true)]))
+    );
+    assert_eq!(
+        refined(
+            optional_a,
+            vec![Constraint::MinLen(2), Constraint::MaxLen(1)]
+        ),
+        None
+    );
+    assert_eq!(
+        refined(
+            open(vec![field("a", Schema::Int, true)]),
+            vec![Constraint::MaxLen(1)]
+        ),
+        Some(closed(vec![field("a", Schema::Int, true)]))
+    );
+}
+
 /// A mapping keyed by words under a length that counts every word, read as the
 /// record of those names.
 mod a_counted_mapping {
@@ -16157,6 +16326,52 @@ mod a_counted_mapping {
         assert!(records::the_record_a_count_requires(&kind, &cx).is_none());
         let counted = mapping(word(0), vec![Constraint::MinLen(1)]);
         assert!(records::the_record_a_count_requires(&counted, &cx).is_some());
+    }
+
+    // THEORY: a-refinement-narrows-its-base
+    /// One mapping of words beside a bound over every dict is the mapping under
+    /// that bound, so a least length counting every word leaves the record of
+    /// the words, and a shorter one leaves nothing to read.
+    #[test]
+    fn a_bound_beside_a_mapping_of_words_counts_its_words() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let words = |key: Schema| {
+            Schema::keyed_map(
+                Vec::new(),
+                vec![MapClause {
+                    key,
+                    value: Schema::Int,
+                }],
+            )
+        };
+        let every = |constraints: Vec<Constraint>| {
+            Schema::refine(
+                Schema::keyed_map(
+                    Vec::new(),
+                    vec![MapClause {
+                        key: Schema::Str,
+                        value: Schema::ANYTHING,
+                    }],
+                ),
+                constraints,
+            )
+        };
+        let one = [words(word(0)), every(vec![Constraint::MinLen(1)])];
+        assert_eq!(
+            records::the_record_a_length_leaves(&one, &cx)
+                .map(|record| relation(&record, &record_a())),
+            Some(Relation::Holds)
+        );
+        let short = [
+            words(Schema::union([word(0), word(1)])),
+            every(vec![Constraint::MinLen(1)]),
+        ];
+        assert_eq!(records::the_record_a_length_leaves(&short, &cx), None);
+    }
+
+    fn record_a() -> Schema {
+        record(&["a"])
     }
 }
 

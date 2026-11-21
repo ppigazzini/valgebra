@@ -22,6 +22,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a goal holding a reference is read by the sets where a connective tops it
 - feat: a guard is dropped from a meet beside a member of its kind
 - feat: a meet reads a complement pushed in and a branch in its clause
+- feat: a length bound beside a record leaves the record it counts
 
 -->
 
@@ -112,6 +113,22 @@ answer of its own, or a repair to a change not yet released.
   before the distribution of the meet as written. On the containment suite and the corpus read
   through `valgebra-jsonschema` no answer moves, and against 0.0.30's recording no decision is lost
   and none is slower.
+
+- **A length bound beside a record leaves the record it counts.**
+  A record under a length bound that counts its names is read as the record those leave: a least
+  length counting every name of a closed record requires each, and a greatest length counting its
+  required names admits no other key, so `Annotated[{"a?": int}, MinLen(1)]` is `subset` of `{"a":
+  int}`. A bound over every dict met with records reads the one record they meet into the same way,
+  and one mapping keyed by words beside it goes to the count of its words: `dict[Literal["k"], Any]
+  & Annotated[dict[str, Any], MinLen(1)]` is `subset` of `{"k": anything, str: anything}`, where it
+  was `undecided`. That is how a translation from JSON Schema writes `minProperties` and
+  `maxProperties` beside an object, and `propertyNames` spelled as the closed record of its names,
+  so presence through a `minProperties` counting an object's every possible name, and absence
+  through a `maxProperties` counting its required ones, is decided. A bound counting fewer names
+  proves nothing of any one of them; the relation takes only proofs through the record, and a
+  refined record's emptiness is read off it. On the containment suite and the corpus read through
+  `valgebra-jsonschema` no answer moves, and against 0.0.30's recording no decision is lost and none
+  is slower.
 
 ### Changed
 

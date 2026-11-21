@@ -2824,6 +2824,55 @@ proptest! {
         prop_assert_eq!(met.verdict_under_defs(&defs), Verdict::Empty);
     }
 
+    // THEORY: a-refinement-narrows-its-base
+    /// The record a length bound leaves beside a record holds every value the
+    /// meet holds. Over a drawn record of up to three fields, closed or open, met
+    /// with a bound over every mapping that counts all its names or its required
+    /// ones, every sampled value of the meet is a value of the record read.
+    #[test]
+    fn the_record_a_length_bound_leaves_holds_the_values_of_its_meet(
+        fields in proptest::collection::vec((decidable_schema(), proptest::bool::ANY), 1..4),
+        open in proptest::bool::ANY,
+        least in proptest::bool::ANY,
+    ) {
+        let pool = const_pool();
+        let named: Vec<Field> = ["a", "b", "c"]
+            .iter()
+            .zip(&fields)
+            .map(|(name, (schema, required))| Field {
+                name: (*name).into(),
+                schema: built(schema),
+                required: *required,
+            })
+            .collect();
+        let required = named.iter().filter(|field| field.required).count();
+        let count = named.len();
+        let clauses = if open {
+            vec![MapClause { key: Schema::Str, value: Schema::ANYTHING }]
+        } else {
+            Vec::new()
+        };
+        let record = Schema::keyed_map(named, clauses);
+        let bound = if least { Constraint::MinLen(count) } else { Constraint::MaxLen(required) };
+        let every = Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause { key: Schema::Str, value: Schema::ANYTHING }],
+        );
+        let members = vec![record.clone(), Schema::refine(every, vec![bound])];
+        if let Some(read) = crate::decision::the_record_a_length_leaves_of(&members) {
+            let meet = Schema::Intersection(members.into());
+            for value in boundary_values(&[&record, &read]) {
+                prop_assert!(
+                    !member_full(&meet, &value, &pool) || member_full(&read, &value, &pool),
+                    "{:?} holds {:?} and {:?} does not",
+                    meet,
+                    value,
+                    read
+                );
+            }
+        }
+    }
+
     // THEORY: lattice-theory
     /// A narrowed meet holds the values its meet holds. Over drawn `x`, `y`, `z`
     /// and `w`, built as a caller builds them, four meets each narrow by one of

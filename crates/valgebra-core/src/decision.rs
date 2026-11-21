@@ -496,6 +496,14 @@ pub(crate) fn narrowed_meet_of(members: &[Schema]) -> Option<Schema> {
     )
 }
 
+/// The record a meet's length bounds leave, with no definitions and no oracle:
+/// the laws hold it to membership.
+#[cfg(test)]
+pub(crate) fn the_record_a_length_leaves_of(members: &[Schema]) -> Option<Schema> {
+    let budget = Budget::new(DECISION_BUDGET);
+    records::the_record_a_length_leaves(members, &Cx::new(&NoLeafRelations, &[], &budget))
+}
+
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the
 /// signal a budgeted decision uses to stop and report the conservative answer.
 pub(super) fn spend(budget: &Budget) -> bool {
@@ -2914,6 +2922,23 @@ impl Schema {
             },
             _ => Relation::Unknown,
         }
+        .or_else(|| {
+            // Below the record its length bounds leave, a proof: the meet is
+            // below that record, which leaves out a member of another shape.
+            // Read only of a meet holding a refinement, which a meet of a class
+            // and its attributes never does.
+            if members
+                .iter()
+                .any(|member| matches!(member, Schema::Refine { .. }))
+            {
+                records::the_record_a_length_leaves(members, cx)
+                    .map_or(Relation::Unknown, |record| {
+                        record.is_subtype_rec(other, cx).proof_only()
+                    })
+            } else {
+                Relation::Unknown
+            }
+        })
         .or_else(|| self.unstructured(other, cx))
         .or_else(|| self.below_a_reference(other, cx))
     }
