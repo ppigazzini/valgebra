@@ -24,9 +24,9 @@ use valgebra_core::{
 use super::reads_its_length;
 use super::record::{RecordReading, check_attr_record, check_keyed_map};
 use super::scalar::{
-    FloatRange, Scalar, admitted_quietly, check_refine, constraints_hold, exact_of,
+    FloatRange, Scalar, admitted_quietly, check_refine, constraints_hold, exact_of, exact_text,
     exact_text_length, float_range, homogeneous_scalar_union, json_leaf_admits, leaf_admits,
-    leaf_reads_here, length_range, machine_range, machine_word, scalar_union_admits,
+    leaf_reads_here, length_range, machine_range, machine_word, pattern_range, scalar_union_admits,
     tree_json_leaf_admits, tree_leaf_admits,
 };
 use super::tree::tree_list_read;
@@ -35,7 +35,7 @@ use super::{
     mutated, reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
 };
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH};
-use crate::check::index::{Exact, LeafPlan};
+use crate::check::index::{Exact, LeafPlan, Regex};
 use crate::check::violation::{summarize_value, type_fail};
 use crate::codes::{
     Code, FROZEN_SET_TYPE, LIST_LENGTH, LIST_TYPE, SET_TYPE, TUPLE_LENGTH, TUPLE_TYPE,
@@ -1303,10 +1303,11 @@ fn refined_list_loop(
 }
 
 /// [`refined_scalar_list`] over strings: one range where every constraint is a
-/// length bound, and each element's constraints elsewhere. A call of its own,
-/// so the readers of the other kinds keep their layout: inlined beside them,
-/// the range took the floats' loop to 2.4% more instructions on the build
-/// without a profile (`--binding-refined-float`).
+/// length bound, one compiled pattern where one pattern stands among them, and
+/// each element's constraints elsewhere. A call of its own, so the readers of
+/// the other kinds keep their layout: inlined beside them, the range took the
+/// floats' loop to 2.4% more instructions on the build without a profile
+/// (`--binding-refined-float`).
 #[inline(never)]
 fn refined_str_list(
     list: &Bound<'_, PyList>,
@@ -1315,13 +1316,56 @@ fn refined_str_list(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
-    match length_range(constraints) {
-        Some(range) => length_range_list(list, range, base, constraints, value, frame),
-        #[expect(
-            clippy::redundant_closure_for_method_calls,
-            reason = "the method's path takes one lifetime, where the loop asks a test for every one"
-        )]
-        None => refined_list_loop(list, |v| v.is_str(), base, constraints, value, frame),
+    if let Some(range) = length_range(constraints) {
+        return length_range_list(list, range, base, constraints, value, frame);
+    }
+    if let Some((program, range)) = pattern_range(constraints, &frame.ctx) {
+        return pattern_list(list, program, range, base, constraints, value, frame);
+    }
+    #[expect(
+        clippy::redundant_closure_for_method_calls,
+        reason = "the method's path takes one lifetime, where the loop asks a test for every one"
+    )]
+    refined_list_loop(list, |v| v.is_str(), base, constraints, value, frame)
+}
+
+/// [`refined_list_loop`] over strings under one pattern and length bounds.
+///
+/// An exact `str` is in the set exactly when its text matches the pattern, read
+/// from the index once for the list where each element's check finds it by the
+/// pattern's address, and its length lies in the range, read only where a bound
+/// stands. A string holding a lone surrogate, which has no text to match, a
+/// subclass and a value of another type are [`check_refine`]'s.
+#[inline(never)]
+fn pattern_list(
+    list: &Bound<'_, PyList>,
+    program: &Regex,
+    (least, most): (usize, usize),
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let bounded = least > 0 || most < usize::MAX;
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        ok &= match exact_text(item) {
+            Some(text) => {
+                (!bounded || exact_text_length(item).is_some_and(|len| least <= len && len <= most))
+                    && program.is_match(text)
+            }
+            None => check_refine(base, constraints, &Value::Py(item), frame),
+        };
+        if ok {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
     }
 }
 

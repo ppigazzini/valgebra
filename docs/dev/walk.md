@@ -918,7 +918,19 @@ is compared with it (`length_range_list`): a lone surrogate and a character
 past the basic plane count one each, as `len` counts them, and a subclass, whose
 length the walk reads by its storage, is the element's own check.
 `a_list_of_bounded_strings_reads_as_the_bounds_read_it` holds the range to the
-bounds. A meet of `str` and its length refinements, the spelling a JSON Schema
+bounds. Where one constraint of a `str` is a pattern the index compiled and every
+other is a length bound, the compiled pattern is read from the index once for the
+list (`pattern_range`), where each element's check found it there by the
+pattern's address, and an exact `str` holding no lone surrogate is its text
+matched against it, with its length against the range where a bound stands
+(`pattern_list`): two hundred strings under one pattern read 15% fewer
+instructions on the profiled CPython 3.12 wheel than with the pattern found at
+each element, as `scripts/perf_inspect.py count` reads its `pattern` shape. A string holding a lone
+surrogate, which has no text to match, a subclass and a value of another type
+are the element's own check, and so are two patterns, or a pattern beside a
+bound of another kind.
+`a_list_of_patterned_strings_reads_as_its_constraints_read_it` holds the list
+to the walk of a tuple of the same elements. A meet of `str` and its length refinements, the spelling a JSON Schema
 translation gives `minLength` beside `maxLength`, is that one range too
 (`text_lengths`, read by `text_meet_list` where the three levels below the list's
 to the base's type test are free, in a walk that explains nothing, whatever

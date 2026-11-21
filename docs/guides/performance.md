@@ -930,7 +930,11 @@ program that builds validators per request, and to no validation call.
   under two bounds cost 12% fewer instructions, and a thousand strings under two
   length bounds 19%. Deciding over a base of `int`, `float` or `str`, its kind is
   read once and has a loop of its own (`refined_scalar_list`): strings under a
-  pattern read 7.4% fewer instructions on the profiled CPython 3.15 wheel. Order
+  pattern read 7.4% fewer instructions on the profiled CPython 3.15 wheel. One
+  pattern, alone or beside length bounds, is read from the index once for the list,
+  and an exact `str` is its text matched against it (`pattern_list`): two hundred
+  strings under one pattern read 15% fewer instructions again on the profiled
+  CPython 3.12 wheel. Order
   bounds on an `int` whose operands a machine word holds are one range read once for
   the list, and an exact `int` that fits a word is compared with it where it lies
   (`machine_range_list`): a thousand integers under one bound read 74% fewer

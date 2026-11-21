@@ -11416,6 +11416,157 @@ fn a_list_of_bounded_strings_reads_as_the_bounds_read_it() {
     });
 }
 
+/// A list of strings under one pattern and length bounds reads each exact
+/// `str`'s text against the pattern its index compiled, and answers as the walk
+/// of a tuple of the same elements does, element by element: a pattern alone and
+/// beside every pair of bounds around the corpus's lengths, a lone surrogate,
+/// which has no text to match, a character past the basic plane, a subclass
+/// whose `__len__` lies, and values of other types; and two patterns, or a
+/// pattern beside a bound of another kind, which the element's own check reads.
+#[test]
+fn a_list_of_patterned_strings_reads_as_its_constraints_read_it() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Lying(str):\n\
+              \x20   def __len__(self):\n\
+              \x20       return 99\n\
+              VALUES = ['', 'a', 'ab', 'abc', 'abd', 'b', '\\ud800', '\\U0001F600', 'a\\U0001F600',\n\
+              \x20         Lying('ab'), Lying('x'), b'ab', 2, None, ['ab']]\n",
+            c"patterned_strings.py",
+            c"patterned_strings",
+        )
+        .expect("the corpus compiles");
+        let values: Vec<Bound<'_, PyAny>> = module
+            .getattr("VALUES")
+            .expect("the corpus")
+            .try_iter()
+            .expect("a list")
+            .map(|item| item.expect("an element"))
+            .collect();
+        let mut read = vec![
+            vec![
+                Constraint::Regex("a.*".into()),
+                Constraint::Regex(".*b".into()),
+            ],
+            vec![
+                Constraint::Regex("a.*".into()),
+                Constraint::Ge(OperandIx::new(0)),
+            ],
+        ];
+        for pattern in ["a.*", "[ab]+", ".", "", "\\p{Emoji}*a?"] {
+            read.push(vec![Constraint::Regex(pattern.into())]);
+            for least in 0..4 {
+                read.push(vec![
+                    Constraint::MinLen(least),
+                    Constraint::Regex(pattern.into()),
+                ]);
+                read.push(vec![
+                    Constraint::Regex(pattern.into()),
+                    Constraint::MaxLen(least),
+                ]);
+                for most in 0..4 {
+                    read.push(vec![
+                        Constraint::MinLen(least),
+                        Constraint::Regex(pattern.into()),
+                        Constraint::MaxLen(most),
+                    ]);
+                }
+            }
+        }
+        let pool = [PyString::new(py, "a").into_any().unbind()];
+        for constraints in read {
+            let element = Schema::Refine {
+                base: Arc::new(Schema::Str),
+                constraints: constraints.into(),
+            };
+            let list = Schema::list(SeqShape::homogeneous(element.clone()));
+            let tuple = Schema::tuple(SeqShape::homogeneous(element));
+            for value in &values {
+                let listed = PyList::new(py, [value]).expect("a list").into_any();
+                let tupled = PyTuple::new(py, [value]).expect("a tuple").into_any();
+                assert_eq!(
+                    decide(py, &list, &listed, &pool, &[]),
+                    decide(py, &tuple, &tupled, &pool, &[]),
+                    "{list:?} and {tuple:?} part over {value:?}"
+                );
+            }
+            let mixed = PyList::new(py, &values).expect("a list").into_any();
+            let tupled = PyTuple::new(py, &values).expect("a tuple").into_any();
+            assert_eq!(
+                decide(py, &list, &mixed, &pool, &[]),
+                decide(py, &tuple, &tupled, &pool, &[]),
+                "{list:?} and {tuple:?} part over the corpus"
+            );
+        }
+    });
+}
+
+/// The pattern's reading takes one pattern its index holds and length bounds,
+/// and a string's text is read off an exact `str` holding no lone surrogate.
+#[test]
+fn a_pattern_range_is_the_one_pattern_and_the_lengths() {
+    use super::scalar::{exact_text, pattern_range};
+    Python::attach(|py| {
+        // Each refinement read with the index its own schema builds, or with
+        // none, the index the relation oracle walks with.
+        let range = |constraints: Vec<Constraint>, indexed: bool| {
+            let element = Schema::Refine {
+                base: Arc::new(Schema::Str),
+                constraints: constraints.into(),
+            };
+            let index = build_index(py, if indexed { &element } else { &Schema::Str }, &[], &[]);
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &[],
+                defs: &[],
+                index: &index,
+                state: &state,
+                mode: WalkMode::Fast,
+            };
+            let Schema::Refine { constraints, .. } = &element else {
+                unreachable!("a refinement")
+            };
+            pattern_range(constraints, &ctx).map(|(program, range)| (program.is_match("aa"), range))
+        };
+        let pattern = |text: &str| Constraint::Regex(text.into());
+        assert_eq!(
+            range(vec![pattern("a+")], true),
+            Some((true, (0, usize::MAX)))
+        );
+        assert_eq!(
+            range(vec![pattern("b+")], true),
+            Some((false, (0, usize::MAX)))
+        );
+        assert_eq!(
+            range(
+                vec![
+                    Constraint::MinLen(2),
+                    pattern("a+"),
+                    Constraint::MaxLen(4),
+                    Constraint::MinLen(3)
+                ],
+                true
+            ),
+            Some((true, (3, 4)))
+        );
+        assert_eq!(range(vec![pattern("a+"), pattern("b+")], true), None);
+        assert_eq!(
+            range(vec![pattern("a+"), Constraint::Ge(OperandIx::new(0))], true),
+            None
+        );
+        assert_eq!(range(vec![Constraint::MinLen(1)], true), None);
+        assert_eq!(range(vec![pattern("a+")], false), None);
+        let text = |source: &str| exact_text(&evaluate(py, source)).map(str::to_owned);
+        assert_eq!(text("'abc'").as_deref(), Some("abc"));
+        assert_eq!(text("'\\U0001F600'").as_deref(), Some("\u{1F600}"));
+        assert_eq!(text("'\\ud800'"), None);
+        assert_eq!(text("type('S', (str,), {})('ab')"), None);
+        assert_eq!(text("b'ab'"), None);
+        assert_eq!(text("2"), None);
+    });
+}
+
 /// The range takes length bounds alone, and a string's length is read off an
 /// exact `str` alone, a code point a unit.
 #[test]

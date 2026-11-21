@@ -32,7 +32,7 @@ use super::{
     reads_its_length, record_fatal, record_if_fatal, record_stop, stop, stopped,
 };
 use crate::check::ctx::{Ctx, MAX_RECURSION_DEPTH, WalkState};
-use crate::check::index::{Exact, LeafPlan, Number, matches_unindexed, ordered};
+use crate::check::index::{Exact, LeafPlan, Number, Regex, matches_unindexed, ordered};
 use crate::check::violation::{mismatch, summarize_in, summarize_value};
 use crate::codes::{
     Code, GREATER_THAN, GREATER_THAN_EQUAL, LESS_THAN, LESS_THAN_EQUAL, LITERAL_ERROR, MULTIPLE_OF,
@@ -725,6 +725,44 @@ pub(super) fn length_range(constraints: &[Constraint]) -> Option<(usize, usize)>
         }
     }
     Some((least, most))
+}
+
+/// The one pattern among `constraints`, as the index compiled it, and the range
+/// of lengths the rest admit, where every other constraint is a length bound;
+/// `None` for two patterns, any other constraint, or a pattern the index does not
+/// hold, which [`check_constraint`] compiles itself.
+///
+/// Read once for a list ([`pattern_list`](super::sequence)), as
+/// [`length_range`] is: an element's check finds its pattern in the index by the
+/// pattern's address at every element.
+pub(super) fn pattern_range<'i>(
+    constraints: &[Constraint],
+    ctx: &Ctx<'i>,
+) -> Option<(&'i Regex, (usize, usize))> {
+    let (mut program, mut least, mut most) = (None, 0, usize::MAX);
+    for constraint in constraints {
+        match constraint {
+            Constraint::Regex(pattern) if program.is_none() => {
+                program = Some(&**ctx.index.regexes.get(&(pattern.as_ptr() as usize))?);
+            }
+            Constraint::MinLen(n) => least = least.max(*n),
+            Constraint::MaxLen(n) => most = most.min(*n),
+            _ => return None,
+        }
+    }
+    Some((program?, (least, most)))
+}
+
+/// `value`'s text, where it is an exact `str` that holds no lone surrogate, the
+/// text a pattern matches.
+#[inline]
+pub(super) fn exact_text<'v>(value: &'v Bound<'_, PyAny>) -> Option<&'v str> {
+    value
+        .cast_exact::<PyString>()
+        .ok()?
+        .to_str()
+        .map_err(set_aside)
+        .ok()
 }
 
 /// The length of `value`, where it is an exact `str`.

@@ -150,6 +150,11 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- **A list of strings under one pattern reads the pattern once.** A list whose element is a `str`
+  under one pattern, alone or beside length bounds, finds the pattern's compiled program once for
+  the list, where each element's check looked it up: two hundred strings under one pattern read
+  15.3% fewer instructions on the profiled CPython 3.12 wheel, and 15.0% fewer than 0.0.30's.
+
 - **A list of floats under order bounds is read as one interval.** Where every constraint of a
   `float` element is an order bound whose operand a float holds exactly, the bounds are read once
   for the list, each end open or closed, and an exact `float` is its two comparisons, where it went
