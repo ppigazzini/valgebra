@@ -13,20 +13,35 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: opening or closing a recursive placeholder is refused
-- fix: the walk asks PyPy for room before its question can overflow
-- feat: a pair the deciders decline is refuted on a value guessed from the subject
-- fix: a float meets a Decimal bound as the Decimal it equals
-- fix: a predicate re-entering its validator raises RecursionError before 3.14
-- feat: a pair is refuted on a value aimed outside the supertype
-- feat: a goal holding a reference is read by the sets where a connective tops it
-- feat: a guard is dropped from a meet beside a member of its kind
-- feat: a meet reads a complement pushed in and a branch in its clause
-- feat: a length bound beside a record leaves the record it counts
-- feat: a meet among a key's types is read beside the key's other types
-- fix: a query's declined goals holding a reference share one allowance -- internal
-
 -->
+
+## [0.0.31] - 2026-11-21
+
+A release of answers and speed, with no node. Where the deciders declined, a pair is now refuted on
+a value guessed from its subject or aimed outside its supertype, a meet reads a complement pushed
+in, a branch in its clause, a guard beside a member of its kind and a meet among a key's types,
+records met over a guarded fixpoint are related as one record, and a length bound beside a record
+leaves the record it counts. Over the 70,000 pairs each generation of a fuzzer draws, the relations
+give 1,570 answers more than 0.0.30 on the first generation, 3,491 on the second and 2,923 on the
+fourth, and lose none, and no call is ten times slower past 50 ms; the families of exact relations
+over lists, records, mappings, TypedDicts and recursions give 19,269 more and lose none. Read
+through `valgebra-jsonschema`, the JSON Schema test suite and corpus studies move no count, and the
+containment study decides 65 questions more, 64 refutations and a proof: of the 36 refutations
+against the suite's labels, the 35 in draft 4 stand on a `const`, which draft 4 does not have, and
+the one in 2020-12 on `{"bar": {"baz": {}}}`, which `jsonschema` and `jsonschema-rs` both admit in a
+subject the suite labels unsatisfiable. `valgebra-vtjson`'s differential suite passes.
+
+Against 0.0.30 built here from its tag, on CPython 3.11 through 3.15, a list of floats under order
+bounds counts 42.5% to 49.4% fewer instructions on the profiled wheels, a list of strings under a
+pattern 15.0% to 16.6% fewer and a record of refined fields 0.7% to 1.0% fewer, and a relation
+between two dataclasses reads 40.8% fewer on 3.15 and 3.12. Every other shape counts within 0.5% of
+0.0.30's but seven, each of which reads the same in an environment 4,096 bytes larger: on 3.13 a
+JSON document's integers, union and refusal 2.0% to 4.3% more, the copy a `realloc` makes as the
+parser grows the document's array from empty; on 3.15 a deep JSON document 1.41% and a list's
+explanation 0.54% more; on 3.11 a union's build 0.99%, a scalar's explanation 0.76% and a dataclass
+0.55% more, in glibc's allocator. The instruction gate's ten decision workloads count within 0.2% of
+0.0.30's.
+
 
 ### Added
 
@@ -5313,7 +5328,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.30...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.31...HEAD
+[0.0.31]: https://github.com/ppigazzini/valgebra/compare/v0.0.30...v0.0.31
 [0.0.30]: https://github.com/ppigazzini/valgebra/compare/v0.0.29...v0.0.30
 [0.0.29]: https://github.com/ppigazzini/valgebra/compare/v0.0.28...v0.0.29
 [0.0.28]: https://github.com/ppigazzini/valgebra/compare/v0.0.27...v0.0.28
