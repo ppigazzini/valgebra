@@ -1417,6 +1417,9 @@ fn refinements_within_the_rest(
     let mut rest: Option<Descr> = None;
     let mut within = Vec::new();
     for member in members {
+        if bounds_patterns_keep_to(member, members) {
+            continue;
+        }
         match descend(member, pool, budget, depth) {
             Some(set) => {
                 rest = Some(match rest {
@@ -1433,6 +1436,28 @@ fn refinements_within_the_rest(
         whole = whole.intersect(&if negated { set.complement() } else { set })?;
     }
     Some(whole)
+}
+
+/// Whether `member` is a `str` under length bounds alone that the patterns of
+/// another member, a `str` refinement too, keep every word to
+/// ([`a_pattern_keeps_to`]). Such a member changes no value of the meet, `R ∩ L`
+/// being `R` where `R` lies within `L`, so the meet is read without it, where
+/// lowered on its own its bound may pass the counted automaton's states.
+fn bounds_patterns_keep_to(member: &Schema, members: &[Schema]) -> bool {
+    let Schema::Refine { base, constraints } = member else {
+        return false;
+    };
+    matches!(&**base, Schema::Str)
+        && constraints.iter().all(|bound| {
+            matches!(bound, Constraint::MinLen(_) | Constraint::MaxLen(_))
+                && members.iter().any(|other| match other {
+                    Schema::Refine {
+                        base,
+                        constraints: patterns,
+                    } => matches!(&**base, Schema::Str) && a_pattern_keeps_to(patterns, bound),
+                    _ => false,
+                })
+        })
 }
 
 /// A meet member [`refinements_within_the_rest`] reads within the others: a
@@ -1493,6 +1518,13 @@ fn refine(
         narrowed = narrowed.intersect(within)?;
     }
     for constraint in constraints {
+        // A length bound the refinement's patterns keep to changes no value of it,
+        // since a pattern admits only the strings it matches, and is left out: past
+        // the counted automaton's states (`RegularSet::counted`) it would refuse the
+        // lowering of a set it does not narrow.
+        if a_pattern_keeps_to(constraints, constraint) {
+            continue;
+        }
         let Some(set) = constrained(constraint, &narrowed, pool) else {
             if matches!(constraint, Constraint::Predicate(_)) {
                 budget.unread.set(true);
@@ -1502,6 +1534,32 @@ fn refine(
         narrowed = narrowed.intersect(&set)?;
     }
     Some(narrowed)
+}
+
+/// Whether the patterns among `constraints` keep every string to the length bound
+/// `bound`: a pattern's least length at or past a `MinLen`, or its
+/// most at or below a `MaxLen` ([`RegularSet::lengths`]). Such a bound changes no
+/// value of the refinement, so a reading may leave it out, and a refinement whose
+/// patterns keep to a supertype's bound is below it on that bound.
+pub(crate) fn a_pattern_keeps_to(constraints: &[Constraint], bound: &Constraint) -> bool {
+    if !matches!(bound, Constraint::MinLen(_) | Constraint::MaxLen(_)) {
+        return false;
+    }
+    constraints.iter().any(|constraint| {
+        let Constraint::Regex(pattern) = constraint else {
+            return false;
+        };
+        let Some(lengths) = RegularSet::pattern(pattern, Alphabet::Text)
+            .and_then(|set| set.lengths(Alphabet::Text))
+        else {
+            return false;
+        };
+        match bound {
+            Constraint::MinLen(least) => lengths.least >= *least,
+            Constraint::MaxLen(most) => lengths.most.is_some_and(|longest| longest <= *most),
+            _ => false,
+        }
+    })
 }
 
 /// Whether `constraint` holds of no `None`: it raises against `None`, and the

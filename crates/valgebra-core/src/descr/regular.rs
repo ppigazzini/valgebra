@@ -299,6 +299,170 @@ impl Dfa {
         None
     }
 
+    /// The lengths of the words this table accepts ([`Lengths`]): the least
+    /// and the most, counted in characters over text -- a byte counts where it
+    /// opens a code point, not where it continues one -- and in bytes
+    /// otherwise. `None` where it accepts no word, and where a live transition
+    /// reads a class whose bytes count apart, one opening a code point beside
+    /// one continuing it, which a table over every byte string has and a
+    /// pattern's, over text, does not.
+    ///
+    /// Read off the states that lead on to acceptance, since a word is a path
+    /// from the start to an accepting state through them: the least is the
+    /// shortest such path, the most the longest, which a cycle among them
+    /// makes unbounded. Each is the length of a word the table accepts.
+    fn lengths(&self, text: bool) -> Option<Lengths> {
+        let counts = self.class_counts(text);
+        let live = self.live_states()?;
+        let least = self.shortest_word(&counts, &live)?;
+        let most = match self.longest_word(&counts, &live)? {
+            Longest::Of(length) => Some(length),
+            Longest::Unbounded => None,
+        };
+        Some(Lengths { least, most })
+    }
+
+    /// What each class counts toward a word's length: one or none where its
+    /// bytes agree, `None` where they count apart ([`lengths`](Self::lengths)).
+    fn class_counts(&self, text: bool) -> Vec<Option<usize>> {
+        let counts = |byte: u8| usize::from(!text || byte & 0xC0 != 0x80);
+        let mut seen: Vec<Option<Option<usize>>> = vec![None; self.class_count];
+        for byte in 0..=u8::MAX {
+            if let Some(slot) = seen.get_mut(usize::from(self.class_of(byte))) {
+                *slot = match *slot {
+                    None => Some(Some(counts(byte))),
+                    Some(Some(count)) if count == counts(byte) => Some(Some(count)),
+                    Some(_) => Some(None),
+                };
+            }
+        }
+        seen.into_iter().map(Option::flatten).collect()
+    }
+
+    /// The states a word leads on from to acceptance, or `None` where the
+    /// start is not one of them: the table accepts no word.
+    fn live_states(&self) -> Option<Vec<bool>> {
+        let states = self.state_count();
+        let mut preceding: Vec<Vec<u32>> = vec![Vec::new(); states];
+        let mut live = vec![false; states];
+        let mut stack: Vec<u32> = Vec::new();
+        for state in 0..states {
+            let from = u32::try_from(state).ok()?;
+            for class in 0..self.class_count {
+                let target = self.step(from, Class::try_from(class).ok()?);
+                preceding.get_mut(target as usize)?.push(from);
+            }
+            if self.accepts(from) {
+                *live.get_mut(state)? = true;
+                stack.push(from);
+            }
+        }
+        while let Some(state) = stack.pop() {
+            for &from in preceding.get(state as usize)? {
+                let seen = live.get_mut(from as usize)?;
+                if !*seen {
+                    *seen = true;
+                    stack.push(from);
+                }
+            }
+        }
+        live.first().copied().unwrap_or(false).then_some(live)
+    }
+
+    /// The transitions from `state` to a live state, each with what its class
+    /// counts, or `None` where one reads a class whose bytes count apart.
+    fn live_steps(
+        &self,
+        state: u32,
+        counts: &[Option<usize>],
+        live: &[bool],
+    ) -> Option<Vec<(u32, usize)>> {
+        let mut steps = Vec::new();
+        for class in 0..self.class_count {
+            let target = self.step(state, Class::try_from(class).ok()?);
+            if live.get(target as usize).copied().unwrap_or(false) {
+                steps.push((target, counts.get(class).copied().flatten()?));
+            }
+        }
+        Some(steps)
+    }
+
+    /// The length of the shortest word: a zero-one search from the start
+    /// through the live states, each settled at its first taking, which is at
+    /// its least, so the first accepting state taken ends it.
+    fn shortest_word(&self, counts: &[Option<usize>], live: &[bool]) -> Option<usize> {
+        let mut settled = vec![false; self.state_count()];
+        let mut queue = std::collections::VecDeque::from([(0u32, 0usize)]);
+        while let Some((state, length)) = queue.pop_front() {
+            let seen = settled.get_mut(state as usize)?;
+            if *seen {
+                continue;
+            }
+            *seen = true;
+            if self.accepts(state) {
+                return Some(length);
+            }
+            for (target, count) in self.live_steps(state, counts, live)? {
+                if count == 0 {
+                    queue.push_front((target, length));
+                } else {
+                    queue.push_back((target, length + count));
+                }
+            }
+        }
+        None
+    }
+
+    /// The length of the longest word, or [`Longest::Unbounded`] where a cycle
+    /// among the live states repeats: the live states taken in an order of
+    /// their transitions, which a cycle leaves some of out.
+    fn longest_word(&self, counts: &[Option<usize>], live: &[bool]) -> Option<Longest> {
+        let states = self.state_count();
+        let mut steps: Vec<Vec<(u32, usize)>> = vec![Vec::new(); states];
+        let mut entering = vec![0usize; states];
+        for state in 0..states {
+            if live.get(state).copied().unwrap_or(false) {
+                let from = u32::try_from(state).ok()?;
+                let out = self.live_steps(from, counts, live)?;
+                for &(target, _) in &out {
+                    *entering.get_mut(target as usize)? += 1;
+                }
+                *steps.get_mut(state)? = out;
+            }
+        }
+        // The start is the one live state no word reaches but the empty one, unless a
+        // cycle runs back into it, which leaves no order to start from.
+        let mut ready: Vec<u32> = if entering.first() == Some(&0) {
+            vec![0]
+        } else {
+            Vec::new()
+        };
+        let mut most: Vec<Option<usize>> = vec![None; states];
+        *most.first_mut()? = Some(0);
+        let mut ordered = 0usize;
+        while let Some(state) = ready.pop() {
+            ordered += 1;
+            let here = most.get(state as usize).copied().flatten()?;
+            for &(target, count) in steps.get(state as usize)? {
+                let there = most.get_mut(target as usize)?;
+                *there = Some(there.map_or(here + count, |seen| seen.max(here + count)));
+                let left = entering.get_mut(target as usize)?;
+                *left -= 1;
+                if *left == 0 {
+                    ready.push(target);
+                }
+            }
+        }
+        if ordered < live.iter().filter(|&&seen| seen).count() {
+            return Some(Longest::Unbounded);
+        }
+        (0..states)
+            .filter(|&state| u32::try_from(state).is_ok_and(|at| self.accepts(at)))
+            .filter_map(|state| most.get(state).copied().flatten())
+            .max()
+            .map(Longest::Of)
+    }
+
     /// Whether this automaton accepts `word`.
     fn holds(&self, word: &[u8]) -> bool {
         let mut state = 0;
@@ -1421,6 +1585,24 @@ fn write_a_word(hir: &Hir, word: &mut Vec<u8>) -> Option<()> {
     (word.len() <= WITNESS_BYTES).then_some(())
 }
 
+/// The longest word a table accepts ([`Dfa::lengths`]).
+enum Longest {
+    /// The longest word has this length.
+    Of(usize),
+    /// A cycle among the live states repeats: no word is the longest.
+    Unbounded,
+}
+
+/// The lengths of a regular set's words: the least, and the most, `None` where
+/// they grow without end. A word of the least length holds, and one of the most,
+/// or of every length past some where there is none, so either proves a length
+/// bound the set keeps to and refutes one it breaks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Lengths {
+    pub(crate) least: usize,
+    pub(crate) most: Option<usize>,
+}
+
 /// A set of words: a regular language.
 ///
 /// The table sits behind a handle, so a copy is a reference count. A descriptor
@@ -1711,6 +1893,14 @@ impl RegularSet {
     #[must_use]
     pub(crate) fn words(&self, limit: usize) -> Option<Vec<Vec<u8>>> {
         self.dfa.words(limit)
+    }
+
+    /// The lengths of this set's words, in characters over `Alphabet::Text`
+    /// and in bytes over `Alphabet::Bytes`, or `None` where it holds none
+    /// ([`Lengths`]).
+    #[must_use]
+    pub(crate) fn lengths(&self, alphabet: Alphabet) -> Option<Lengths> {
+        self.dfa.lengths(alphabet == Alphabet::Text)
     }
 
     /// The words in either set, or `None` past [`MAX_STATES`].

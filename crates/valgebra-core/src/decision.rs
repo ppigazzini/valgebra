@@ -36,7 +36,7 @@ use crate::unordered_pairs;
 use crate::verdict::{Relation, Verdict};
 
 use crate::oracle::{denotes_a_set_within, has_complementary_pair};
-use constraints::constraint_entailed;
+use constraints::{a_pattern_holds_a_word, a_word_breaks_a_length, constraint_entailed};
 use emptiness::{ReadBack, ReadFor, class_with_attributes, narrowed_meet, the_rules_find_a_value};
 use literals::{
     a_union_spilled_past_as_a_table, finite_meet_below, finite_set, finite_set_below,
@@ -1983,6 +1983,7 @@ impl Schema {
             if self.holds_a_value_shallowly()
                 || matches!(self, Schema::Union(_))
                 || self.holds_a_kind_whole(cx)
+                || a_pattern_holds_a_word(self)
             {
                 return answer;
             }
@@ -3713,7 +3714,7 @@ fn refinement_subtype(
     wide_cons: &[Constraint],
     cx: &mut Cx<'_>,
 ) -> Relation {
-    narrow_base
+    let proven = narrow_base
         .is_subtype_rec(wide_base, cx)
         .proof_only()
         .and(|| {
@@ -3723,7 +3724,11 @@ fn refinement_subtype(
                     || (matches!(narrow_base, Schema::Coll { .. } | Schema::KeyedMap { .. })
                         && narrow_base.lengths_entail(core::slice::from_ref(constraint), cx.oracle))
             }))
-        })
+        });
+    if proven == Relation::Unknown && a_word_breaks_a_length(narrow_base, narrow_cons, wide_cons) {
+        return Relation::Fails;
+    }
+    proven
 }
 
 #[cfg(test)]

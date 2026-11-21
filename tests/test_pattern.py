@@ -12,9 +12,10 @@ import pickle
 import re
 from typing import Annotated
 
+import annotated_types as at
 import pytest
 
-from valgebra import Regex, ValidationError, Validator, union
+from valgebra import Regex, ValidationError, Validator, intersection, union
 
 
 def test_pattern_fullmatch_anchored() -> None:
@@ -185,3 +186,38 @@ def test_a_regex_marker_refuses_to_change() -> None:
 
     assert marker.pattern == r"[0-9]+"
     assert hash(marker) == before
+
+
+#: Bounds below, at and past the counted automaton's states, where a length bound
+#: lowered alone stops: `MaxLen(581)` counts 4067 states past the 4094 a chain holds
+#: beside its two ends, at seven a code point.
+BOUNDS = [24, 580, 581, 5120, 100_000]
+
+
+@pytest.mark.parametrize("bound", BOUNDS)
+def test_a_pattern_of_fixed_length_is_below_every_bound_it_keeps_to(bound: int) -> None:
+    """Every string `[a-f0-9]{24}` matches has 24 characters, read off its automaton."""
+    hex24 = Validator(Annotated[str, Regex("[a-f0-9]{24}")])
+    assert hex24.relation_to(Validator(Annotated[str, at.MaxLen(bound)])) == "subset"
+    assert hex24.relation_to(Validator(Annotated[str, at.MinLen(24)])) == "subset"
+    assert hex24.relation_to(Validator(Annotated[str, at.MinLen(25)])) == "not_subset"
+
+
+@pytest.mark.parametrize("bound", BOUNDS)
+def test_a_pattern_of_unbounded_length_is_outside_every_bound(bound: int) -> None:
+    """`.*-x` matches strings of every length past two, so a longer one refutes."""
+    tail = Validator(Annotated[str, Regex(".*-x")])
+    assert tail.relation_to(Validator(Annotated[str, at.MaxLen(bound)])) == "not_subset"
+    assert "-" * bound + "-x" in tail
+
+
+@pytest.mark.parametrize("bound", BOUNDS)
+def test_a_meet_of_a_pattern_with_a_bound_it_keeps_to_is_the_pattern(
+    bound: int,
+) -> None:
+    """The bound changes no string the pattern matches, so the meet is the pattern."""
+    hex24 = Validator(Annotated[str, Regex("[a-f0-9]{24}")])
+    searched = Validator(Annotated[str, Regex("(?s:.*)(?:^[a-f0-9]{24}$)(?s:.*)")])
+    meet = intersection(hex24, Validator(Annotated[str, at.MaxLen(bound)]))
+    assert (meet.relation_to(hex24), hex24.relation_to(meet)) == ("subset", "subset")
+    assert meet.relation_to(searched) == "subset"

@@ -13,7 +13,21 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- feat: a pattern's word lengths decide a length bound
+
 -->
+
+### Added
+
+- **A pattern's word lengths decide a length bound.** The least and the most length of the
+  strings a `Regex` matches are read off its automaton, so a pattern on a `str` is below a
+  `MaxLen` or a `MinLen` its strings keep to and outside one a string breaks, at every bound:
+  `Annotated[str, Regex("[a-f0-9]{24}")]` is `subset` of `Annotated[str, MaxLen(n)]` for every
+  `n` from 24, and `Annotated[str, Regex(".*-x")]` `not_subset` of every `MaxLen`, where each
+  stayed `undecided` past a few hundred characters, the bound's own automaton no longer fitting
+  its states. A bound a pattern keeps to changes no string of it, so the meet of the two is the
+  pattern, below the same patterns the pattern alone is below. Against 0.0.31's recording no
+  decision is lost and none is slower.
 
 ## [0.0.31] - 2026-11-21
 

@@ -17553,3 +17553,179 @@ mod a_meet_of_sequences {
         );
     }
 }
+
+/// Patterns over `{a, b}`: letters, a class, an empty branch, concatenation,
+/// alternation and every repetition, the shapes whose lengths a table reads.
+fn a_pattern_over_two_letters() -> impl Strategy<Value = String> {
+    let leaf = prop_oneof![
+        Just(String::new()),
+        Just("a".to_owned()),
+        Just("b".to_owned()),
+        Just("[ab]".to_owned()),
+    ];
+    leaf.prop_recursive(3, 12, 2, |inner| {
+        prop_oneof![
+            (inner.clone(), inner.clone()).prop_map(|(x, y)| format!("{x}{y}")),
+            (inner.clone(), inner.clone()).prop_map(|(x, y)| format!("(?:{x}|{y})")),
+            (
+                inner,
+                prop::sample::select(vec!["*", "+", "?", "{1,2}", "{2}"])
+            )
+                .prop_map(|(x, quantifier)| format!("(?:{x}){quantifier}")),
+        ]
+    })
+}
+
+proptest! {
+    /// A pattern against a length bound is answered by the pattern's lengths and
+    /// agrees with the walk: a proof leaves no word the pattern matches, of every
+    /// word over `{a, b}` up to eight letters, outside the bound, and a refutation
+    /// stands on one, or on a language of infinitely many words, which holds one
+    /// of every length past some. Where the pattern's lengths read, the pair is
+    /// decided.
+    #[test]
+    fn a_pattern_against_a_length_bound_is_decided_by_its_lengths(
+        pattern in a_pattern_over_two_letters(),
+        bound in 0usize..=6,
+        at_most in any::<bool>(),
+    ) {
+        let subject = Schema::refine(Schema::Str, vec![Constraint::Regex(pattern.clone())]);
+        let constraint = if at_most { Constraint::MaxLen(bound) } else { Constraint::MinLen(bound) };
+        let breaks = |length: usize| if at_most { length > bound } else { length < bound };
+        let supertype = Schema::refine(Schema::Str, vec![constraint]);
+        let matcher = regex::Regex::new(&format!(r"\A(?:{pattern})\z")).expect("a drawn pattern compiles");
+        let matched: Vec<usize> = (0..=8u32)
+            .flat_map(|length| {
+                (0..1u32 << length).map(move |bits| {
+                    (0..length).map(|at| if bits >> at & 1 == 1 { 'b' } else { 'a' }).collect::<String>()
+                })
+            })
+            .filter(|word| matcher.is_match(word))
+            .map(|word| word.len())
+            .collect();
+        let lengths = RegularSet::pattern(&pattern, Alphabet::Text)
+            .and_then(|set| set.lengths(Alphabet::Text));
+        let answer = subject.subtype_relation_under(&supertype, &ByIndex, &[]);
+        match answer {
+            Relation::Holds => prop_assert!(matched.iter().all(|&length| !breaks(length))),
+            Relation::Fails => prop_assert!(
+                matched.iter().any(|&length| breaks(length))
+                    || lengths.is_some_and(|lengths| at_most && lengths.most.is_none())
+            ),
+            Relation::Unknown => {}
+        }
+        if lengths.is_some() {
+            prop_assert_ne!(answer, Relation::Unknown);
+        }
+    }
+}
+
+/// A pattern beside a length bound it keeps to lowers as the pattern alone, at a
+/// bound the counted automaton past its states would refuse lowered on its own,
+/// in one refinement and in a meet of two.
+#[test]
+fn a_bound_a_pattern_keeps_to_lowers_as_the_pattern() {
+    let pattern = || Constraint::Regex("[a-f0-9]{24}".into());
+    let alone = Schema::refine(Schema::Str, vec![pattern()]);
+    let bound = Schema::refine(Schema::Str, vec![Constraint::MaxLen(5120)]);
+    let pool = NoLeafRelations;
+    assert!(
+        crate::descr::lower::lower(&bound, &pool).is_none(),
+        "the bound lowered alone fits no table"
+    );
+    let both = Schema::refine(Schema::Str, vec![pattern(), Constraint::MaxLen(5120)]);
+    let meet = Schema::meet([alone.clone(), bound]);
+    let lowered = crate::descr::lower::lower(&alone, &pool).expect("the pattern lowers");
+    assert_eq!(
+        crate::descr::lower::lower(&both, &pool).as_ref(),
+        Some(&lowered)
+    );
+    assert_eq!(
+        crate::descr::lower::lower(&meet, &pool).as_ref(),
+        Some(&lowered)
+    );
+}
+
+/// A pattern on a `str` entails a length bound its words keep to and refutes one
+/// a word breaks, read off its lengths: 24 characters, at and past each bound,
+/// and an unbounded tail, which keeps to no `MaxLen` and breaks every one.
+#[test]
+fn a_patterns_lengths_entail_and_break_bounds_at_their_edges() {
+    let hex = [Constraint::Regex("[a-f0-9]{24}".into())];
+    let tail = [Constraint::Regex(".*-x".into())];
+    let entails = |narrow: &[Constraint], wide: Constraint| {
+        constraints::constraint_entailed(&wide, &Schema::Str, narrow, &NoLeafRelations)
+    };
+    let breaks = |narrow: &[Constraint], wide: Constraint| {
+        constraints::a_word_breaks_a_length(&Schema::Str, narrow, &[wide])
+    };
+    for (bound, kept) in [(23, false), (24, true), (25, true)] {
+        assert_eq!(
+            entails(&hex, Constraint::MaxLen(bound)),
+            kept,
+            "MaxLen({bound})"
+        );
+        assert_eq!(
+            breaks(&hex, Constraint::MaxLen(bound)),
+            !kept,
+            "MaxLen({bound})"
+        );
+    }
+    for (bound, kept) in [(23, true), (24, true), (25, false)] {
+        assert_eq!(
+            entails(&hex, Constraint::MinLen(bound)),
+            kept,
+            "MinLen({bound})"
+        );
+        assert_eq!(
+            breaks(&hex, Constraint::MinLen(bound)),
+            !kept,
+            "MinLen({bound})"
+        );
+    }
+    assert!(!entails(&tail, Constraint::MaxLen(1_000_000)));
+    assert!(breaks(&tail, Constraint::MaxLen(1_000_000)));
+    assert!(entails(&tail, Constraint::MinLen(2)) && !entails(&tail, Constraint::MinLen(3)));
+    // Over `bytes`, or beside a second constraint, nothing is read.
+    assert!(!constraints::constraint_entailed(
+        &Constraint::MaxLen(30),
+        &Schema::Bytes,
+        &hex,
+        &NoLeafRelations
+    ));
+    let beside = [hex[0].clone(), Constraint::MinLen(1)];
+    assert!(!constraints::a_word_breaks_a_length(
+        &Schema::Str,
+        &beside,
+        &[Constraint::MaxLen(5)]
+    ));
+    // A pattern holding a word witnesses a refutation on it; one holding none does not.
+    let refined =
+        |pattern: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(pattern.into())]);
+    assert!(constraints::a_pattern_holds_a_word(&refined(
+        "[a-f0-9]{24}"
+    )));
+    assert!(!constraints::a_pattern_holds_a_word(&refined("[a&&b]")));
+    assert!(!constraints::a_pattern_holds_a_word(&Schema::Str));
+}
+/// Past the counted automaton's states a length bound lowered alone fits no table,
+/// and the relation reads the pattern's lengths instead: a pattern of 24 characters
+/// is below every `MaxLen` from 24 and outside a `MinLen` past them, and an unbounded
+/// one outside every `MaxLen`.
+#[test]
+fn a_pattern_against_a_bound_past_the_counted_states_is_decided() {
+    let refined = |constraint: Constraint| Schema::refine(Schema::Str, vec![constraint]);
+    let hex = refined(Constraint::Regex("[a-f0-9]{24}".into()));
+    let tail = refined(Constraint::Regex(".*-x".into()));
+    let ask = |sub: &Schema, sup: &Schema| sub.subtype_relation_under(sup, &NoLeafRelations, &[]);
+    for bound in [581, 5120, 100_000] {
+        let at_most = refined(Constraint::MaxLen(bound));
+        assert_eq!(ask(&hex, &at_most), Relation::Holds, "MaxLen({bound})");
+        assert_eq!(ask(&tail, &at_most), Relation::Fails, "MaxLen({bound})");
+        assert_eq!(
+            ask(&hex, &refined(Constraint::MinLen(bound))),
+            Relation::Fails,
+            "MinLen({bound})"
+        );
+    }
+}

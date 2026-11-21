@@ -14,7 +14,8 @@
 //! refinement of the same base.
 
 use crate::descr::integers::gcd;
-use crate::descr::lower::Operand;
+use crate::descr::lower::{Operand, a_pattern_keeps_to};
+use crate::descr::regular::{Alphabet, RegularSet};
 use crate::ir::{Constraint, OperandIx, Schema};
 use crate::kind::Kind;
 
@@ -303,12 +304,19 @@ pub(super) fn constraint_entailed(
         }),
         // Length bounds compare by their raw counts, as the array rule compares
         // its item counts [BBC+26, (array)].
-        Constraint::MinLen(w) => narrow
-            .iter()
-            .any(|c| matches!(c, Constraint::MinLen(n) if n >= w)),
-        Constraint::MaxLen(w) => narrow
-            .iter()
-            .any(|c| matches!(c, Constraint::MaxLen(n) if n <= w)),
+        // A pattern on a `str` entails a bound its words keep to (`a_pattern_keeps_to`).
+        Constraint::MinLen(w) => {
+            narrow
+                .iter()
+                .any(|c| matches!(c, Constraint::MinLen(n) if n >= w))
+                || (matches!(narrow_base, Schema::Str) && a_pattern_keeps_to(narrow, wide))
+        }
+        Constraint::MaxLen(w) => {
+            narrow
+                .iter()
+                .any(|c| matches!(c, Constraint::MaxLen(n) if n <= w))
+                || (matches!(narrow_base, Schema::Str) && a_pattern_keeps_to(narrow, wide))
+        }
         // Every multiple of `n` is a multiple of `w` when `w` divides `n`
         // [HSHP20, Fig. 10], wherever `%` reads the value and both steps as one
         // kind of number. The question goes to the oracle because a step is a
@@ -457,4 +465,44 @@ pub(super) fn tighter_bound(
         }
         None => current,
     }
+}
+
+/// Whether a word of a `str` refined by one pattern alone breaks a length bound of
+/// `wide`, by the pattern's lengths ([`RegularSet::lengths`]): a word as long as
+/// its most, or longer than any bound where it has none, past a `MaxLen`, or one as
+/// short as its least short of a `MinLen`. That word is the subject's and outside
+/// the supertype, so the inclusion fails on it.
+pub(super) fn a_word_breaks_a_length(
+    narrow_base: &Schema,
+    narrow: &[Constraint],
+    wide: &[Constraint],
+) -> bool {
+    let (Schema::Str, [Constraint::Regex(pattern)]) = (narrow_base, narrow) else {
+        return false;
+    };
+    let Some(lengths) =
+        RegularSet::pattern(pattern, Alphabet::Text).and_then(|set| set.lengths(Alphabet::Text))
+    else {
+        return false;
+    };
+    wide.iter().any(|bound| match bound {
+        Constraint::MaxLen(most) => lengths.most.is_none_or(|longest| longest > *most),
+        Constraint::MinLen(least) => lengths.least < *least,
+        _ => false,
+    })
+}
+
+/// Whether `schema` is a `str` refined by one pattern whose language holds a word,
+/// read off the pattern's table ([`RegularSet::is_empty`]). A refutation standing on
+/// such a refinement ([`a_word_breaks_a_length`]) is witnessed by it, where asking
+/// the subject's emptiness under the query's budget reads nothing once a reading
+/// before it spent the budget.
+pub(super) fn a_pattern_holds_a_word(schema: &Schema) -> bool {
+    let Schema::Refine { base, constraints } = schema else {
+        return false;
+    };
+    let (Schema::Str, [Constraint::Regex(pattern)]) = (&**base, &constraints[..]) else {
+        return false;
+    };
+    RegularSet::pattern(pattern, Alphabet::Text).is_some_and(|set| !set.is_empty())
 }

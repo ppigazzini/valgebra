@@ -1422,3 +1422,81 @@ fn a_product_is_charged_alike_built_or_found() {
     let small = under(0, || language("a*").intersect(&language("a*b?")));
     assert_eq!(small, Some(language("a*")));
 }
+
+/// The lengths of a pattern's words, in characters over text: a fixed count,
+/// an unbounded tail, the companion's unanchored spelling, whose anchors leave
+/// both `.*` empty, a letter past ASCII, and a pattern holding no word.
+#[test]
+fn a_patterns_lengths_are_read_off_its_table() {
+    let lengths = |pattern: &str, alphabet| {
+        RegularSet::pattern(pattern, alphabet)
+            .expect("the pattern builds")
+            .lengths(alphabet)
+            .map(|lengths| (lengths.least, lengths.most))
+    };
+    assert_eq!(
+        lengths("[a-f0-9]{24}", Alphabet::Text),
+        Some((24, Some(24)))
+    );
+    assert_eq!(lengths(".*-x", Alphabet::Text), Some((2, None)));
+    assert_eq!(
+        lengths("(?s:.*)(?:^[a-f0-9]{24}$)(?s:.*)", Alphabet::Text),
+        Some((24, Some(24)))
+    );
+    assert_eq!(lengths("é{3}", Alphabet::Text), Some((3, Some(3))));
+    assert_eq!(lengths("é{3}", Alphabet::Bytes), Some((6, Some(6))));
+    assert_eq!(lengths("a|bc{2,4}", Alphabet::Text), Some((1, Some(5))));
+    // Two characters in four bytes against three in three: counted by character.
+    assert_eq!(lengths("(?:éé|abc)", Alphabet::Text), Some((2, Some(3))));
+    assert_eq!(lengths("(?:éé|abc)", Alphabet::Bytes), Some((3, Some(4))));
+    assert_eq!(lengths("[a&&b]", Alphabet::Text), None);
+    // A complement holds every byte string but its pattern's words, a lone
+    // continuation byte beside a character opening one: counted apart, read as none.
+    let complement = language("a").complement();
+    assert_eq!(complement.lengths(Alphabet::Text), None);
+    assert_eq!(
+        complement
+            .lengths(Alphabet::Bytes)
+            .map(|lengths| lengths.least),
+        Some(0)
+    );
+}
+
+proptest! {
+    /// The lengths read off a table are the walk's: the least is the shortest
+    /// word the matcher takes of every word over `{a, b}` up to eight letters,
+    /// a most is the longest, and no most is a language of infinitely many
+    /// words.
+    #[test]
+    fn a_patterns_lengths_are_the_lengths_of_the_words_it_matches(pattern in ranked_pattern()) {
+        let set = language(&pattern);
+        let matched: Vec<usize> = (0..=8u32)
+            .flat_map(|length| {
+                (0..1u32 << length).map(move |bits| {
+                    (0..length)
+                        .map(|at| if bits >> at & 1 == 1 { 'b' } else { 'a' })
+                        .collect::<String>()
+                })
+            })
+            .filter(|word| matcher(&pattern).is_match(word))
+            .map(|word| word.len())
+            .collect();
+        match set.lengths(Alphabet::Text) {
+            None => prop_assert!(matched.is_empty() && set.is_empty()),
+            Some(lengths) => {
+                if lengths.least <= 8 {
+                    prop_assert_eq!(matched.iter().copied().min(), Some(lengths.least));
+                } else {
+                    prop_assert!(matched.is_empty());
+                }
+                match lengths.most {
+                    Some(most) if most <= 8 => {
+                        prop_assert_eq!(matched.iter().copied().max(), Some(most));
+                    }
+                    Some(_) => {}
+                    None => prop_assert!(set.words(10_000).is_none()),
+                }
+            }
+        }
+    }
+}

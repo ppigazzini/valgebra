@@ -399,6 +399,29 @@ time it was asked again, most of a millisecond, and reads it back in five
 microseconds (`a_counted_table_is_kept_under_the_compilers_text`). The memo is
 bounded by the bytes it holds, `COMPILED_BYTES`, and starts over past it.
 
+**A pattern's lengths answer a length bound without counting it** (`Dfa::lengths` in
+`descr/regular.rs`). Whether a regular language lies within the words of at most `n`
+symbols asks its longest word alone, so the least and the most length of a pattern's
+words are read off its table: the shortest and the longest path from the start to an
+accepting state through the states that lead on to one, a cycle among them leaving no
+most, and a byte counted where it opens a code point. A length bound's own table counts
+seven states a code point under `MAX_STATES`, so a `MaxLen` of a few hundred characters
+fits none, and a relation that lowered it declined. Read off the pattern, a `Regex` on a
+`str` entails a bound its words keep to (`a_pattern_keeps_to` in `descr/lower.rs`, which
+`constraint_entailed` asks), and refutes one a word breaks, as long as its most, or
+longer than any bound where it has none (`a_word_breaks_a_length` in
+`decision/constraints.rs`): `Regex("[a-f0-9]{24}")` is `subset` of every `MaxLen` from 24,
+and `Regex(".*-x")` `not_subset` of every one. That refutation is witnessed by the
+pattern's table holding a word (`a_pattern_holds_a_word`), where the subject's
+emptiness, asked under a budget the lowering before it spent, reads nothing. A bound a
+refinement's patterns keep to changes no word of it, and its lowering leaves it out, in
+one refinement and across a meet (`bounds_patterns_keep_to`), so the meet of a pattern
+with such a bound lowers as the pattern. The lengths are read only where every live
+transition counts its bytes alike, as a pattern's table over text does; a table over
+every byte string sets a code point's first byte beside its continuation and reads none.
+`a_patterns_lengths_are_the_lengths_of_the_words_it_matches` and
+`a_pattern_against_a_length_bound_is_decided_by_its_lengths` hold the two readings.
+
 **A thread builds a product of two tables once** (`Products` in
 `descr/regular.rs`). A meet or a join of two languages is a function of the two
 tables and the operation, since each table is minimal and canonically numbered,
