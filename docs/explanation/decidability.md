@@ -785,9 +785,19 @@ answers `"undecided"`.
   three are eight clauses distributed and one meet narrowed, as a subject as
   well as alone: the guarded meet is below the record it guards. Two tags fixed
   two ways meet in nothing, and a tag beside a field it requires holds the
-  dict with that field. A meet of more unions no complement narrows, or of a
-  union with a meet for a branch, is left to the set representation, and is
-  decided within the depth it descends.
+  dict with that field. Where such a meet is asked below a supertype, a
+  union's branch that is a meet is read in the clause it makes with the
+  members beside it: dropped where one of its conjuncts
+  shares no value with them, its own unions narrowed the same way. A member
+  that is the complement of a union is read as its branches' complements, and
+  one that is the complement of a meet all of whose conjuncts but one are
+  members as that conjunct's complement, where that narrows the meet: within
+  the JSON values `J`, `~(X & J)` is the complement of `X`. So the `not`, `if`,
+  `anyOf` and `oneOf` a translation writes beside an object -- `not X` as
+  `~X & J`, `if I then T` as `(~I & J) | (I & T & J)`, each keyword guarded to
+  its kind -- are read as the records they hold. A meet of more unions no
+  complement narrows is left to the set representation, and is decided within
+  the depth it descends.
 
     ```python
     from typing import Literal
@@ -805,6 +815,18 @@ answers `"undecided"`.
     assert tagged.is_valid({"tag": "t0"})
     assert tagged.relation_to(nothing) == "not_subset"
     assert tagged.relation_to({"tag": json, str: json}) == "subset"
+
+
+    def negated(schema):
+        return intersection(complement(schema), json)
+
+
+    twice = intersection(obj, negated(negated(required)))
+    assert twice.relation_to({"tag": json, str: json}) == "subset"
+    named = union(complement(obj), {"n": json, str: json})
+    if_t0_then_named = union(negated(t0), intersection(t0, named, json))
+    held = intersection(obj, t0, if_t0_then_named)
+    assert held.relation_to({"n": json, str: json}) == "subset"
     ```
 - **The complement laws, where the constructors reach them.** `complement`
   cancels a complement, `union` folds a join carrying a schema beside its own

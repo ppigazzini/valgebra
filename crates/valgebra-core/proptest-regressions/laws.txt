@@ -68,3 +68,4 @@ cc 393c35788286d99ae3fb0b926a6d48f23ce4e062537084e8d5ecac0b4375f86b # shrinks to
 cc 4809d9a0d4c43e81e0192a8198f68b9b6787795f53f1f0aa1f1493128c92e3a6 # a list of three floats under a pair, refuted below a pair of two
 cc 0d498a76ef8add2d81579f9a3efd2b51a76231380bbb5a9724c8f14d0db20921 # a dict of three entries refuted below one of at most two
 cc bb4b737581b616548ddb5c28c25c83cd6da0e9a271aef1f6caea199610c79cfd # shrinks to a = Seq { container: List, shape: SeqShape { prefix: [Refine { base: Refine { base: Coll { container: FrozenSet, element: Float }, constraints: [MinLen(0)] }, constraints: [MinLen(2)] }, Ref(DefIx(1))], tail: None } }, b = NoneType
+cc 52c83f55059fed3d67dcda56522c8fa198ec6a5aa624a4714ba51000bfcc19b8 # a complemented meet beside guards over it, read as written where its union narrows nothing

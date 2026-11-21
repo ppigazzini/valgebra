@@ -91,7 +91,10 @@ meet the union of them [FCB08, Lem. 6.2]. The
 relation reads a complemented union or meet as a subject with its complement
 pushed one level in, as a lazy normalization pushes a negation no further than
 the question in hand needs [BBC+26, §6.2, p. 9], and takes that reading where it
-is the supertype or holds it as a member. Two branches of a union splitting one
+is the supertype or holds it as a member; a narrowed meet related to a
+supertype reads a complemented union among its members so too, and a
+complemented meet all of whose conjuncts but one are members as that conjunct's
+complement, the complement within a universe. Two branches of a union splitting one
 set by another, `(R ∩ B) ∪ (R ∩ ¬B)`, are read as the set `R` they split, by
 distributivity and `B ∪ ¬B` being everything where `B` is a set.
 **[LOAD-BEARING: lattice-theory]** — `crates/valgebra-core/src/ir.rs`, where a
@@ -100,9 +103,9 @@ each claimed equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, descr/lower.rs::refinements_within_the_rest, descr/lower.rs::narrowed_parts, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, oracle.rs::complemented_members, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::narrowed_meet, decision/emptiness.rs::the_rest_of_a_meet_within_a_kind, ir.rs::Schema, descr/polar.rs, descr/polar.rs::PolarUnion::union, descr/lines.rs::Line::complement, descr/sets.rs::escapes, oracle.rs::has_complementary_pair, decision/emptiness.rs::shares_nothing_beside
+IMPLEMENTED-BY: decision.rs::Schema::union_complement_is_empty, decision/readings.rs::Schema::region_set, decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::meet_through_a_reference, descr/polar.rs::PolarUnion::intersect, descr/polar.rs::complement_all, descr/polar.rs::product, descr/lower.rs::descend, descr/lower.rs::refinements_within_the_rest, descr/lower.rs::narrowed_parts, ir.rs::Schema::union_within, ir.rs::Schema::meet_within, ir.rs::Schema::complement, kind.rs::Region::union, kind.rs::Region::intersect, kind.rs::Region::complement, oracle.rs::has_complementary_pair_within, oracle.rs::complemented_members, valgebra-py/src/check/walk.rs::check_intersection, decision.rs::pushed_complement_is_placed, decision.rs::merged_split, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::narrowed_meet, decision/emptiness.rs::the_rest_of_a_meet_within_a_kind, ir.rs::Schema, descr/polar.rs, descr/polar.rs::PolarUnion::union, descr/lines.rs::Line::complement, descr/sets.rs::escapes, oracle.rs::has_complementary_pair, decision/emptiness.rs::shares_nothing_beside, decision/emptiness.rs::complements_pushed_in
 
-HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference, a_complement_is_below_its_complements_pushed_in, a_set_is_below_its_own_split, a_complement_the_relation_empties_is_read_empty, a_meet_of_guards_reads_as_the_meet_of_their_branches, a_reference_and_its_complement_meet_in_nothing
+HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference, a_complement_is_below_its_complements_pushed_in, a_set_is_below_its_own_split, a_complement_the_relation_empties_is_read_empty, a_meet_of_guards_reads_as_the_meet_of_their_branches, a_reference_and_its_complement_meet_in_nothing, a_complement_among_a_meet_s_members_is_pushed_in, a_narrowed_meet_holds_the_values_its_meet_holds, test_a_complement_pushed_in_leaves_the_values_it_held
 
 **A universe is a set, and the algebra below it is Boolean again.** A
 set-theoretic interpretation is a domain and a map into its subsets
@@ -1429,7 +1432,9 @@ members' branches make with the rest [FCB08, Def. 4.1], which distributes
 every union it holds. The rules distribute a meet holding no reference only
 where its normal form spans four clauses at most, the bound ty's intersection
 builder caps its own normal form at, and past that narrow its unions by the
-complements beside them and drop a guard beside a member of its kind. Four is a peer's tuning and no result. The
+complements beside them, each branch read in the clause it makes with the
+members beside it where the meet is related to a supertype, and drop a guard
+beside a member of its kind. Four is a peer's tuning and no result. The
 narrowing and the capped distribution split one budget between two readings
 that each decide answers the other cannot, so a repair that moves the split
 trades answers rather than adding them. A binary decision tree holds the
@@ -1440,9 +1445,9 @@ build as they descend, each a term of its own.
 
 SOURCE: §13.1 "**product** of the sub-forms. That blow-up is why a DNF-based decision needs"
 
-IMPLEMENTED-BY: decision/emptiness.rs::normal_form_within, decision/emptiness.rs::narrowed_by_its_members
+IMPLEMENTED-BY: decision/emptiness.rs::normal_form_within, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::in_its_clause
 
-HELD-BY: a_union_holding_a_reference_is_distributed_into_the_meet, a_union_in_a_meet_is_narrowed_by_the_members_beside_it, test_a_narrowed_meet_left_open_is_distributed_as_written
+HELD-BY: a_union_holding_a_reference_is_distributed_into_the_meet, a_union_in_a_meet_is_narrowed_by_the_members_beside_it, test_a_narrowed_meet_left_open_is_distributed_as_written, a_branch_of_a_union_is_read_in_its_clause, test_a_translation_s_not_if_any_of_and_one_of_are_read_beside_the_object, test_a_meet_read_for_its_emptiness_is_narrowed_as_written
 
 **The descriptor holds no cycle.** A recursive reference is cut after one
 unfolding, to the top where it is read positively and to the bottom under a

@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a pair is refuted on a value aimed outside the supertype
 - feat: a goal holding a reference is read by the sets where a connective tops it
 - feat: a guard is dropped from a meet beside a member of its kind
+- feat: a meet reads a complement pushed in and a branch in its clause
 
 -->
 
@@ -94,6 +95,23 @@ answer of its own, or a repair to a change not yet released.
   not dropped by its kinds. On the containment suite read through `valgebra-jsonschema`, one more
   2020-12 question is proven, as the suite labels it; against 0.0.30's recording no decision is
   lost and none is slower.
+
+- **A meet reads a complement among its members pushed in, and a union's branch in its clause.**
+  Where a meet is related to a supertype, a member that is the complement of a union is read as its
+  branches' complements, and one that is the complement of a meet all of whose conjuncts but one are
+  members as that conjunct's complement, where that narrows the meet. A union's branch that is a
+  meet is read beside the members its clause holds: dropped where one of its conjuncts shares no
+  value with them, its own unions narrowed the same way. And the complement of a reference shares no
+  value with a member its definition holds as a branch. Each reading leaves the same set. They are
+  the shapes a translation from JSON Schema writes beside an object -- `not X` as `~X & J`, `J` the
+  JSON values, `if I then T` as `(~I & J) | (I & T & J)`, and `anyOf` and `oneOf` as unions of meets
+  each holding `J`, every keyword guarded to its kind -- so the object a `not not`, `not anyOf`,
+  `if`/`then` or `anyOf` requires `k` of is `subset` of `{"k": anything, str: anything}`, where each
+  was `undecided`, and so is one a `oneOf` requires it of whose one branch excludes a key the other
+  requires. A meet read for its emptiness takes neither reading, since its narrowed meet is asked
+  before the distribution of the meet as written. On the containment suite and the corpus read
+  through `valgebra-jsonschema` no answer moves, and against 0.0.30's recording no decision is lost
+  and none is slower.
 
 ### Changed
 

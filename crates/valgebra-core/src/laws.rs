@@ -2825,6 +2825,61 @@ proptest! {
     }
 
     // THEORY: lattice-theory
+    /// A narrowed meet holds the values its meet holds. Over drawn `x`, `y`, `z`
+    /// and `w`, built as a caller builds them, four meets each narrow by one of
+    /// the readings: a complement of a meet pushed in, `x ∩ ¬(¬y ∩ x)`; one of a
+    /// union, `x ∩ ¬((¬y ∩ x) ∪ z)`; a branch read in its clause, `x ∩ ((¬(x ∪ z)
+    /// ∩ w) ∪ y)`; and a guard in a branch's union, `list[x] ∩ (((list[y] ∪
+    /// ¬list[Any]) ∩ w) ∪ z)`. Wherever the narrowing reads one, every sampled
+    /// value is a member of both or of neither.
+    #[test]
+    fn a_narrowed_meet_holds_the_values_its_meet_holds(
+        x in decidable_schema(),
+        y in decidable_schema(),
+        z in decidable_schema(),
+        w in decidable_schema(),
+    ) {
+        let pool = const_pool();
+        let (x, y, z, w) = (built(&x), built(&y), built(&z), built(&w));
+        let list = |item: Schema| Schema::list(SeqShape::homogeneous(item));
+        let meets = [
+            vec![x.clone(), not(intersection(not(y.clone()), x.clone()))],
+            vec![
+                x.clone(),
+                not(union(intersection(not(y.clone()), x.clone()), z.clone())),
+            ],
+            vec![
+                x.clone(),
+                union(intersection(not(union(x.clone(), z.clone())), w.clone()), y.clone()),
+            ],
+            vec![
+                list(x.clone()),
+                union(
+                    intersection(union(list(y.clone()), not(list(Schema::ANYTHING))), w.clone()),
+                    z.clone(),
+                ),
+            ],
+        ];
+        for members in meets {
+            let Some(narrowed) = crate::decision::narrowed_meet_of(&members) else {
+                continue;
+            };
+            let meet = Schema::Intersection(members.clone().into());
+            let parts: Vec<&Schema> = members.iter().collect();
+            for value in boundary_values(&parts) {
+                prop_assert_eq!(
+                    member_full(&meet, &value, &pool),
+                    member_full(&narrowed, &value, &pool),
+                    "{:?} narrowed to {:?} at {:?}",
+                    meet,
+                    narrowed,
+                    value
+                );
+            }
+        }
+    }
+
+    // THEORY: lattice-theory
     /// A meet of a set and three guards over it reads as the meet of the set
     /// and the guards' branches: `k ∩ (¬k ∪ x₁) ∩ (¬k ∪ x₂) ∩ (¬k ∪ x₃)` is
     /// `k ∩ x₁ ∩ x₂ ∩ x₃`, eight clauses distributed, past the bound, over a

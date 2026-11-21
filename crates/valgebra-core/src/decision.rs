@@ -37,7 +37,7 @@ use crate::verdict::{Relation, Verdict};
 
 use crate::oracle::{denotes_a_set_within, has_complementary_pair};
 use constraints::constraint_entailed;
-use emptiness::{ReadBack, class_with_attributes, narrowed_meet, the_rules_find_a_value};
+use emptiness::{ReadBack, ReadFor, class_with_attributes, narrowed_meet, the_rules_find_a_value};
 use literals::{
     a_union_spilled_past_as_a_table, finite_meet_below, finite_set, finite_set_below,
     spilled_past_a_table, spills_past_a_table, the_constant_speaks_for_the_literal,
@@ -484,6 +484,18 @@ pub(crate) fn kind_reading(
     }
 }
 
+/// The narrowed meet of `members` with no definitions and no oracle, or `None`
+/// where nothing narrows: the laws hold it to membership.
+#[cfg(test)]
+pub(crate) fn narrowed_meet_of(members: &[Schema]) -> Option<Schema> {
+    let budget = Budget::new(DECISION_BUDGET);
+    narrowed_meet(
+        members,
+        &Cx::new(&NoLeafRelations, &[], &budget),
+        ReadFor::Relation,
+    )
+}
+
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the
 /// signal a budgeted decision uses to stop and report the conservative answer.
 pub(super) fn spend(budget: &Budget) -> bool {
@@ -633,7 +645,7 @@ fn flat_members(members: &[Schema]) -> impl Iterator<Item = &Schema> {
 fn a_meet_respelled_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Relation {
     let query = cx.query();
     if NARROWING.with(Cell::get) == query {
-        return narrowed_meet(members, cx)
+        return narrowed_meet(members, cx, ReadFor::Relation)
             .map_or(Relation::Unknown, |narrowed| {
                 narrowed.is_subtype_rec(other, cx)
             })
@@ -652,7 +664,7 @@ fn a_meet_respelled_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) ->
     if let Some(answer) = asked {
         return answer;
     }
-    let answer = narrowed_meet(members, cx)
+    let answer = narrowed_meet(members, cx, ReadFor::Relation)
         .map_or(Relation::Unknown, |narrowed| {
             let allowance = Budget::new(given);
             let _open = Narrowing::open(query);

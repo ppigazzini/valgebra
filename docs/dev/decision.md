@@ -1836,7 +1836,42 @@ shape is not dropped by its kinds: dropped so, the JSON values' `None` beside a
 string, a narrowed meet is found wherever the JSON values meet a constant, each
 read under an allowance a declining reading spends, and a record guarded three
 deep in `scripts/metamorphic_gate.py` lost its proof and took five times as
-long. A narrowed meet is
+long. Where the narrowed meet is related to a supertype, after every other
+reading of the meet, it reads two things more. A member that is the complement
+of a union is read as its branches' complements [FCB08, Lem. 6.2], and one that
+is the complement of a meet all of whose conjuncts but one are members as that
+conjunct's complement: within a universe `u`, `u & ~(s & u)` is `u & ~s`. That
+is where a translation's `not` lands, `~X & J` with `J` the JSON values, so
+`not not X` beside `J` is `X` (`a_complement_among_a_meet_s_members_is_pushed_in`).
+A complement of a meet with more conjuncts outside stays as written, as does a
+member whose reading narrows nothing or holds a union: the translation's `not`
+needs no more, and the union of a meet's conjuncts' complements, which ty's
+intersection builder pushes a negated meet into, widens the normal form the
+narrowed meet is read in. The member as written is read beside what it reads as
+by the drops alone, so a branch it complements is dropped still, and the
+narrowed meet holds one of the two, never both. A meet holding both keeps the
+complement in every clause the reading's union is distributed into, the
+complement is read so again, and the clause is met on its own path with no
+constructor crossed, which emptiness answers by hypothesis: `~(T & I & J) & J`,
+the complement of a translation's `if I then T`, would be read empty while it
+holds `-20`, and `anyOf [X, not X]` refuted above the JSON values it equals
+(`test_a_complement_pushed_in_leaves_the_values_it_held`). And a union's branch
+that is a meet is read in the clause it makes with the members beside it,
+dropped where one of its conjuncts shares no value with them and its own unions
+narrowed the same way, which is what a translation's `if`, `anyOf` and `oneOf`
+are, unions of meets each guarded to its kind
+(`a_branch_of_a_union_is_read_in_its_clause`). A meet read for its emptiness
+takes neither (`ReadFor`): its narrowed meet is asked before the distribution of
+the meet as written, which a narrowing hands the respelling's allowance alone,
+and read there with a branch narrowed in its clause, the excluded middle over
+the translation of an object with `dependentSchemas` and
+`unevaluatedProperties` is left undecided
+(`test_a_meet_read_for_its_emptiness_is_narrowed_as_written`). The complement of
+a reference shares no value with a member its definition holds as a branch,
+read either way: the complement of the JSON values with `dict[str, J]`. Each
+reading leaves the same set, which
+`a_narrowed_meet_holds_the_values_its_meet_holds` holds to membership over drawn
+members. A narrowed meet is
 the same set, read with its own unions distributed; where that ends undecided,
 the meet as written is distributed through its reference once more, whose guard
 union distributes into a shape a reading decides (a fixpoint of words met with

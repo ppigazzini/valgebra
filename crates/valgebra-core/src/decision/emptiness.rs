@@ -16,7 +16,7 @@
 //! here decline, the question is asked once more of the *set* the schema
 //! denotes, under the lowering's bound on what building it may cost.
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
@@ -1074,7 +1074,7 @@ fn the_empty_container_in_every_member(members: &[Schema]) -> Verdict {
 /// first look where no member is a union.
 #[inline(never)]
 pub(super) fn narrowed_by_its_members(members: &[Schema], cx: &mut Cx<'_>) -> Option<Verdict> {
-    let narrowed = narrowed_meet(members, cx)?;
+    let narrowed = narrowed_meet(members, cx, ReadFor::Emptiness)?;
     Some(held_verdict(narrowed, ReadBack::Spared, cx))
 }
 
@@ -1192,7 +1192,10 @@ pub(super) fn held_verdict(meet: Schema, read_back: ReadBack, cx: &mut Cx<'_>) -
 /// The meet of `members` with every branch of a union member dropped that
 /// shares no value with another member ([`shares_nothing_beside`]), or that is
 /// a guard another member is of the kind of ([`Schema::a_guard_apart_from`]), which is the
-/// same set [FCB08, Def. 4.1], or `None` where no branch is.
+/// same set [FCB08, Def. 4.1], or `None` where no branch is. A complement among
+/// the members is read pushed in where that reads as no wider a set of members
+/// ([`complements_pushed_in`]), and a branch that is a meet in the clause it
+/// makes with them ([`in_its_clause`]).
 ///
 /// The narrowed meet's members are read beside each other once more, by the
 /// same complements, and the meet is empty where one shares no value with the
@@ -1202,46 +1205,70 @@ pub(super) fn held_verdict(meet: Schema, read_back: ReadBack, cx: &mut Cx<'_>) -
 /// conjuncts beside the rest. `(f ∪ c) ∩ ¬f` met with `¬k ∪ ¬(i ∪ c)`, `k` the
 /// meet of the first two, narrows to `c ∩ ¬f ∩ ¬(i ∪ c)`, and `c` is no value
 /// of `¬(i ∪ c)`.
-pub(super) fn narrowed_meet(members: &[Schema], cx: &Cx<'_>) -> Option<Schema> {
-    if !members
-        .iter()
-        .any(|member| matches!(member, Schema::Union(_)))
-    {
+pub(super) fn narrowed_meet(members: &[Schema], cx: &Cx<'_>, read_for: ReadFor) -> Option<Schema> {
+    let pushed = match read_for {
+        ReadFor::Relation => complements_pushed_in(members, cx),
+        ReadFor::Emptiness => None,
+    };
+    let (read, beside) = pushed.as_ref().map_or((members, members), |pushed| {
+        (&pushed.read[..], &pushed.beside[..])
+    });
+    if !read.iter().any(|member| matches!(member, Schema::Union(_))) {
         return None;
     }
-    // What each member may hold is read only where a union holds a guard.
-    let guarded = members.iter().any(|member| {
-        matches!(member, Schema::Union(branches)
-            if branches.iter().any(|branch| branch.kinds_a_guard_holds().is_some()))
-    });
-    let kinds: Vec<_> = if guarded {
-        members
-            .iter()
-            .map(|member| member.kinds_possibly_held(cx.oracle, cx.defs))
-            .collect()
-    } else {
-        Vec::new()
-    };
+    // What each member may hold is read once a guard is met, and only then.
+    let kinds = OnceCell::new();
     let drops = |at: usize, branch: &Schema| {
-        shares_nothing_beside(branch, members, at, cx) || branch.a_guard_apart_from(&kinds, at)
+        shares_nothing_beside(branch, beside, at, cx)
+            || (branch.kinds_a_guard_holds().is_some()
+                && branch.a_guard_apart_from(
+                    kinds.get_or_init(|| {
+                        read.iter()
+                            .map(|member| member.kinds_possibly_held(cx.oracle, cx.defs))
+                            .collect::<Vec<_>>()
+                    }),
+                    at,
+                ))
     };
-    let narrows = members.iter().enumerate().any(|(at, member)| {
-        matches!(member, Schema::Union(branches) if branches.iter().any(|b| drops(at, b)))
-    });
-    if !narrows {
-        return None;
-    }
-    let kept: Vec<Schema> = members
+    let mut narrowed_at = vec![false; read.len()];
+    let kept: Vec<Schema> = read
         .iter()
         .enumerate()
         .map(|(at, member)| match member {
             Schema::Union(branches) => {
-                Schema::union_within(branches.iter().filter(|b| !drops(at, b)).cloned(), cx.defs)
+                let read = branches.iter().filter_map(|branch| {
+                    let clause = match read_for {
+                        ReadFor::Relation => in_its_clause(branch, at, &drops, cx),
+                        ReadFor::Emptiness if drops(at, branch) => Clause::Dropped,
+                        ReadFor::Emptiness => Clause::AsWritten,
+                    };
+                    if !matches!(clause, Clause::AsWritten)
+                        && let Some(narrowed) = narrowed_at.get_mut(at)
+                    {
+                        *narrowed = true;
+                    }
+                    match clause {
+                        Clause::Dropped => None,
+                        Clause::AsWritten => Some(branch.clone()),
+                        Clause::Narrowed(narrowed) => Some(narrowed),
+                    }
+                });
+                Schema::union_within(read, cx.defs)
             }
             other => other.clone(),
         })
         .collect();
-    let narrowed = Schema::meet_within(kept, cx.defs);
+    let narrowed = match &pushed {
+        None => {
+            if !narrowed_at.contains(&true) {
+                return None;
+            }
+            Schema::meet_within(kept, cx.defs)
+        }
+        Some(pushed) => {
+            Schema::meet_within(pushed.read_back(members, &kept, &narrowed_at)?, cx.defs)
+        }
+    };
     if let Schema::Intersection(parts) = &narrowed
         && parts
             .iter()
@@ -1251,6 +1278,185 @@ pub(super) fn narrowed_meet(members: &[Schema], cx: &Cx<'_>) -> Option<Schema> {
         return Some(Schema::Nothing);
     }
     Some(narrowed)
+}
+
+/// What a narrowed meet is read for, which sets the readings it takes.
+#[derive(Clone, Copy)]
+pub(super) enum ReadFor {
+    /// Its emptiness, asked before the distribution of the meet as written,
+    /// which a narrowing hands the respelling's allowance alone: there a
+    /// branch is dropped only where it shares no value beside the members as
+    /// written. Read past that, the narrowing loses answers the distribution
+    /// gives (`test_a_meet_read_for_its_emptiness_is_narrowed_as_written`).
+    Emptiness,
+    /// Its relation below a supertype, asked after every other reading of the
+    /// meet: a complement among the members is read pushed in
+    /// ([`complements_pushed_in`]), and a branch that is a meet in its clause
+    /// ([`in_its_clause`]).
+    Relation,
+}
+
+/// A union's branch read in the clause it makes with the meet's other members.
+enum Clause {
+    /// The branch shares no value with them.
+    Dropped,
+    /// Nothing in the branch narrows.
+    AsWritten,
+    /// The branch, a meet, with the unions among its conjuncts narrowed.
+    Narrowed(Schema),
+}
+
+/// The branch of the union member at `at` read beside the meet's other members,
+/// in the clause the normal form makes of it [FCB08, Def. 4.1]. It is dropped
+/// where it shares no value with them (`drops`), or where it is a meet one
+/// conjunct of which shares none, since the branch is below each conjunct; and a
+/// meet's union conjuncts are narrowed by the same test.
+fn in_its_clause(
+    branch: &Schema,
+    at: usize,
+    drops: &impl Fn(usize, &Schema) -> bool,
+    cx: &Cx<'_>,
+) -> Clause {
+    if drops(at, branch) {
+        return Clause::Dropped;
+    }
+    let Schema::Intersection(conjuncts) = branch else {
+        return Clause::AsWritten;
+    };
+    if conjuncts.iter().any(|conjunct| drops(at, conjunct)) {
+        return Clause::Dropped;
+    }
+    let narrows = |conjunct: &Schema| match conjunct {
+        Schema::Union(branches) => branches.iter().any(|b| drops(at, b)),
+        _ => false,
+    };
+    if !conjuncts.iter().any(narrows) {
+        return Clause::AsWritten;
+    }
+    let read = conjuncts.iter().map(|conjunct| match conjunct {
+        Schema::Union(branches) => {
+            Schema::union_within(branches.iter().filter(|b| !drops(at, b)).cloned(), cx.defs)
+        }
+        other => other.clone(),
+    });
+    Clause::Narrowed(Schema::meet_within(read, cx.defs))
+}
+
+/// The members with each complement of a union, or of a meet all of whose
+/// conjuncts but one are members, pushed in ([`complements_pushed_in`]).
+struct Pushed {
+    /// The members, each pushed in where it is such a complement.
+    read: Vec<Schema>,
+    /// The positions in `read` each member became, in order, and whether it was
+    /// pushed in rather than read as written.
+    became: Vec<(std::ops::Range<usize>, bool)>,
+    /// `read` and, after it, every complement pushed in as written, which the
+    /// drops alone read, so a branch one complements is still dropped beside it.
+    beside: Vec<Schema>,
+}
+
+impl Pushed {
+    /// The members of the narrowed meet, `kept` being `read` narrowed and
+    /// `narrowed` where it narrowed, or `None` where nothing did. A member pushed
+    /// in stays as written unless what it reads as narrowed and holds no union:
+    /// one left would spell the member wider, widening the normal form the
+    /// readings after this one distribute. A member is read as written or pushed
+    /// in, never both.
+    fn read_back(
+        &self,
+        members: &[Schema],
+        kept: &[Schema],
+        narrowed: &[bool],
+    ) -> Option<Vec<Schema>> {
+        let mut read = Vec::with_capacity(kept.len());
+        let mut narrows = false;
+        for (member, (at, was_pushed)) in members.iter().zip(&self.became) {
+            let pieces = kept.get(at.clone()).unwrap_or_default();
+            let narrowed_here = narrowed.get(at.clone()).unwrap_or_default().contains(&true);
+            if !was_pushed {
+                narrows |= narrowed_here;
+                read.extend(pieces.iter().cloned());
+            } else if narrowed_here && !pieces.iter().any(|piece| matches!(piece, Schema::Union(_)))
+            {
+                narrows = true;
+                read.extend(pieces.iter().cloned());
+            } else {
+                read.push(member.clone());
+            }
+        }
+        narrows.then_some(read)
+    }
+}
+
+/// The members with each complement pushed in where it reads as no wider a
+/// set of members, which is what the drops after it read ([`Pushed`]). The
+/// complement of a union is the meet of its branches' complements
+/// [FCB08, Lem. 6.2]. The complement of a meet all of whose conjuncts but one
+/// are members is that one conjunct's complement: within a universe `u`,
+/// `u ∧ ¬(s ∧ u)` is `u ∧ ¬s` [FCB08, Def. 4.1], which is what a translation's
+/// `not` writes, `~X & J` with `J` the JSON values, so `not not X` beside `J`
+/// reads as `X`. A complement of a meet with more conjuncts outside is left as
+/// written: pushed into the union of their complements, it widens the normal
+/// form every later reading distributes. `None` where nothing is pushed in, or
+/// where the set complemented is no set, a predicate obeying neither law.
+///
+/// The narrowed meet holds a member pushed in or as written, never both: a meet
+/// holding a complement beside what it reads as keeps the complement in every
+/// clause the reading's union is distributed into, the complement is read so
+/// again, and the clause is met again on its own path with no constructor
+/// crossed, which emptiness answers by hypothesis -- `¬(t ∩ i ∩ J) ∩ J`, the
+/// translation's `if i then t` complemented, would be read empty while it holds
+/// `-20`.
+fn complements_pushed_in(members: &[Schema], cx: &Cx<'_>) -> Option<Pushed> {
+    fn push(member: &Schema, members: &[Schema], pushed: &mut Pushed, cx: &Cx<'_>) -> bool {
+        if let Schema::Complement(inner) = member
+            && denotes_a_set_within(inner, cx.oracle, cx.defs)
+        {
+            match &**inner {
+                Schema::Union(branches) => {
+                    for branch in branches.iter() {
+                        push(&branch.clone().complement(), members, pushed, cx);
+                    }
+                    return true;
+                }
+                Schema::Intersection(conjuncts) => {
+                    let mut outside = conjuncts.iter().filter(|c| !members.contains(c));
+                    if let (Some(one), None) = (outside.next(), outside.next()) {
+                        push(&one.clone().complement(), members, pushed, cx);
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        pushed.read.push(member.clone());
+        false
+    }
+    if !members.iter().any(|member| {
+        matches!(member, Schema::Complement(inner)
+            if matches!(&**inner, Schema::Union(_) | Schema::Intersection(_)))
+    }) {
+        return None;
+    }
+    let mut pushed = Pushed {
+        read: Vec::with_capacity(members.len()),
+        became: Vec::with_capacity(members.len()),
+        beside: Vec::new(),
+    };
+    for member in members {
+        let at = pushed.read.len();
+        let was_pushed = push(member, members, &mut pushed, cx);
+        if was_pushed {
+            pushed.beside.push(member.clone());
+        }
+        pushed.became.push((at..pushed.read.len(), was_pushed));
+    }
+    if pushed.beside.is_empty() {
+        return None;
+    }
+    let as_written = std::mem::take(&mut pushed.beside);
+    pushed.beside = pushed.read.iter().cloned().chain(as_written).collect();
+    Some(pushed)
 }
 
 /// Whether `branch` shares no value with the members of a meet other than the
@@ -1275,7 +1481,7 @@ fn shares_nothing_beside(branch: &Schema, members: &[Schema], at: usize, cx: &Cx
         let held = match &**inner {
             Schema::Intersection(parts) => parts.iter().all(|part| beside().any(|m| m == part)),
             Schema::Union(parts) => beside().any(|m| m == &**inner || parts.contains(m)),
-            single => beside().any(|m| m == single),
+            single => beside().any(|m| m == single || defined_holding(single, m, cx.defs)),
         };
         if held && a_set(inner) {
             return true;
@@ -1284,9 +1490,17 @@ fn shares_nothing_beside(branch: &Schema, members: &[Schema], at: usize, cx: &Cx
     beside().any(|member| {
         let complements = matches!(member, Schema::Complement(inner)
             if **inner == *branch
-                || matches!(&**inner, Schema::Union(parts) if parts.contains(branch)));
+                || matches!(&**inner, Schema::Union(parts) if parts.contains(branch))
+                || defined_holding(inner, branch, cx.defs));
         complements && a_set(member)
     })
+}
+
+/// Whether `schema` is a reference whose definition is a union holding `held`,
+/// so the reference, which denotes exactly its definition, holds `held`.
+fn defined_holding(schema: &Schema, held: &Schema, defs: &[Schema]) -> bool {
+    matches!(schema, Schema::Ref(id)
+        if matches!(defs.get(id.get()), Some(Schema::Union(parts)) if parts.contains(held)))
 }
 
 /// A meet the rules declined, read as a set minus sets where it is one: a

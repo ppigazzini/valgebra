@@ -905,6 +905,144 @@ def test_a_guard_beside_a_member_of_the_kind_it_complements_is_its_branch() -> N
     assert not held.is_valid({"tags": ["c"]})
 
 
+# THEORY: a-meet-is-distributed-four-clauses-wide
+def test_a_translation_s_not_if_any_of_and_one_of_are_read_beside_the_object() -> None:
+    """The complements and branches a translation writes beside an object narrow.
+
+    A translation from JSON Schema writes `not X` as `~X & J`, `J` the JSON
+    values, `if I then T` as `(~I & J) | (I & T & J)`, and `anyOf` and `oneOf` as
+    unions of meets each holding `J`, every keyword guarded to its kind with
+    `| ~dict`, beside the object it applies to. Each shape below holds only
+    objects carrying `k`. Below a supertype, a complement of a union beside the
+    object is read as its branches' complements, a complement of a meet all of
+    whose conjuncts but one are members as that conjunct's complement, and each
+    branch of a union in the clause it makes with the members beside it, so each
+    is below the record requiring `k`; and one that admits an object without `k`
+    is refuted.
+    """
+    every_dict = complement(dict[Any, Any])
+    obj = {str: _JSON}
+
+    def has(*keys: str) -> Validator[object]:
+        return union({**dict.fromkeys(keys, _JSON), str: _JSON}, every_dict)
+
+    def nt(schema: object) -> Validator[object]:
+        return intersection(complement(schema), _JSON)
+
+    alone, both = intersection(has("k"), nt(has("j"))), has("k", "j")
+    shapes = {
+        "not not": intersection(obj, nt(nt(has("k"))), _JSON),
+        "not anyOf": intersection(
+            obj,
+            nt(union(intersection(nt(has("k")), _JSON), intersection(has("z"), _JSON))),
+            _JSON,
+        ),
+        "if": intersection(
+            {"j": _JSON, str: _JSON},
+            union(nt(has("j")), intersection(has("j"), has("k"), _JSON)),
+        ),
+        "anyOf": intersection(
+            obj,
+            union(intersection(has("k"), _JSON), intersection(has("k", "j"), _JSON)),
+        ),
+        "oneOf": intersection(
+            obj,
+            union(
+                intersection(alone, complement(both), _JSON),
+                intersection(both, complement(alone), _JSON),
+            ),
+        ),
+    }
+    carries_k = Validator({"k": anything, str: anything})
+    for shape, held in shapes.items():
+        assert held.relation_to(carries_k) == "subset", shape
+    either = intersection(
+        obj, union(intersection(has("k"), _JSON), intersection(has("j"), _JSON))
+    )
+    assert either.relation_to(carries_k) == "not_subset"
+    assert either.is_valid({"j": 1})
+
+
+# THEORY: lattice-theory
+def test_a_complement_pushed_in_leaves_the_values_it_held() -> None:
+    """A complement read pushed in leaves the meet holding the values it held.
+
+    A translation writes `if I then T` as `(~I & J) | (I & T & J)`, each keyword
+    guarded to its kind, and `not X` as `~X & J`. Held beside the union it
+    pushes into, a complement would stay in every clause that union is
+    distributed into through `J`, push into it again, and meet the same clause
+    on its own path, which emptiness answers by hypothesis: `~(T & I & J) & J`
+    would be read empty while it holds `-20`, and `anyOf [X, not X]` refuted
+    above the JSON values it equals.
+    """
+    if_ = union(complement(int), Annotated[int, at.Lt(0)])
+    then = union(
+        intersection(Annotated[int, at.Ge(-10)], complement(bool)), complement(int)
+    )
+    held = intersection(complement(intersection(then, if_, _JSON)), _JSON)
+    assert held.is_valid(-20)
+    assert held.relation_to(nothing) == "not_subset"
+    implied = union(
+        intersection(complement(if_), _JSON), intersection(if_, then, _JSON)
+    )
+    either = union(implied, intersection(complement(implied), _JSON))
+    assert Validator(_JSON).relation_to(either) == "subset"
+
+
+# THEORY: a-meet-is-distributed-four-clauses-wide
+def test_a_meet_read_for_its_emptiness_is_narrowed_as_written() -> None:
+    """A meet read for its emptiness drops only what shares no value as written.
+
+    Its narrowed meet is asked before the distribution of the meet as written,
+    which a narrowing hands the respelling's allowance alone. Read there with a
+    branch narrowed in its clause, the excluded middle over the translation of
+    an object with `dependentSchemas` and `unevaluatedProperties`, `J <= X | (~X
+    & J)`, would be left undecided; read so where the meet is related to a
+    supertype, after every other reading of it, it costs none. The same holds
+    over the translation of `if I else E` on numbers. `J` is the JSON values as
+    a translation writes them, its floats those at least `-inf`.
+    """
+    json = recursive(
+        lambda j: union(
+            None, bool, int, Annotated[float, at.Ge(-math.inf)], str, [j], {str: j}
+        )
+    )
+    every_dict = complement(dict[Any, Any])
+    has_foo = Validator({"foo": anything, anything: anything})
+    obj = intersection(
+        {str: json},
+        {"foo?": str, str: json},
+        union(
+            intersection(union(Validator({"foo?": json}), every_dict), json),
+            intersection(
+                has_foo,
+                union(Validator({"bar?": json, "foo?": json}), every_dict),
+                json,
+            ),
+        ),
+        union(
+            intersection(
+                has_foo, union({"bar": Literal["bar"], str: json}, every_dict), json
+            ),
+            complement(has_foo),
+        ),
+    )
+    not_bool = complement(bool)
+    numbers = intersection(union(int, Annotated[float, at.Ge(-math.inf)]), not_bool)
+
+    def keyword(*branches: object) -> Validator[object]:
+        return union(intersection(union(*branches), not_bool), complement(numbers))
+
+    if_ = keyword(Annotated[float, at.Lt(0)], Annotated[int, at.Lt(0)])
+    else_ = keyword(
+        Annotated[float, at.MultipleOf(2)], Annotated[int, at.MultipleOf(2)]
+    )
+    implied = union(intersection(if_, json), intersection(else_, complement(if_), json))
+    for x in (obj, implied):
+        either = union(x, intersection(complement(x), json))
+        assert Validator(json).relation_to(either) == "subset"
+
+
 class _WeirdInt(int):
     """An `int` subclass whose comparisons answer `True` whatever they are asked."""
 
