@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - feat: a pattern's word lengths decide a length bound
+- feat: a union's branch that is a meet of atoms is one clause
 
 -->
 
@@ -28,6 +29,14 @@ answer of its own, or a repair to a change not yet released.
   its states. A bound a pattern keeps to changes no string of it, so the meet of the two is the
   pattern, below the same patterns the pattern alone is below. Against 0.0.31's recording no
   decision is lost and none is slower.
+
+- **A union's branch that is a meet of atoms is one clause.** A meet the rules decline is
+  distributed across its unions where its normal form spans four clauses at most, and a union
+  whose branch was a meet counted past any bound, so such a meet was never distributed. A branch
+  that is a meet holding no union and no meet is the one clause its members join, so `w implies
+  w and t` spelled `union(intersection(has("w"), has("w", "t")), complement(has("w")))` reads as
+  its flat spelling does: met with a record whose field holds a predicate, which keeps the record
+  from the set representation, it is `not_subset` of `nothing`, where it stayed `undecided`.
 
 ## [0.0.31] - 2026-11-21
 

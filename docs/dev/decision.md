@@ -1857,10 +1857,13 @@ its members unfolds the reference into itself (`meet_through_a_reference` in
 members, and a union among a meet's members distributed the same way where it
 holds a reference, a meet is already being unfolded, or the meet's normal form
 spans four clauses at most -- the product of its unions' widths, the bound ty's
-intersection builder caps its normal form at, where no branch is a meet or a
-union, whose own unions a width does not count -- so a meet of two keywords
-guarded to their kind, `OBJ & (~OBJ | R) & (~OBJ | Q)`, is read clause by
-clause. The meet is a goal of
+intersection builder caps its normal form at, where no branch is a union or a
+meet holding a union or a meet, whose own unions a width does not count, and a
+branch that is a meet of atoms is the one clause its members join (`one_clause`)
+-- so a meet of two keywords guarded to their kind, `OBJ & (~OBJ | R) & (~OBJ |
+Q)`, is read clause by clause, and so is a record met with
+`(has(w) & has(w, t)) | ~has(w)`, which a field holding a predicate keeps from
+the sets. The meet is a goal of
 its own, its members sorted and without repeats, held open beside the query's
 budget while the path below decides it -- except a meet distributed for its
 normal form alone, which no reference reaches and which, held open, would have

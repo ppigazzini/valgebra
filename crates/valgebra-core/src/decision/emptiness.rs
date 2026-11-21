@@ -1702,35 +1702,45 @@ pub(super) const MAX_DISTRIBUTED_TERMS: usize = 4;
 /// branch of them one clause.
 ///
 /// A meet the rules decline is the union of the meets its union members'
-/// branches make with the rest [FCB08, Def. 4.1], which is how every source
-/// decides it, on the normal form, and a branch's meet is strictly smaller, so
+/// branches make with the rest [FCB08, Def. 4.1], its normal form
+/// [FCB08, Def. 6.1, Lem. 6.2], which is how every source decides it, on the
+/// normal form, and a branch's meet is strictly smaller, so
 /// the distribution ends. What it costs is the clauses: a meet of `k` unions of
 /// two is `2^k` of them, each a decision, so a decline that spends a step
 /// distributed spends a product, which [`MAX_DISTRIBUTED_TERMS`] bounds.
 ///
-/// **A branch that is a meet or a union is not one clause.** Distributed, its
-/// members join the branch's meet and its own unions are distributed in turn,
-/// so the width counts fewer clauses than the distribution reads, and the meet
-/// is left to the rules: a tower whose every level is `(N | A) & (N | B)`,
-/// counted by its widths, is four clauses at each level and a product of them
-/// over its depth.
-fn normal_form_within(members: &[Schema], bound: usize) -> bool {
+/// **A branch that is a union, or a meet holding a union or a meet, is not one
+/// clause.** Distributed, its members join the branch's meet and its own unions
+/// are distributed in turn, so the width counts fewer clauses than the
+/// distribution reads, and the meet is left to the rules: a tower whose every
+/// level is `(N | A) & (N | B)`, counted by its widths, is four clauses at each
+/// level and a product of them over its depth. A meet of neither is one clause
+/// ([`one_clause`]): `(has(w) & has(w, t)) | ~has(w)` is two.
+pub(super) fn normal_form_within(members: &[Schema], bound: usize) -> bool {
     members
         .iter()
         .try_fold(1usize, |clauses, member| match member {
-            Schema::Union(branches)
-                if branches.iter().all(|branch| {
-                    !matches!(branch, Schema::Union(_) | Schema::Intersection(_))
-                }) =>
-            {
-                clauses
-                    .checked_mul(branches.len())
-                    .filter(|&clauses| clauses <= bound)
-            }
+            Schema::Union(branches) if branches.iter().all(one_clause) => clauses
+                .checked_mul(branches.len())
+                .filter(|&clauses| clauses <= bound),
             Schema::Union(_) => None,
             _ => Some(clauses),
         })
         .is_some()
+}
+
+/// Whether a union's `branch` is one clause of the normal form
+/// ([`normal_form_within`]): no union, and no meet holding a union or a meet.
+/// A clause of the normal form is a set of atoms [FCB08, Def. 6.1, Lem. 6.2], so
+/// a meet of atoms is its members spliced into the clause it makes.
+fn one_clause(branch: &Schema) -> bool {
+    match branch {
+        Schema::Union(_) => false,
+        Schema::Intersection(members) => members
+            .iter()
+            .all(|member| !matches!(member, Schema::Union(_) | Schema::Intersection(_))),
+        _ => true,
+    }
 }
 
 thread_local! {

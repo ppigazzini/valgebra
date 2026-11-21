@@ -17708,6 +17708,7 @@ fn a_patterns_lengths_entail_and_break_bounds_at_their_edges() {
     assert!(!constraints::a_pattern_holds_a_word(&refined("[a&&b]")));
     assert!(!constraints::a_pattern_holds_a_word(&Schema::Str));
 }
+
 /// Past the counted automaton's states a length bound lowered alone fits no table,
 /// and the relation reads the pattern's lengths instead: a pattern of 24 characters
 /// is below every `MaxLen` from 24 and outside a `MinLen` past them, and an unbounded
@@ -17728,4 +17729,32 @@ fn a_pattern_against_a_bound_past_the_counted_states_is_decided() {
             "MinLen({bound})"
         );
     }
+}
+
+/// A union's branch is one clause of the normal form where it holds no union and
+/// no meet: an atom, or a meet of atoms spliced into its clause. A branch that is
+/// a union, or a meet holding a union or a meet, is not, the tower the width
+/// bounds, and a product of widths past the bound is refused.
+// THEORY: a-meet-is-distributed-four-clauses-wide
+#[test]
+fn a_meet_of_atoms_is_one_clause_and_a_meet_of_unions_is_not() {
+    use super::emptiness::normal_form_within;
+    let union_of = |branches: Vec<Schema>| Schema::Union(branches.into());
+    let meet_of = |members: Vec<Schema>| Schema::Intersection(members.into());
+    let atoms = meet_of(vec![Schema::Int, Schema::Str]);
+    let pair = || union_of(vec![atoms.clone(), Schema::Bool]);
+    assert!(normal_form_within(&[pair(), pair()], 4));
+    assert!(!normal_form_within(&[pair(), pair(), pair()], 4));
+    let holding_a_union = meet_of(vec![Schema::Int, union_of(vec![Schema::Str, Schema::Bool])]);
+    assert!(!normal_form_within(
+        &[union_of(vec![holding_a_union, Schema::Bool])],
+        4
+    ));
+    let holding_a_meet = meet_of(vec![Schema::Int, atoms.clone()]);
+    assert!(!normal_form_within(
+        &[union_of(vec![holding_a_meet, Schema::Bool])],
+        4
+    ));
+    let nested = union_of(vec![union_of(vec![Schema::Int, Schema::Str]), Schema::Bool]);
+    assert!(!normal_form_within(&[nested], 4));
 }

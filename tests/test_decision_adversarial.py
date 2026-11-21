@@ -906,6 +906,32 @@ def test_a_guard_beside_a_member_of_the_kind_it_complements_is_its_branch() -> N
 
 
 # THEORY: a-meet-is-distributed-four-clauses-wide
+def test_a_branch_that_is_a_meet_of_records_is_one_clause() -> None:
+    """A union whose branch is a meet holding no union is distributed clause by clause.
+
+    `w implies w and t` spelled as `(has(w) & has(w, t)) | ~has(w)` and as
+    `has(w, t) | ~has(w)` is one set, and a record whose field holds a predicate
+    branch, which keeps the record from the set representation, meets either in the
+    record without `w`: `{"u": "a"}`. The branch that is a meet is one clause, its
+    two records spliced into it, so both spellings are read as two clauses.
+    """
+    name = Validator(Annotated[str, Regex("[a-z]+")])
+    legacy = Validator(Annotated[str, at.Predicate(lambda value: value == "Old User")])
+
+    def has(*names: str) -> Validator[object]:
+        return Validator(dict.fromkeys(names, anything)).open()
+
+    nested = union(intersection(has("w"), has("w", "t")), complement(has("w")))
+    flat = union(has("w", "t"), complement(has("w")))
+    split = union(intersection(has("w"), has("t")), complement(has("w")))
+    assert (nested.relation_to(flat), flat.relation_to(nested)) == ("subset", "subset")
+    record = Validator({"u": union(name, legacy), "w?": str, "t?": int})
+    for spelling in (flat, nested, split):
+        assert intersection(record, spelling).relation_to(nothing) == "not_subset"
+    assert {"u": "a"} in intersection(record, nested)
+
+
+# THEORY: a-meet-is-distributed-four-clauses-wide
 def test_a_translation_s_not_if_any_of_and_one_of_are_read_beside_the_object() -> None:
     """The complements and branches a translation writes beside an object narrow.
 
