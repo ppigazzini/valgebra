@@ -151,6 +151,12 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- **The documentation site is built by Zensical.** Material for MkDocs, which reaches its end of
+  life on 2027-05-05, gives way to Zensical, its maintained successor, which builds the site from
+  the same `mkdocs.yml` under `zensical build --strict`: its own search, the redirects from each
+  page's former address, the `llms.txt` manifest and the `llms-full.txt` export, the Mermaid
+  diagrams and the mkdocstrings API reference. No page moves.
+
 - **A relation keeps what it read of a class.** A refutation about a class reads what a direct
   instance of it can carry off the namespaces of its `__mro__`, and a class's own reading is now
   kept across relations and taken where the namespace still holds the same names, each read as the

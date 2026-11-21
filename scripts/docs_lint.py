@@ -14,7 +14,7 @@ claims:
   readers follow into nothing.
 * **A link from the site into the developer set.** ``mkdocs.yml`` excludes
   ``docs/dev/``, so a published page linking there resolves in the tree and
-  answers 404 on the site, where ``mkdocs build --strict`` reports it only at
+  answers 404 on the site, where ``zensical build --strict`` reports it only at
   INFO. A published page links such a page by its GitHub address instead.
 * **A link whose text is a page's file name.** ``[decision.md](decision.md)``
   says where the page is, which the target already says, and not what the
@@ -276,7 +276,7 @@ def check_links(path: Path, text: str) -> list[str]:
             problems.append(f"dead link {target!r}")
             continue
         # The page resolves in the tree and not on the site, which renders
-        # neither the target nor a warning: `mkdocs build --strict` reports a
+        # neither the target nor a warning: `zensical build --strict` reports a
         # link to an excluded page at INFO, and the published page answers 404.
         if _on_the_site(path) and _unpublished(page):
             problems.append(

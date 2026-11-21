@@ -136,13 +136,13 @@ file that owns the contract and the single command that reproduces its verdict.
 | Python lint and format | `pyproject.toml` `[tool.ruff]` | `uv run --no-sync ruff check . && uv run --no-sync ruff format --check .` |
 | Python types | `pyproject.toml` | `uv run --no-sync ty check` |
 | documentation claims | every tracked `*.md` | `uv run --no-sync python scripts/docs_lint.py` |
-| the API reference carries the compiled docstrings | `scripts/docs_stubs.py` | `uv run --no-sync --group docs mkdocs build --strict && uv run --no-sync python scripts/docs_stubs.py --check` |
+| the API reference carries the compiled docstrings | `scripts/docs_stubs.py` | `uv run --no-sync --group docs zensical build --strict && uv run --no-sync python scripts/docs_stubs.py --check` |
 | the use cases the tree has, and how many the suite names | the type stub and the codes the walk writes | `uv run --no-sync python scripts/use_case_ledger.py` |
 | the branch arms the core's tests reach | an instrumented run on the pinned nightly | `uv run --no-sync python scripts/branch_coverage.py branches.json` |
 | when a `typing` or `enum` name, or a stdlib module, arrived | `tests/floor_names.json` | `uv run --no-sync python scripts/floor_names.py --check` |
 | doc examples run | `docs/` | `uv run --no-sync --group examples python scripts/run_doc_examples.py` |
 | doc examples read clean under ty, mypy, pyright and ruff, or say why | `scripts/check_doc_examples.py` | `uv run --no-sync --group examples python scripts/check_doc_examples.py` |
-| the rendered site builds, every link and anchor resolving and every page in the nav | `mkdocs.yml` | `uv run --no-sync --group docs mkdocs build --strict` |
+| the rendered site builds, every link and anchor resolving and every page in the nav | `mkdocs.yml` | `uv run --no-sync --group docs zensical build --strict` |
 | a change costs the core and decision workloads no more instructions than its base, within the instruction gate's ceiling and past a step the budget file argues | the workloads in `crates/valgebra-core/examples/`, built at the change and at its base | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --core --decision --decision-refute --decision-repeat --decision-matrix --decision-rules --decision-sets --decision-lengths` |
 | a change costs a binding shape no more instructions than its base, within the instruction gate's ceiling and past a step the budget file argues | the shapes in `crates/valgebra-py/src/workload.rs`, built at the change and at its base | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --binding` |
 | a change, to the code or to the training, costs a comparison shape no more instructions on the profile-guided wheel than at its base, within the instruction gate's ceiling | the comparison gate's shapes, on the wheel built at the change and at its base in one directory | `uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --profiled` |

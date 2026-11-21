@@ -912,7 +912,7 @@ jobs:
       # tree's -- a cell nothing names and nothing excuses, or an excuse for a
       # cell a test now names.
       - run: uv run --no-sync python scripts/use_case_ledger.py
-      - run: uv run --no-sync mkdocs build --strict
+      - run: uv run --no-sync zensical build --strict
       # A build that exits 0 is not evidence the API reference has content: a
       # page of headings and no prose builds as cleanly as one with its prose.
       - run: uv run --no-sync python scripts/docs_stubs.py --check

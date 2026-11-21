@@ -86,7 +86,7 @@ validation:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  # A diagram is a `mermaid` block, text the page carries: Material loads Mermaid on a page
+  # A diagram is a `mermaid` block, text the page carries: the theme loads Mermaid on a page
   # holding one and draws it in the site's palette, light or dark, and GitHub draws the same
   # block. The formatter is named by a Python tag, which is why the YAML hook parses this
   # file with --unsafe.

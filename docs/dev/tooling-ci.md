@@ -43,7 +43,7 @@ A script runs with its own directory first on the import path, so it finds the
 module by name. A test or the benchmarks' conftest loading a script by path
 puts the directory there first, and a test copying a script into a tree of its
 own copies the module too, since a script's root is where `_lib.py` sits.
-mkdocs loads `docs_stubs.py` by path as a griffe extension, with no loader of
+mkdocstrings loads `docs_stubs.py` by path as a griffe extension, with no loader of
 ours between, so that script puts its own directory on the path. The leading underscore says the file is
 no script: no lane runs it, it has no contract row and it takes no flags.
 `tests/test_script_arguments.py` refuses a script that defines a code, `ROOT`

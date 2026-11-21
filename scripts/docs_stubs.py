@@ -11,7 +11,7 @@ an alias to `valgebra.Validator`, whose own definition is an alias back to
 the extension, and the two point at each other. griffe then merges the stub
 it read beside the extension into the module, and where a stub class meets
 an alias it keeps the stub class, which carries the types and no prose. The
-page renders every heading with nothing under it, and `mkdocs build --strict`
+page renders every heading with nothing under it, and `zensical build --strict`
 exits 0 doing it.
 
 `InspectTheCompiledClasses` is a griffe extension that breaks the cycle at
@@ -26,7 +26,7 @@ the stub's. Each stays written once, where it is.
 script this checks a built page instead, because a build that exits 0 is not
 evidence the page has content:
 
-    python scripts/docs_stubs.py --check    # after `mkdocs build --strict`
+    python scripts/docs_stubs.py --check    # after `zensical build --strict`
 
 The check imports the package and looks for the first line of each documented
 object's docstring in `site/reference/api/index.html`, so a phrase edited in Rust is
@@ -44,7 +44,7 @@ from typing import Any
 
 import griffe
 
-# mkdocs loads this file by path, as a griffe extension, in a process no script
+# mkdocstrings loads this file by path, as a griffe extension, in a process no script
 # run started: `scripts/` is not on that import path until this puts it there.
 _HERE = str(Path(__file__).resolve().parent)
 if _HERE not in sys.path:
@@ -117,7 +117,8 @@ def main(argv: list[str]) -> int:
         parser.error("--check is the one mode")
     if not PAGE.exists():
         print(
-            f"{PAGE.relative_to(ROOT)} is not built: run `mkdocs build --strict` first"
+            f"{PAGE.relative_to(ROOT)} is not built:"
+            " run `zensical build --strict` first"
         )
         return 2
     absent = missing(PAGE.read_text(encoding="utf-8"))
