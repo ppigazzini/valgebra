@@ -1442,7 +1442,12 @@ intersection builder caps its own normal form at, a branch that is a meet of
 atoms counted as the one clause its members join, and past that narrow its unions by the
 complements beside them, each branch read in the clause it makes with the
 members beside it where the meet is related to a supertype, and drop a guard
-beside a member of its kind. Four is a peer's tuning and no result. The
+beside a member of its kind. Related to a supertype, a meet the other readings
+leave is brought to almost-DNF a union at a time [BBC+26, §5.2], below the
+supertype where every clause is [BBC+26, (anyOf-l)], and read lazily
+[BBC+26, §6], so one union is distributed, a clause holding another distributes
+it in its own turn, and the query's own steps bound the whole. Four is a peer's
+tuning and no result. The
 narrowing and the capped distribution split one budget between two readings
 that each decide answers the other cannot, so a repair that moves the split
 trades answers rather than adding them. A binary decision tree holds the
@@ -1453,9 +1458,9 @@ build as they descend, each a term of its own.
 
 SOURCE: §13.1 "**product** of the sub-forms. That blow-up is why a DNF-based decision needs"
 
-IMPLEMENTED-BY: decision/emptiness.rs::normal_form_within, decision/emptiness.rs::one_clause, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::in_its_clause
+IMPLEMENTED-BY: decision/emptiness.rs::normal_form_within, decision/emptiness.rs::one_clause, decision/emptiness.rs::narrowed_by_its_members, decision/emptiness.rs::in_its_clause, decision.rs::a_meet_distributed_below
 
-HELD-BY: a_union_holding_a_reference_is_distributed_into_the_meet, a_union_in_a_meet_is_narrowed_by_the_members_beside_it, test_a_narrowed_meet_left_open_is_distributed_as_written, a_meet_of_atoms_is_one_clause_and_a_meet_of_unions_is_not, test_a_branch_that_is_a_meet_of_records_is_one_clause, a_branch_of_a_union_is_read_in_its_clause, test_a_translation_s_not_if_any_of_and_one_of_are_read_beside_the_object, test_a_meet_read_for_its_emptiness_is_narrowed_as_written
+HELD-BY: a_union_holding_a_reference_is_distributed_into_the_meet, a_union_in_a_meet_is_narrowed_by_the_members_beside_it, test_a_narrowed_meet_left_open_is_distributed_as_written, a_meet_of_atoms_is_one_clause_and_a_meet_of_unions_is_not, test_a_branch_that_is_a_meet_of_records_is_one_clause, test_a_meet_holding_a_union_is_asked_as_its_clauses, test_a_meet_holding_a_union_answers_as_its_distribution_wherever_it_decides, a_branch_of_a_union_is_read_in_its_clause, test_a_translation_s_not_if_any_of_and_one_of_are_read_beside_the_object, test_a_meet_read_for_its_emptiness_is_narrowed_as_written, a_meet_holding_a_union_is_asked_as_its_clauses, a_meet_of_unions_is_below_what_each_clause_is_below
 
 **The descriptor holds no cycle.** A recursive reference is cut after one
 unfolding, to the top where it is read positively and to the bottom under a

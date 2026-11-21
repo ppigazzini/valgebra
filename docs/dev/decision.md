@@ -399,6 +399,23 @@ time it was asked again, most of a millisecond, and reads it back in five
 microseconds (`a_counted_table_is_kept_under_the_compilers_text`). The memo is
 bounded by the bytes it holds, `COMPILED_BYTES`, and starts over past it.
 
+**A meet holding a union is asked as its clauses, in a further asking**
+(`a_meet_distributed_below`, `asked_distributed`). Where a root question every asking
+leaves undecided has a meet holding a union for its subject, it is asked once more, with a
+budget of its own, and in that asking a meet subject the other readings decline is brought
+to almost-DNF a union at a time [BBC+26, §5.2], so the widest union among its members is
+distributed, each branch met with the members beside it and that union's copies dropped,
+and the meet is below the supertype where every clause is [BBC+26, (anyOf-l)] and outside it
+where one is. A clause holding a union distributes it in its own turn [BBC+26, §6], and a
+respelled question inside it spends the asking's steps (`NARROWING`), so the asking's budget
+bounds the whole: the distribution deciding a `oneOf` of two pairs below the `if` a
+translation from JSON Schema writes spends 156,908 steps, past both respelling allowances.
+In the first asking it lost answers, since it spent the steps the readings after it decided
+with -- the excluded middle over the translation of an object, `J <= X | (~X & J)`, read
+undecided (`test_a_meet_read_for_its_emptiness_is_narrowed_as_written`) -- so it is a further
+asking only, which takes no answer away. A meet supertype needs no reading of its own: its
+member questions reach the subject's distribution through the rules.
+
 **A pattern's lengths answer a length bound without counting it** (`Dfa::lengths` in
 `descr/regular.rs`). Whether a regular language lies within the words of at most `n`
 symbols asks its longest word alone, so the least and the most length of a pattern's

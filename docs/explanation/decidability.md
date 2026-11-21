@@ -844,6 +844,26 @@ answers `"undecided"`.
     held = intersection(obj, t0, if_t0_then_named)
     assert held.relation_to({"n": json, str: json}) == "subset"
     ```
+- **A meet holding a union, asked as its clauses.** A meet holding a union is
+  the union of the clauses its distribution writes, so it is below a supertype
+  where each clause is. Where every other reading of a question declines and its
+  subject is such a meet, the question is asked once more with the meet
+  distributed, under steps of its own: the widest union is spread first, and a
+  clause holding a union spreads it in its own turn, so a clause is written only
+  where it is asked. For `a = recursive(lambda t: union(None, [t]))`,
+  `(a | str) & (a | bytes)` is below `a`: the clause beside `a` by that member,
+  and `str & bytes` because it is empty, though construction leaves it a meet.
+  The distribution costs the product of the unions' widths, and asked last it
+  spends nothing on a question another reading decides.
+
+    ```python
+    from valgebra import intersection, recursive, union
+
+    a = recursive(lambda t: union(None, [t]))
+    assert intersection(union(a, str), union(a, bytes)).relation_to(a) == "subset"
+    assert a.relation_to(intersection(union(a, str), union(a, bytes))) == "subset"
+    ```
+
 - **The complement laws, where the constructors reach them.** `complement`
   cancels a complement, `union` folds a join carrying a schema beside its own
   complement, and `intersection` folds the meet of that pair, all where the
@@ -1511,14 +1531,6 @@ the shape. What is left below is what the descriptor cannot hold.
   assert Validator(int).relation_to(complement(float)) == "subset"
   ```
 
-- **A meet of unions, read through its members.** A meet is placed below a
-  supertype by its members and its own readings, and is not spread over the
-  branches of the unions it holds: for `a = recursive(lambda t: union(None,
-  [t]))`, `(a | str) & (a | bytes)` is `a | (str & bytes)` by distributivity,
-  which is `a`, and the pair is `"undecided"` though the converse is
-  `"subset"`. `str & bytes` is empty, and construction leaves it a meet rather
-  than folding it to `nothing`. Spreading a meet over its unions costs the
-  product of their widths, the cost the budget is there to bound.
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one -- and that is a statement about the
   *predicate*, not about every pair carrying one. A refinement is a subset of

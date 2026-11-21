@@ -17758,3 +17758,132 @@ fn a_meet_of_atoms_is_one_clause_and_a_meet_of_unions_is_not() {
     let nested = union_of(vec![union_of(vec![Schema::Int, Schema::Str]), Schema::Bool]);
     assert!(!normal_form_within(&[nested], 4));
 }
+
+/// Records over objects as a translation from JSON Schema writes them: each holding
+/// `rest` at any other key and guarded to its kind with `| ~dict`, over two disjoint
+/// values,
+/// the condition `I` of an `if`, its branches `T` and `E`, and the record `Z` requiring
+/// both keys.
+fn guarded_records(rest: &Schema) -> [Schema; 6] {
+    let every_dict = Schema::mapping(MapClause {
+        key: Schema::ANYTHING,
+        value: Schema::ANYTHING,
+    })
+    .complement();
+    let guarded = |fields: Vec<Field>| {
+        Schema::union([
+            Schema::keyed_map(
+                fields,
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: rest.clone(),
+                }],
+            ),
+            every_dict.clone(),
+        ])
+    };
+    let (x, y) = (Schema::Int, Schema::Str);
+    [
+        guarded(vec![
+            field("a", x.clone(), false),
+            field("b", x.clone(), false),
+        ]),
+        guarded(vec![
+            field("a", y.clone(), false),
+            field("b", y.clone(), false),
+        ]),
+        guarded(vec![field("a", x.clone(), false)]),
+        guarded(vec![field("b", x, false)]),
+        guarded(vec![field("b", y, false)]),
+        guarded(vec![
+            field("a", rest.clone(), true),
+            field("b", rest.clone(), true),
+        ]),
+    ]
+}
+
+/// A meet subject holding a union is below a supertype where each clause of its
+/// distribution is, the rule [BBC+26, (anyOf-l)] states: `Z & (X | Y)` is below `if
+/// a = x then b = x else b = y`, which no reading of the meet as written decides, and
+/// below the meet of that with `Z`, for records holding any value or the JSON values
+/// at their other keys. The further asking that distributes it is closed once it
+/// returns.
+// THEORY: a-meet-is-distributed-four-clauses-wide
+#[test]
+fn a_meet_holding_a_union_is_asked_as_its_clauses() {
+    let json = Schema::Ref(DefIx::new(0));
+    let defs = [Schema::union([
+        Schema::NoneType,
+        Schema::Bool,
+        Schema::Int,
+        Schema::Float,
+        Schema::Str,
+        Schema::list(SeqShape::homogeneous(json.clone())),
+        Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: json.clone(),
+        }),
+    ])];
+    for rest in [Schema::ANYTHING, json] {
+        let [both_x, both_y, cond, then, otherwise, both] = guarded_records(&rest);
+        let ite = Schema::union([
+            Schema::meet([cond.clone(), then]),
+            Schema::meet([cond.complement(), otherwise]),
+        ]);
+        let subject = Schema::meet([both.clone(), Schema::union([both_x, both_y])]);
+        let ask = |sup: &Schema| subject.subtype_relation_under(sup, &NoLeafRelations, &defs);
+        assert_eq!(ask(&ite), Relation::Holds, "{rest:?}");
+        assert!(!DISTRIBUTING.with(Cell::get));
+        assert_eq!(ask(&Schema::meet([ite, both])), Relation::Holds, "{rest:?}");
+        assert!(!DISTRIBUTING.with(Cell::get));
+    }
+}
+
+/// The boundary page's meet of unions: for `a = μt. None | list[t]`, `(a | str) & (a |
+/// bytes)` is `a | (str & bytes)` by distributivity, which is `a`, and each clause is
+/// below `a`, the one beside `a` by its member and the other empty.
+// THEORY: a-meet-is-distributed-four-clauses-wide
+#[test]
+fn a_meet_of_unions_is_below_what_each_clause_is_below() {
+    let defs = [Schema::union([
+        Schema::NoneType,
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ])];
+    let a = Schema::Ref(DefIx::new(0));
+    let subject = Schema::meet([
+        Schema::union([a.clone(), Schema::Str]),
+        Schema::union([a.clone(), Schema::Bytes]),
+    ]);
+    assert_eq!(
+        subject.subtype_relation_under(&a, &NoLeafRelations, &defs),
+        Relation::Holds
+    );
+    assert!(!DISTRIBUTING.with(Cell::get));
+    assert_eq!(
+        a.subtype_relation_under(&subject, &NoLeafRelations, &defs),
+        Relation::Holds
+    );
+}
+
+/// The deeper reading is asked only of a subject holding a reference, with the
+/// definitions it names: an undecided pair naming none reads the sets as often
+/// beside a definition as without one.
+#[test]
+fn a_subject_naming_no_definition_is_asked_no_deeper_reading() {
+    use super::goal_tests::goals::pairs_read_by_the_sets;
+    let literal = |at: usize| Schema::Literal(ConstIx::new(at));
+    let list_of = |item: Schema| Schema::list(SeqShape::homogeneous(item));
+    for (sub, sup) in [
+        (literal(0), literal(1)),
+        (list_of(literal(0)), list_of(literal(1))),
+    ] {
+        let reads = |defs: &[Schema]| {
+            let before = pairs_read_by_the_sets();
+            let answer = sub.subtype_relation_under(&sup, &NoLeafRelations, defs);
+            (answer, pairs_read_by_the_sets() - before)
+        };
+        let (alone, read_alone) = reads(&[]);
+        assert_eq!(alone, Relation::Unknown);
+        assert_eq!(reads(&[Schema::Int]), (alone, read_alone));
+    }
+}

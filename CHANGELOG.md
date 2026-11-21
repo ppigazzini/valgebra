@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - feat: a pattern's word lengths decide a length bound
 - feat: a union's branch that is a meet of atoms is one clause
+- feat: a meet holding a union is asked as its clauses once all else declines
 
 -->
 
@@ -37,6 +38,16 @@ answer of its own, or a repair to a change not yet released.
   w and t` spelled `union(intersection(has("w"), has("w", "t")), complement(has("w")))` reads as
   its flat spelling does: met with a record whose field holds a predicate, which keeps the record
   from the set representation, it is `not_subset` of `nothing`, where it stayed `undecided`.
+
+- **A meet holding a union is asked as its clauses once all else declines.** A relation every
+  asking leaves undecided whose subject is a meet holding a union is asked once more, a budget of
+  its own, with each meet holding a union read as the union of its clauses, one union at a time:
+  below a supertype where every clause is, and outside it where one clause is. `Z & (X | Y)` is
+  related as `(Z & X) | (Z & Y)` is, so a `oneOf` of two pairs a translation from JSON Schema
+  writes, `{"oneOf": [{a: 1, b: 1}, {a: 2, b: 2}]}` beside `required: ["a", "b"]`, is `subset` of
+  `if a = 1 then b = 1 else b = 2`, and a meet subject below a meet supertype where it is below
+  each member, where each stayed `undecided`. The asking before it is unchanged, so no answer it
+  gives moves; against 0.0.31's recording no decision is lost and none is slower.
 
 ## [0.0.31] - 2026-11-21
 

@@ -905,6 +905,93 @@ def test_a_guard_beside_a_member_of_the_kind_it_complements_is_its_branch() -> N
     assert not held.is_valid({"tags": ["c"]})
 
 
+def _guarded_records(rest: object) -> dict[str, object]:
+    """Keywords over objects as a translation from JSON Schema writes them.
+
+    Each is an open record whose other keys take `rest`, guarded to its kind with
+    `| ~dict`: two pairs of constants, the condition of an `if`, the two keys it
+    requires and the branch each side of it narrows.
+    """
+    every_dict = complement(dict[Any, Any])
+
+    def guarded(fields: dict[str, object]) -> object:
+        return union({**fields, str: rest}, every_dict)
+
+    x, y = Literal["x"], Literal["y"]
+    return {
+        "X": guarded({"a?": x, "b?": x}),
+        "Y": guarded({"a?": y, "b?": y}),
+        "I": guarded({"a?": x}),
+        "T": guarded({"b?": x}),
+        "E": guarded({"b?": y}),
+        "Z": guarded({"a": rest, "b": rest}),
+    }
+
+
+# THEORY: a-meet-is-distributed-four-clauses-wide
+@pytest.mark.parametrize("rest", [anything, _JSON], ids=["rest anything", "rest JSON"])
+def test_a_meet_holding_a_union_is_asked_as_its_clauses(rest: object) -> None:
+    """A meet subject holding a union is below a supertype where each clause is.
+
+    `Z & (X | Y)` is `(Z & X) | (Z & Y)`, and each clause is below `if a = x then
+    b = x else b = y`; with the records open to the JSON values neither reading of
+    the meet as written decides it, and the clauses do. Beside a meet supertype the
+    same: `S <= A & B` where `S <= A` and `S <= B`. Every guard holds the values
+    that are no dict, the JSON values' and others, so the subject lies within the
+    JSON values only met with them.
+    """
+    k = _guarded_records(rest)
+    ite = union(intersection(k["I"], k["T"]), intersection(complement(k["I"]), k["E"]))
+    subject = intersection(k["Z"], union(k["X"], k["Y"]))
+    assert subject.relation_to(ite) == "subset"
+    assert subject.relation_to(intersection(ite, k["Z"])) == "subset"
+    within = intersection(subject, _JSON)
+    assert within.relation_to(intersection(ite, k["Z"], _JSON)) == "subset"
+    swapped = union(
+        intersection(k["I"], k["E"]), intersection(complement(k["I"]), k["T"])
+    )
+    assert subject.relation_to(swapped) == "not_subset"
+
+
+# THEORY: a-meet-is-distributed-four-clauses-wide
+@given(
+    z=st.sampled_from(["Z", "X", "I"]),
+    left=st.sampled_from(["X", "Y", "T", "E"]),
+    right=st.sampled_from(["X", "Y", "T", "E"]),
+    supertype=st.sampled_from(["ite", "I", "T", "E", "~I", "Z"]),
+    rest_is_json=st.booleans(),
+)
+def test_a_meet_holding_a_union_answers_as_its_distribution_wherever_it_decides(
+    *, z: str, left: str, right: str, supertype: str, rest_is_json: bool
+) -> None:
+    """A meet holding a union answers as its distribution wherever that decides.
+
+    `Z & (L | R)` and `(Z & L) | (Z & R)` are one set: where the second is proved
+    below a supertype the first is, and the two never answer apart. A meet supertype
+    is the greatest lower bound of its members, so where the subject is proved below
+    each it is proved below their meet.
+
+    The refutation half is not held here: a refutation a reading at a query's root
+    alone gives, as the guessed values do, is not given to a meet supertype's member
+    question, so `S <= A` refuted and `S <= A & B` undecided both occur, at 0.0.31 too.
+    """
+    k = _guarded_records(_JSON if rest_is_json else anything)
+    k["ite"] = union(
+        intersection(k["I"], k["T"]), intersection(complement(k["I"]), k["E"])
+    )
+    k["~I"] = complement(k["I"])
+    other = k[supertype]
+    written = intersection(k[z], union(k[left], k[right]))
+    distributed = union(intersection(k[z], k[left]), intersection(k[z], k[right]))
+    spread, asked = distributed.relation_to(other), written.relation_to(other)
+    assert {spread, asked} != {"subset", "not_subset"}
+    if spread == "subset":
+        assert asked == "subset"
+    for member in ("Z", "I"):
+        if asked == "subset" and written.relation_to(k[member]) == "subset":
+            assert written.relation_to(intersection(other, k[member])) == "subset"
+
+
 # THEORY: a-meet-is-distributed-four-clauses-wide
 def test_a_branch_that_is_a_meet_of_records_is_one_clause() -> None:
     """A union whose branch is a meet holding no union is distributed clause by clause.

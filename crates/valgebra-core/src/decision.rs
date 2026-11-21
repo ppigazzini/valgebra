@@ -222,6 +222,55 @@ impl Drop for SecondAsking {
     }
 }
 
+thread_local! {
+    /// Whether a root question's further asking, the one that distributes a meet
+    /// subject's unions ([`asked_distributed`]), is under way on this thread.
+    static DISTRIBUTING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// A root question asked a further time with its meets brought to almost-DNF
+/// ([`a_meet_distributed_below`]), under a budget of its own, where every asking
+/// before it ended undecided and its subject is a meet holding a union
+/// ([`a_meet_holding_a_union`]).
+///
+/// A distribution spends the steps the readings after it would decide with, so
+/// asked in the first asking it took answers away: the excluded middle over the
+/// translation of an object, `J <= X | (~X & J)`, read undecided
+/// (`test_a_meet_read_for_its_emptiness_is_narrowed_as_written`). Read as a
+/// further asking where the ones before decline, it takes none, the lesson of the
+/// nested meet distributed under a narrowed one, and the cost falls on questions
+/// already undecided.
+#[cold]
+#[inline(never)]
+fn asked_distributed<T>(ask: impl FnOnce(&Budget) -> T) -> T {
+    let _open = Distributing::open();
+    ask(&Budget::new(DECISION_BUDGET))
+}
+
+/// A root question's further asking under way on this thread, closed when
+/// dropped, unwinding included.
+struct Distributing;
+
+impl Distributing {
+    fn open() -> Self {
+        DISTRIBUTING.with(|on| on.set(true));
+        Self
+    }
+}
+
+impl Drop for Distributing {
+    fn drop(&mut self) {
+        DISTRIBUTING.with(|on| on.set(false));
+    }
+}
+
+/// Whether `subject` is a meet one of whose members is a union, the shape a
+/// further asking distributes: other subjects ask no further asking.
+fn a_meet_holding_a_union(subject: &Schema) -> bool {
+    matches!(subject, Schema::Intersection(members)
+        if members.iter().any(|member| matches!(member, Schema::Union(_))))
+}
+
 /// The most levels of its own recursion one decision query holds open.
 ///
 /// The step budget bounds what a query costs and never how deep it goes: two
@@ -625,6 +674,64 @@ fn flat_members(members: &[Schema]) -> impl Iterator<Item = &Schema> {
             }
         }
     })
+}
+
+/// A meet asked below `other` in the spellings the algebra gives it: respelled
+/// ([`a_meet_respelled_below`]), then, where that declines, distributed
+/// ([`a_meet_distributed_below`]).
+fn a_meet_rewritten_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+    a_meet_respelled_below(members, other, cx)
+        .or_else(|| a_meet_distributed_below(members, other, cx))
+}
+
+/// A meet holding a union asked below `other` as the union of its clauses: the
+/// subject brought to almost-DNF a union at a time [BBC+26, §5.2], below
+/// `other` where every clause is [BBC+26, (anyOf-l)], and outside it where one
+/// clause is, a clause lying inside the meet. It is read lazily [BBC+26, §6],
+/// so the widest union among the members is distributed, each branch met with
+/// the members beside it and that union's copies dropped, and a clause holding
+/// a union distributes it in its own turn, so a clause is written only where it
+/// is asked. A clause holds one union fewer, so the distribution ends.
+///
+/// Asked only in a root question's further asking ([`asked_distributed`]), after
+/// every other reading of the meet, with that asking's own steps and trail, and a
+/// respelled question inside it is asked with them too ([`NARROWING`]). A distribution given steps of its own would be counted by
+/// nothing above it: one query asks a meet distributed hundreds of times, from
+/// each reading that reaches it, and the respelling's allowances are short of
+/// what one asks -- the distribution deciding `OUT <= PAIR`, a `oneOf` of two
+/// pairs below the `if` a translation from JSON Schema writes, spends 156,908
+/// steps, past [`RESPELLING_AGAIN`].
+#[inline(never)]
+fn a_meet_distributed_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Relation {
+    if !DISTRIBUTING.with(Cell::get) {
+        return Relation::Unknown;
+    }
+    let widest = members
+        .iter()
+        .filter_map(|member| match member {
+            Schema::Union(branches) => Some((member, branches)),
+            _ => None,
+        })
+        .max_by_key(|(_, branches)| branches.len());
+    let Some((union, branches)) = widest else {
+        return Relation::Unknown;
+    };
+    let clause = |branch: &Schema| {
+        Schema::meet(
+            members
+                .iter()
+                .filter(|member| *member != union)
+                .cloned()
+                .chain(core::iter::once(branch.clone())),
+        )
+    };
+    let query = cx.query();
+    let _open = Narrowing::open(query);
+    Relation::all(
+        branches
+            .iter()
+            .map(|branch| clause(branch).is_subtype_rec(other, cx)),
+    )
 }
 
 /// A meet respelled as the same set below `other`: narrowed by the complements
@@ -1135,8 +1242,16 @@ impl Schema {
         } else {
             first
         };
-        if answer == Relation::Unknown && !defs.is_empty() && self.has_reference() {
-            return self.refuted_narrowed_deeper(other, oracle, defs);
+        let answer = if answer == Relation::Unknown && !defs.is_empty() && self.has_reference() {
+            self.refuted_narrowed_deeper(other, oracle, defs)
+        } else {
+            answer
+        };
+        if answer == Relation::Unknown && a_meet_holding_a_union(self) {
+            return asked_distributed(|budget| {
+                let mut cx = Cx::new(oracle, defs, budget);
+                self.is_subtype_rec(other, &mut cx)
+            });
         }
         answer
     }
@@ -3012,7 +3127,7 @@ impl Schema {
                 .meet_below(other, members, cx)
                 .or_else(|| finite_meet_below(members, other, cx.oracle))
                 .or_else(|| self.a_meet_read_whole(members, other, cx))
-                .or_else(|| a_meet_respelled_below(members, other, cx)),
+                .or_else(|| a_meet_rewritten_below(members, other, cx)),
             // A table of constants is a union of literals, and holds no kind of
             // infinitely many values whole, which the branches read alone
             // cannot say; asked where the branches have declined.

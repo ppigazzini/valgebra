@@ -341,6 +341,9 @@ ROWS: dict[str, Row] = {
         None,
         "empty",
     ),
+    "A meet holding a union, asked as its clauses.": Decides(
+        intersection(union(_LISTS, str), union(_LISTS, bytes)), _LISTS, "subset"
+    ),
     "The complement laws, where the constructors reach them.": Decides(
         union(int, complement(int)), anything, "subset"
     ),
@@ -495,17 +498,6 @@ ROWS: dict[str, Row] = {
             ]
         ),
         "a larger allowance, which bounds the cost of asking and not the schema",
-    ),
-    "A meet of unions, read through its members.": Declines(
-        intersection(union(_LISTS, str), union(_LISTS, bytes)),
-        _LISTS,
-        "spreading a meet over the branches of its unions",
-        # The entry's own contrast: the converse, which a member settles.
-        beside=(
-            _LISTS,
-            intersection(union(_LISTS, str), union(_LISTS, bytes)),
-            "subset",
-        ),
     ),
     "A predicate.": Declines(
         int,
