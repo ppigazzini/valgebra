@@ -85,7 +85,7 @@
   "~int&~str": true,
   "~~int": true
  },
- "commit": "e8e5c81ae976b4d94ce6ff5d2ceb75b2ac006e60",
+ "commit": "687e6208290a8aaf340e9cf6143db3c896008ee1",
  "decisions": {
   "(int|str)&(str|none) <= (int|str)&(str|none)": "s",
   "(int|str)&(str|none) <= (int|str)&~str": "n",
@@ -705,7 +705,7 @@
   "guarded-4 <= int-ge-0-le-9": "n",
   "guarded-4 <= int-ge-5-le-1": "n",
   "guarded-4 <= integer-tree": "u",
-  "guarded-4 <= integer-tree&nested-closed": "u",
+  "guarded-4 <= integer-tree&nested-closed": "n",
   "guarded-4 <= int|bool": "n",
   "guarded-4 <= int|str": "n",
   "guarded-4 <= int|~int": "s",
@@ -1966,7 +1966,7 @@
   "lit-a-1&~str <= lit-a-1&~str": "s",
   "lit-a-1&~str <= lit-none": "n",
   "lit-a-1&~str <= lit-true": "n",
-  "lit-a-1&~str <= nested-closed": "u",
+  "lit-a-1&~str <= nested-closed": "n",
   "lit-a-1&~str <= none": "n",
   "lit-a-1&~str <= nothing": "n",
   "lit-a-1&~str <= open-a&open-b": "n",
@@ -2110,8 +2110,8 @@
   "nested-closed <= int-ge-0": "n",
   "nested-closed <= int-ge-0-le-9": "n",
   "nested-closed <= int-ge-5-le-1": "n",
-  "nested-closed <= integer-tree": "u",
-  "nested-closed <= integer-tree&nested-closed": "u",
+  "nested-closed <= integer-tree": "n",
+  "nested-closed <= integer-tree&nested-closed": "n",
   "nested-closed <= int|bool": "n",
   "nested-closed <= int|str": "n",
   "nested-closed <= int|~int": "s",
@@ -6435,5 +6435,5 @@
   "~~int @ tuple-1-2": "n",
   "~~int @ tuple-1-a": "n"
  },
- "version": "0.0.30"
+ "version": "0.0.31"
 }
