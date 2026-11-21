@@ -77,7 +77,7 @@ work, in Python.
 ## Baseline matrix
 
 Machine class: AMD Ryzen 7 PRO 7840U (Zen 4, 8c/16t, up to 5.1 GHz, a 2023-era
-mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.99.1 (the build these
+mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.100.0 (the build these
 numbers are measured on; the supported minimum is the lower `rust-version` in
 the manifest), CPython 3.15.2 built from source with
 `--enable-optimizations --with-lto`, `CC=clang` and
@@ -146,11 +146,11 @@ different interpreters, because a ratio between builds cancels the machine and
 not the interpreter.
 
 Measured that way on the box above, six readings of each build interleaved, the
-profile buys on five shapes, by the median of the six: the list nested
-twenty-five deep 35%, the JSON document 26%, compilation 18%, the one-`int` call
-17%, and the error report 3%. The accepting walk over a fifty-field record reads
-1.0% slower, between 2.4% slower and 7.3% faster across the six, and the
-ten-thousand element `list[int]` reads 10% slower, between 8% and 13%. A single reading of
+profile buys on six shapes, by the median of the six: the list nested
+twenty-five deep 36%, the JSON document 25%, the one-`int` call 19%, compilation
+18%, the error report 5%, and the accepting walk over a fifty-field record 4%,
+between 3% and 5% across the six. The ten-thousand element `list[int]` reads
+10% slower, between 5% and 13%. A single reading of
 one shape is not a verdict either way: the first reading after an install can
 part from the five after it by 12%.
 
@@ -329,7 +329,7 @@ entry names; it re-reads neither.
 ### The cheapest door, and where the floor is
 
 `x in v` is `v.is_valid(x)` through the container protocol, and it is the
-cheaper call: **12 ns against 19 ns** for a scalar on the machine above, the
+cheaper call: **12 ns against 18 ns** for a scalar on the machine above, the
 best of fifteen `timeit` repeats of a million calls, because the interpreter
 reaches a container slot directly and a method by its call protocol. Neither
 number is the check. `Validator(anything).is_valid(1)` -- the schema that
@@ -349,18 +349,18 @@ End-to-end validation of a value that passes (lower is better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 10.3 +/- 0.14 us | 87.4 +/- 1.2 us | 24,620 +/- 580 us |
-| Closed record, 50 int fields | 0.481 +/- 0.010 us | 2.21 +/- 0.031 us | 127 +/- 2.8 us |
-| Nested `list[...]`, depth 25 | 0.184 +/- 0.031 us | 2.03 +/- 0.070 us | 73.6 +/- 1.4 us |
+| `list[int]`, 10,000 elements | 10.4 +/- 0.18 us | 87.2 +/- 1.2 us | 25,410 +/- 650 us |
+| Closed record, 50 int fields | 0.481 +/- 0.015 us | 2.02 +/- 0.12 us | 133 +/- 3.1 us |
+| Nested `list[...]`, depth 25 | 0.183 +/- 0.037 us | 2.04 +/- 0.045 us | 75.6 +/- 2.4 us |
 
 valgebra relative to pydantic on this machine, under the CPython 3.15 the matrix
-above names, as the medians above divide: **11.1x** faster on deep nesting,
-**8.5x** on the large flat array, **4.6x** on the wide record. The comparison
-gate's minimums read the same three at 10.3x, 8.4x and 4.9x (the 3.15 column
-below). It is consistently far ahead of pure-Python jsonschema — 2,382x on the
-array, 400x on the nesting and 264x on the record. The nesting's half-range is
-its slowest run of the ten, which read 0.241 us; the other nine read 0.178 to
-0.187.
+above names, as the medians above divide: **11.2x** faster on deep nesting,
+**8.4x** on the large flat array, **4.2x** on the wide record. The comparison
+gate's minimums read the same three at 10.2x, 8.4x and 4.6x (the 3.15 column
+below). It is consistently far ahead of pure-Python jsonschema — 2,438x on the
+array, 413x on the nesting and 276x on the record. The nesting's half-range is
+its slowest run of the ten, which read 0.250 us; the other nine read 0.177 to
+0.193.
 
 pydantic does strictly more work on the record (it constructs output), so read
 that shape as a margin over a heavier operation, not a like-for-like loss for
@@ -370,17 +370,17 @@ pydantic.
 
 A ratio cancels the machine — a slower box slows both sides — and it does not
 cancel the interpreter. Running the comparison gate on one box against five of
-them -- CPython 3.12.14 and the free-threaded 3.14.10 and 3.15.2 as `uv` installs
+them -- CPython 3.12.16 and the free-threaded 3.14.10 and 3.15.2 as `uv` installs
 them, beside the 3.15.2 build named above and a 3.14.10 built the same way -- as
 the fraction of pydantic's time each shape takes, the median over twelve runs on
 3.12 and 3.14, eighteen on 3.15 and seven on each free-threaded build:
 
 | Shape | CPython 3.12 | CPython 3.14 | CPython 3.15 | 3.14 free-threaded | 3.15 free-threaded |
 | --- | --- | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 0.157 | 0.112 | 0.119 | 0.144 | 0.134 |
-| Closed record, 50 int fields | 0.198 | 0.216 | 0.202 | 0.235 | 0.227 |
-| Nested `list[...]`, depth 25 | 0.105 | 0.095 | 0.098 | 0.222 | 0.222 |
-| One `int` | 0.161 | 0.162 | 0.175 | 0.162 | 0.176 |
+| `list[int]`, 10,000 elements | 0.159 | 0.107 | 0.119 | 0.143 | 0.135 |
+| Closed record, 50 int fields | 0.224 | 0.212 | 0.219 | 0.234 | 0.234 |
+| Nested `list[...]`, depth 25 | 0.105 | 0.090 | 0.098 | 0.229 | 0.237 |
+| One `int` | 0.160 | 0.155 | 0.171 | 0.163 | 0.175 |
 
 The **element** is what moves, not the check. A list hands out each of its items
 as an owned reference — a count written on the object when the handle is made
@@ -433,8 +433,8 @@ fraction of pydantic's time each takes, on the PGO CPython 3.15 build above:
 
 | Shape | ratio | spread across runs |
 | --- | --- | --- |
-| JSON document, 200 records parsed and checked | 0.50 | 0.064 over eighteen runs |
-| Error report, 50-field record with one wrong field | 0.42 | 0.038 over eighteen runs |
+| JSON document, 200 records parsed and checked | 0.52 | 0.044 over eighteen runs |
+| Error report, 50-field record with one wrong field | 0.46 | 0.024 over eighteen runs |
 
 The JSON document is a single pass over bytes for both libraries, which is why
 valgebra takes about half of pydantic's time here rather than a fraction:
@@ -443,10 +443,10 @@ neither is spending its time in the check. A document's free-form sections are
 narrow object, through a table of last values for a wide one
 (`docs/dev/walk.md`).
 
-The scalar, which sits near timer resolution, spreads 0.091 across the eighteen
-runs, the widest of the seven, sixteen of its runs within 0.010 and two reading
-0.208 and 0.258; beside it the JSON document 0.064, the error report 0.038, the
-nesting 0.036, the record 0.034, the array 0.005 and the build 0.0007. The
+Across the eighteen runs the JSON document spreads 0.044, the widest of the
+seven; beside it the nesting 0.037, seventeen of its runs within 0.006 and one
+reading 0.132, the error report 0.024, the record 0.020, the scalar, which sits
+near timer resolution, 0.016, the array 0.008 and the build 0.0004. The
 error report is the only shape timing a path that raises and formats a Python exception,
 so a Python exception's cost is inside the number. It is excluded from the
 gate's drift ratchet, and `scripts/perf_compare.json` gives the reason rather
@@ -470,8 +470,8 @@ exception.
 
 The scalar shape is absent from the table because it sits near timer resolution,
 and most of it is the call rather than the check, as the floor above shows: on
-CPython 3.15 the competitive gate measures it at a 32.3 ns median over eighteen
-runs, between 31.4 and 52.4 ns, around 5.7x.
+CPython 3.15 the competitive gate measures it at a 32.0 ns median over eighteen
+runs, between 31.4 and 33.8 ns, around 5.9x.
 That gate measures it; this record does not.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
@@ -479,7 +479,7 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 | Operation | Corpus | Median |
 | --- | --- | --- |
 | `reindexed` | 64-field pool-indexed record | ~1.2 us |
-| `with_records_open` | record spine, depth 32 | ~4.3 us |
+| `with_records_open` | record spine, depth 32 | ~4.2 us |
 
 ## Honest limits
 
@@ -544,7 +544,7 @@ error model (`docs/dev/errors.md`) and the schema representation
   compiles it out; `tests/test_build_flags.py` holds the flags there. The
   instruction gate's boundary shape calls the walk without crossing PyO3's call
   machinery, so the comparison gate's `scalar` is the instrument that reads it:
-  32.5 ns with the pool gone against 33.3 with it, on CPython 3.15 and the
+  32.1 ns with the pool gone against 33.9 with it, on CPython 3.15 and the
   machine named above.
 - **A failure is raised in one step.** `into_pyerr` in
   `crates/valgebra-py/src/errors.rs` builds the `ValidationError` instance and
@@ -637,7 +637,7 @@ program that builds validators per request, and to no validation call.
   *type* which names it carries and remembers the answer, up to
   `MAX_MARKER_TYPES` types, which costs no exceptions on any interpreter: fifty
   `Annotated[int, Ge(0)]` fields compile in about 13 us on CPython 3.15, 13 on
-  3.14 and 12 on 3.12, on the machine named above.
+  3.14 and 13 on 3.12, on the machine named above.
 - **A `TypedDict` field's qualifiers are read once.** The reader that says
   whether a key is required walks the `Required`, `NotRequired` and `ReadOnly`
   around a field's hint, below the first that answers so that two which
@@ -1131,7 +1131,7 @@ program that builds validators per request, and to no validation call.
   the value it is about, and a container is rendered through `reprlib` under a
   depth and width bound (`BOUNDED_REPR` in `crates/valgebra-py/src/errors.rs`)
   rather than rendered whole and cut, so reporting on a value nested twenty
-  thousand deep takes about 24 us. A value small enough to print
+  thousand deep takes about 23 us. A value small enough to print
   renders exactly as `repr` would.
 
 ### What a relation between two validators costs
