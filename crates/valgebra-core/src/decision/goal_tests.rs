@@ -544,7 +544,9 @@ fn product_split() -> Schema {
 ///
 /// The set regularity is about: a schema is a finite tree with back edges, so
 /// unfolding it forever reaches only these, and a goal the procedure asks is
-/// a pair of them unless a rule built a term of its own.
+/// a pair of them unless a rule built a term of its own. Beside them, the record
+/// each refinement of a record leaves under its length bounds, one term per
+/// refinement, which the record reading asks in its place.
 fn subterms(schema: &Schema, defs: &[Schema]) -> Vec<Schema> {
     fn collect(schema: &Schema, out: &mut Vec<Schema>) {
         if !out.contains(schema) {
@@ -558,6 +560,25 @@ fn subterms(schema: &Schema, defs: &[Schema]) -> Vec<Schema> {
     collect(schema, &mut out);
     for body in defs {
         collect(body, &mut out);
+    }
+    // A record under length bounds counting its names is read as the record they
+    // leave, a term the record reading builds of its own: a refinement of a record
+    // through `the_record_a_count_requires`, a meet of records and bounds through
+    // `the_record_a_length_leaves`, one per such subterm.
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = super::Cx::new(&super::NoLeafRelations, defs, &budget);
+    let left: Vec<Schema> = out
+        .iter()
+        .filter_map(|term| match term {
+            Schema::Refine { .. } => super::records::the_record_a_count_requires(term, &cx),
+            Schema::Intersection(members) => {
+                super::records::the_record_a_length_leaves(members, &cx)
+            }
+            _ => None,
+        })
+        .collect();
+    for record in &left {
+        collect(record, &mut out);
     }
     out
 }
@@ -1448,4 +1469,26 @@ fn a_goal_met_again_under_a_constructor_passes() {
         at(0).subtype_relation(&at(1), &super::NoLeafRelations, &defs, &budget),
         Relation::Holds
     );
+}
+
+/// A record under a length bound counting its names is read as the record the bound
+/// leaves, a term of the reading's own: `{a?: float}` under `MinLen(1)` is asked as
+/// `{a: float}`, which the closure holds beside the subterms, one per refinement.
+#[test]
+fn the_record_a_length_leaves_is_in_the_closure() {
+    use crate::ir::{Constraint, Field, Openness};
+    let field = |name: &str, schema: Schema, required: bool| Field {
+        name: name.into(),
+        schema,
+        required,
+    };
+    let optional = Schema::record(vec![field("a", Schema::Float, false)], Openness::Closed);
+    let refined = Schema::refine(optional, vec![Constraint::MinLen(1)]);
+    for supertype in [
+        Schema::record(vec![field("n", Schema::Int, false)], Openness::Closed),
+        Schema::record(vec![field("a", Schema::Float, true)], Openness::Closed),
+    ] {
+        let (outside, _) = outside_the_closure(&refined, &supertype, &[]);
+        assert!(outside.is_empty(), "asked outside the closure: {outside:?}");
+    }
 }
