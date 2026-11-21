@@ -157,6 +157,11 @@ answer of its own, or a repair to a change not yet released.
   refutation between two dataclasses reads 40.8% fewer instructions on CPython 3.15 and 3.12. The
   kept readings hold strings alone, so a class a program drops is freed as it would be.
 
+- **A predicate's stack check is one subtraction.** On CPython before 3.14 the walk asks, before it
+  calls a predicate, whether the thread's stack has room for the Python it runs, and that question
+  now reads 7 instructions where it read 17: a thousand integers under a predicate read 5.0% fewer
+  instructions on CPython 3.12.
+
 - **A list of strings under one pattern reads the pattern once.** A list whose element is a `str`
   under one pattern, alone or beside length bounds, finds the pattern's compiled program once for
   the list, where each element's check looked it up: two hundred strings under one pattern read

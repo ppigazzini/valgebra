@@ -175,11 +175,11 @@ pub(crate) struct WalkState {
     /// ([`the_interpreter_has_room`]).
     #[cfg(PyPy)]
     room_at: Cell<usize>,
-    /// The lowest stack address this walk calls a predicate from, read from
-    /// the thread's at the first predicate it calls, and `usize::MAX` before
-    /// ([`WalkState::room_for_python`]).
+    /// The thread's stack limit, the low end of the reserve a predicate is
+    /// called with, read from the thread's at the first predicate this walk
+    /// calls, and `usize::MAX` before ([`WalkState::room_for_python`]).
     #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
-    call_out_floor: Cell<usize>,
+    call_out_limit: Cell<usize>,
 }
 
 /// The pointer [`WalkState`] holds what a walk rarely holds behind, released
@@ -253,7 +253,7 @@ impl WalkState {
             #[cfg(PyPy)]
             room_at: Cell::new(stack_address()),
             #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
-            call_out_floor: Cell::new(usize::MAX),
+            call_out_limit: Cell::new(usize::MAX),
         }
     }
 
@@ -261,25 +261,26 @@ impl WalkState {
     /// the `RecursionError` that ends the chain where it has not
     /// ([`CALL_OUT_RESERVE`]).
     ///
-    /// The floor is the walk's after its first predicate, so a predicate after
-    /// it reads a local's address against a field: about 20 instructions a
-    /// predicate on 3.12, 4% of one that returns at once, read as whole runs of
-    /// a thousand-element list under cachegrind. Asked of the thread every time
-    /// -- `stacker::remaining_stack()`, a lazily built thread-local behind a
-    /// call to an assembled routine -- it read about 40, and about 30 with the
-    /// floor in a thread-local of its own. A shortcut for an address above the
-    /// floor read about 10, and is not in: answering as the reading after it
-    /// does, it is a branch no test can tell from its absence.
+    /// The limit is the walk's after its first predicate, so a predicate after
+    /// it reads a local's address against a field: the address is a `lea`,
+    /// and the reserve one subtraction and one comparison
+    /// ([`short_of_the_reserve`]). Asked of the thread every time --
+    /// `stacker::remaining_stack()`, a lazily built thread-local behind a call
+    /// to an assembled routine -- it read about 40 instructions a predicate on
+    /// 3.12, and about 30 with the limit in a thread-local of its own. A
+    /// shortcut for an address above the reserve is not in: answering as the
+    /// reading after it does, it is a branch no test can tell from its
+    /// absence.
     #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
     #[inline]
     pub(crate) fn room_for_python(&self) -> PyResult<()> {
         let here = stack_address();
-        let mut floor = self.call_out_floor.get();
-        if floor == usize::MAX {
-            floor = thread_floor(here);
-            self.call_out_floor.set(floor);
+        let mut limit = self.call_out_limit.get();
+        if limit == usize::MAX {
+            limit = thread_limit(here);
+            self.call_out_limit.set(limit);
         }
-        match short_of_the_reserve(here, floor) {
+        match short_of_the_reserve(here, limit) {
             None => Ok(()),
             Some(left) => Err(stack_overflow(left)),
         }
@@ -512,9 +513,9 @@ const ROOM_STEP: usize = 1_024;
 #[cfg(PyPy)]
 const ROOM_RESERVE: usize = 12_288;
 
-/// The lowest stack address a predicate is called from on this thread: its
-/// stack's limit plus [`CALL_OUT_RESERVE`], or `0` where the limit cannot be
-/// read, which leaves every address room.
+/// This thread's stack limit, the low end of the [`CALL_OUT_RESERVE`] a
+/// predicate is called with, or [`NO_LIMIT`] where the limit cannot be read,
+/// which leaves every address on a stack room.
 ///
 /// On `CPython` before 3.14 a predicate that calls a validator re-enters the
 /// walk with no frame between the two that the interpreter checks against the
@@ -537,31 +538,39 @@ const ROOM_RESERVE: usize = 12_288;
 /// stops such a chain in a check of its own, which ends the process
 /// (`docs/explanation/boundaries.md`).
 #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
-fn thread_floor(here: usize) -> usize {
+fn thread_limit(here: usize) -> usize {
     thread_local! {
-        static FLOOR: Cell<usize> = const { Cell::new(usize::MAX) };
+        static LIMIT: Cell<usize> = const { Cell::new(usize::MAX) };
     }
-    let mut floor = FLOOR.get();
-    if floor == usize::MAX {
-        floor = stacker::remaining_stack()
+    let mut limit = LIMIT.get();
+    if limit == usize::MAX {
+        limit = stacker::remaining_stack()
             .and_then(|left| here.checked_sub(left))
-            .map_or(0, |limit| limit.saturating_add(CALL_OUT_RESERVE));
-        FLOOR.set(floor);
+            .unwrap_or(NO_LIMIT);
+        LIMIT.set(limit);
     }
-    floor
+    limit
 }
 
-/// The bytes left above the thread's limit at `here`, where they are fewer
-/// than [`CALL_OUT_RESERVE`], read against `floor`, the limit plus the
-/// reserve; `None` where a predicate called from `here` has room. An address
-/// below the limit is on a stack other than the thread's own, which a
-/// coroutine library switches to, and has room, and so has every address
-/// where the limit is not read and `floor` is `0`.
+/// The limit a thread whose limit is not read is given: the reserve above it
+/// is the top [`CALL_OUT_RESERVE`] bytes of the address space, where no
+/// platform maps a thread's stack -- the kernel's half on 64-bit platforms,
+/// and on 32-bit ones the kernel's or a range Windows keeps unmapped.
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+const NO_LIMIT: usize = usize::MAX - CALL_OUT_RESERVE;
+
+/// The bytes left above the thread's `limit` at `here`, where they are no
+/// more than [`CALL_OUT_RESERVE`]; `None` where a predicate called from
+/// `here` has room. One wrapping subtraction reads both ends: an address
+/// below the limit wraps past the reserve, and is on a stack other than the
+/// thread's own, which a coroutine library switches to, and has room, as has
+/// every address above the reserve and every address on a thread whose limit
+/// is not read ([`NO_LIMIT`]).
 #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
 #[inline]
-fn short_of_the_reserve(here: usize, floor: usize) -> Option<usize> {
-    let limit = floor.saturating_sub(CALL_OUT_RESERVE);
-    (limit..=floor).contains(&here).then(|| here - limit)
+fn short_of_the_reserve(here: usize, limit: usize) -> Option<usize> {
+    let left = here.wrapping_sub(limit);
+    (left <= CALL_OUT_RESERVE).then_some(left)
 }
 
 /// The `RecursionError` the walk raises with `left` bytes of the thread's
@@ -591,8 +600,19 @@ fn overflow_message(left: usize) -> String {
 const CALL_OUT_RESERVE: usize = 32_768;
 
 /// An address on the current native stack: a local's, in the frame it is
-/// inlined into.
-#[cfg(any(PyPy, all(not(Py_3_14), not(target_env = "musl"))))]
+/// inlined into. The address is taken and the local never read, so it is one
+/// `lea` off the stack pointer, with nothing stored.
+#[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
+#[inline]
+fn stack_address() -> usize {
+    let marker = 0_u8;
+    (&raw const marker).addr()
+}
+
+/// An address on the current native stack: a local's, in the frame it is
+/// inlined into, kept in memory as the reading [`ROOM_STEP`] was measured
+/// with.
+#[cfg(PyPy)]
 #[inline]
 fn stack_address() -> usize {
     let marker = 0_u8;

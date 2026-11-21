@@ -1125,7 +1125,9 @@ whose frames are larger reaches the same level deeper on the stack, past what
 the answer read. The thread's bounds are read before a predicate is called,
 on CPython before 3.14 (`room_for_python` in `check/ctx.rs`), where a chain
 of re-entries had no check at all; that question is asked where the walk
-calls into Python, which costs many times more. A proposal starts from the
+calls into Python, which costs many times more, and past a walk's first
+predicate it is one subtraction and one comparison against the thread's limit
+the walk keeps (`short_of_the_reserve`). A proposal starts from the
 test it must pass: a value at the depth bound on a 128 KiB thread raises
 `recursion_limit` on every wheel platform, and the walk shapes stay inside the
 perf gate's band.
