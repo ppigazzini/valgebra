@@ -4260,6 +4260,62 @@ fn sized_past(mine: &Schema, theirs: &Schema) -> Vec<Obj> {
                 .filter(|value| member_full(mine, value, &pool)),
         );
     }
+    if let (
+        Schema::KeyedMap { fields, .. },
+        Schema::KeyedMap {
+            fields: named,
+            defaults,
+        },
+    ) = (unrefined(mine), unrefined(theirs))
+    {
+        values.extend(sized_past_a_field(fields, named, defaults, mine));
+    }
+    values
+}
+
+/// Each record of `fields` holding, under one of its names, a value past a
+/// bound the other record reads that name with -- by its field of that name
+/// or by a clause holding it -- and a member of its own under each other name
+/// it requires: `{"a?": tuple[float, ...]}` below a record reading `a` as
+/// anything of at most two items is refuted by `{"a": (0.0, 0.0, 0.0)}`, which
+/// only the field's own bound-crossing values build.
+fn sized_past_a_field(
+    fields: &Fields,
+    named: &Fields,
+    defaults: &Clauses,
+    mine: &Schema,
+) -> Vec<Obj> {
+    let pool = const_pool();
+    let mut values = Vec::new();
+    for field in fields.iter() {
+        let Some(name) = static_name(&field.name) else {
+            continue;
+        };
+        let Some(theirs) = schema_at(named, defaults, name) else {
+            continue;
+        };
+        let Some(rest): Option<Vec<(Key, Obj)>> = fields
+            .iter()
+            .filter(|other| other.required && other.name != field.name)
+            .map(|other| {
+                Some((
+                    Key::Exact(static_name(&other.name)?),
+                    a_member(&other.schema, MEMBER_FUEL)?,
+                ))
+            })
+            .collect()
+        else {
+            continue; // a required name with no member of its own builds no record
+        };
+        for value in sized_past(&field.schema, &theirs) {
+            let mut entries = rest.clone();
+            entries.push((Key::Exact(name), value));
+            let record = Obj::Map(entries);
+            if member_full(mine, &record, &pool) {
+                values.push(record);
+            }
+        }
+    }
     values
 }
 
@@ -8227,6 +8283,42 @@ fn a_length_bound_on_a_set_s_element_is_probed_one_past_it() {
     let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
     let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
     assert!(a_value_parts(&subject, &other));
+}
+
+// THEORY: subtyping-is-inclusion
+/// A length bound on a record's field is probed one past it.
+///
+/// `{"a?": tuple[float, ...]}` below `{"a?": Annotated[Any, MaxLen(2)], str:
+/// Any}` is refuted on `{"a": (0.0, 0.0, 0.0)}`: the field the other record
+/// reads `a` with admits nothing of three items. The universe built the bound's
+/// widths at the records, which count their keys, and none at the field.
+#[test]
+fn a_length_bound_on_a_record_s_field_is_probed_one_past_it() {
+    let record = |schema: Schema, defaults: Vec<MapClause>| Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema,
+            required: false,
+        }]
+        .into(),
+        defaults: defaults.into(),
+    };
+    let a = record(
+        Schema::tuple(SeqShape::homogeneous(Schema::Float)),
+        Vec::new(),
+    );
+    let b = record(
+        Schema::refine(Schema::ANYTHING, vec![Constraint::MaxLen(2)]),
+        vec![MapClause {
+            key: Schema::Str,
+            value: Schema::Anything(Spelling::Any),
+        }],
+    );
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    assert!(a_value_parts(&a, &b));
 }
 
 // THEORY: subtyping-is-inclusion
