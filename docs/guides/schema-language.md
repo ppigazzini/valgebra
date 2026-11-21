@@ -463,7 +463,9 @@ assert not user.is_valid({"name": "Ada", "x": 1})
 ### A key name that ends in a question mark
 
 The suffix is stripped once, so a name that ends in `?` is written with one
-more: `{"page??": int}` is the **optional** key `page?`.
+more: `{"page??": int}` is the **optional** key `page?`. The **required** key
+`page?` has no dict-literal spelling, and a `TypedDict` spells it
+([below](#a-field-is-required-by-its-key)).
 
 ```python
 from valgebra import Validator
