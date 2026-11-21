@@ -8260,8 +8260,9 @@ fn a_length_bound_at_a_position_is_probed_one_past_it() {
 /// `list[frozenset[set[float]], D1]` below `list[frozenset[Any of at most one],
 /// D1]`, with `D1` the fixpoint `int | list[not D1]`, is refuted: a set whose
 /// class hashes is a member of a frozenset, and one holding two floats lies
-/// outside the bound. The universe built the bound's widths at the frozenset and
-/// none inside it, so the refutation read as one with no value under it.
+/// outside the bound. The universe builds the bound's widths inside the
+/// frozenset as well as at it ([`sized_past`]); built at the frozenset alone,
+/// the refutation reads as one with no value under it.
 #[test]
 fn a_length_bound_on_a_set_s_element_is_probed_one_past_it() {
     let defs = fixpoint_defs();
@@ -8290,8 +8291,9 @@ fn a_length_bound_on_a_set_s_element_is_probed_one_past_it() {
 ///
 /// `{"a?": tuple[float, ...]}` below `{"a?": Annotated[Any, MaxLen(2)], str:
 /// Any}` is refuted on `{"a": (0.0, 0.0, 0.0)}`: the field the other record
-/// reads `a` with admits nothing of three items. The universe built the bound's
-/// widths at the records, which count their keys, and none at the field.
+/// reads `a` with admits nothing of three items. The universe builds the bound's
+/// widths at the field ([`sized_past_a_field`]) as well as at the records, which
+/// count their keys.
 #[test]
 fn a_length_bound_on_a_record_s_field_is_probed_one_past_it() {
     let record = |schema: Schema, defaults: Vec<MapClause>| Schema::KeyedMap {

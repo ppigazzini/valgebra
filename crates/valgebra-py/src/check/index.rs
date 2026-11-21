@@ -1058,7 +1058,7 @@ pub(crate) struct ValidatorIndex {
     /// Whether each order bound's operand is the standard library's `Decimal`,
     /// at its place in the pool, which a float is compared with as the
     /// `Decimal` it equals. Beside [`Self::float_operands`] rather than one
-    /// table of both, so the float reading's code is the one it was; the
+    /// table of both, so the float reading reads the floats' table alone; the
     /// measurement is at `compared` in `walk/scalar.rs`.
     decimal_operands: Vec<bool>,
     /// The readings of leaves and of trees of scalars ([`Readings`]), none

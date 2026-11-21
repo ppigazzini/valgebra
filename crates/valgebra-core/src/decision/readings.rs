@@ -781,8 +781,8 @@ impl Schema {
     /// `list[str]` is `[T]`. A branch of another shape is left to the complements
     /// beside it: dropped by its kinds, the JSON values' `None` beside a string, a
     /// narrowed meet is found wherever the JSON values meet a constant, and each
-    /// is read under an allowance a declining reading spends, which lost a record
-    /// guarded three deep its proof and took it five times as long.
+    /// is read under an allowance a declining reading spends, which costs a record
+    /// guarded three deep its proof and five times its time.
     pub(super) fn a_guard_apart_from(&self, kinds: &[Kinds], at: usize) -> bool {
         self.kinds_a_guard_holds().is_some_and(|held| {
             kinds

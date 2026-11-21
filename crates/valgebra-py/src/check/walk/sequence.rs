@@ -1305,9 +1305,9 @@ fn refined_list_loop(
 /// [`refined_scalar_list`] over strings: one range where every constraint is a
 /// length bound, one compiled pattern where one pattern stands among them, and
 /// each element's constraints elsewhere. A call of its own, so the readers of
-/// the other kinds keep their layout: inlined beside them, the range took the
+/// the other kinds keep their layout: inlined beside them, the range takes the
 /// floats' loop to 2.4% more instructions on the build without a profile
-/// (`--binding-refined-float`).
+/// (`scripts/perf_gate.py --binding-refined-float`).
 #[inline(never)]
 fn refined_str_list(
     list: &Bound<'_, PyList>,

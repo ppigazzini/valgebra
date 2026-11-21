@@ -637,8 +637,8 @@ decidability page's chain of five records around a dict outside the chain stays
 so a record of `k` fields reaching itself is a tree of `k^d` values at depth
 `d`, each walked twice, and a deeper bound wants a budget on each guess's size,
 which the builder does not keep. And it decides nothing measured: on the
-containment suite of the same authors, read through `valgebra-jsonschema`, each
-of the 17 undecided questions the suite labels a refutation is against a
+containment suite of the same authors, read through `valgebra-jsonschema`'s
+containment study, each undecided question the suite labels a refutation is against a
 supertype spelled with a predicate, which the reading does not walk at any
 depth. A proposal starts from the decidability page's example, a size budget a
 guess keeps with the measurement of what it costs, and a question of the suite
@@ -1489,7 +1489,7 @@ the rules again with `reads_leaves` set, and a goal they decline is lowered ther
 (`a_goal_declined`), for `LEAF_READING` steps since no step counts a lowering. A
 goal holding a reference arms builds of its own, and the ones a query declines
 draw one build's allowance between them (`GOALS_WORK`, `budget::pooled`): a meet
-of two recursive records over the JSON values declines seventeen of them, each of
+of two recursive records over the JSON values declines many of them, each of
 which would spend its own allowance and answer nothing. A goal holding no
 reference draws on no pool, since one drawn by every goal of a query loses
 answers on the record families (`budget::under`).
@@ -1502,9 +1502,11 @@ member and no branch says alone, and the cut reference only widens the subject. 
 records met whose field is such a goal are past the depth whole, the outer meet a
 level of it, and the field is not. A goal a constructor or a reference tops on both
 sides is the rules' to take apart, into goals of its parts or onto their trail, and
-lowered whole such goals took two lists of lists around a back edge, a hundred deep,
-from 0.84 ms to 5.9 ms for no answer. Asked of every goal the rules decline, the relation matrix
-read ninety-six times its instructions, because a goal declined on the way to an answer
+lowered whole, such goals answer nothing and cost a relation of two lists of lists
+around a back edge, a hundred deep, seven times its time
+(`a_second_asking_does_not_read_the_whole_pair_again`). Asked of every goal the rules
+decline, the relation matrix reads ninety-six times its instructions
+(`scripts/perf_gate.py --decision-matrix`), because a goal declined on the way to an answer
 another rule gives is the common case. Asked here it pays only on a pair that declines
 and holds a constructor or a reference (`holds_parts`), a pair of leaves being what the
 reading of the whole read. The emptiness of a meet holding one complement asks it too,
@@ -1876,8 +1878,8 @@ which holds no list, set or dict whole, since none is a key. A branch of another
 shape is not dropped by its kinds: dropped so, the JSON values' `None` beside a
 string, a narrowed meet is found wherever the JSON values meet a constant, each
 read under an allowance a declining reading spends, and a record guarded three
-deep in `scripts/metamorphic_gate.py` lost its proof and took five times as
-long. Where the narrowed meet is related to a supertype, after every other
+deep in `scripts/metamorphic_gate.py`'s corpus loses its proof and takes five
+times as long, as that script's `--against` reading of a recording shows. Where the narrowed meet is related to a supertype, after every other
 reading of the meet, it reads two things more. A member that is the complement
 of a union is read as its branches' complements [FCB08, Lem. 6.2], and one that
 is the complement of a meet all of whose conjuncts but one are members as that

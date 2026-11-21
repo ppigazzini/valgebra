@@ -266,8 +266,8 @@ impl WalkState {
     /// and the reserve one subtraction and one comparison
     /// ([`short_of_the_reserve`]). Asked of the thread every time --
     /// `stacker::remaining_stack()`, a lazily built thread-local behind a call
-    /// to an assembled routine -- it read about 40 instructions a predicate on
-    /// 3.12, and about 30 with the limit in a thread-local of its own. A
+    /// to an assembled routine -- it costs more than the field, as does the
+    /// limit in a thread-local of its own. A
     /// shortcut for an address above the reserve is not in: answering as the
     /// reading after it does, it is a branch no test can tell from its
     /// absence.
@@ -493,23 +493,24 @@ fn room_below_the_reserve() -> bool {
 /// again. The question is asked from [`ROOM_RESERVE`] below the walk, so the
 /// step bounds how far past `PyPy`'s threshold that frame can land between two
 /// answers, and past it the question itself overflows inside `cpyext`, which
-/// ends the process: at 2 KiB, explaining a list nested 1,600 deep and a JSON
-/// value twelve lists deep ended `PyPy` 3.11 and 3.12 under a recursion limit
-/// of 48. Each answer is a call into `PyPy`, paid by every value deep enough to
-/// cross a step: a JSON value eight lists deep reads 12% slower on `PyPy` 3.12
-/// at 1 KiB than at 2 KiB, and 40% at 512 bytes.
+/// ends the process: at a step of 2 KiB, explaining a list nested 1,600 deep
+/// and a JSON value twelve lists deep ends `PyPy` 3.11 and 3.12 under a
+/// recursion limit of 48. Each answer is a call into `PyPy`, paid by every value
+/// deep enough to cross a step, so a smaller step costs a deep value more.
 #[cfg(PyPy)]
 const ROOM_STEP: usize = 1_024;
 
 /// The stack the walk keeps free below itself on `PyPy`, beside the step it
 /// may have gone since the last answer: room for the Python a level runs and
 /// for raising what it raises. Small enough that asking from below it is no
-/// overflow of its own: at 32 KiB the question took the process down under a
+/// overflow of its own: at 32 KiB the question takes the process down under a
 /// recursion limit of 45, and at 16 KiB under 38, 41 and 53 on `PyPy` 3.12.
-/// Measured with [`ROOM_STEP`] on `PyPy` 3.11 and 3.12, explaining a list
-/// nested 1,600 deep and a JSON value twelve lists deep under every limit from
-/// 37 to 120: no process ends, `is_valid` refuses at `recursion_limit`, and the
-/// explaining walk's rendering raises a `RecursionError` the caller catches.
+/// With [`ROOM_STEP`] on `PyPy` 3.11 and 3.12, explaining a list nested 1,600
+/// deep and a JSON value twelve lists deep under every limit from 37 to 120
+/// (`test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room`
+/// asks 37 to 64 and 200), no process ends, `is_valid` refuses at
+/// `recursion_limit`, and the explaining walk's rendering raises a
+/// `RecursionError` the caller catches.
 #[cfg(PyPy)]
 const ROOM_RESERVE: usize = 12_288;
 
@@ -520,10 +521,10 @@ const ROOM_RESERVE: usize = 12_288;
 /// On `CPython` before 3.14 a predicate that calls a validator re-enters the
 /// walk with no frame between the two that the interpreter checks against the
 /// stack: 3.12 counts each such call against a C-recursion limit of thousands
-/// and spends about 3 KiB of native stack on it, so a predicate calling its own
-/// validator ended 3.12.16 in a segmentation fault on every thread of 1 MiB or
-/// less under the default recursion limit, and on the main thread under a limit
-/// of 10,000. So the walk reads the thread's own bounds before it calls a
+/// and spends about 3 KiB of native stack on it, so, unchecked, a predicate
+/// calling its own validator ends 3.12.16 in a segmentation fault on every
+/// thread of 1 MiB or less under the default recursion limit, and on the main
+/// thread under a limit of 10,000. So the walk reads the thread's own bounds before it calls a
 /// predicate, and with less than [`CALL_OUT_RESERVE`] left raises what 3.14 and
 /// later raise at the Python frame between two re-entries, where they read the
 /// same bounds and need no question here. The bounds are read once a thread
@@ -533,8 +534,9 @@ const ROOM_RESERVE: usize = 12_288;
 /// so far rather than the stack it may grow to.
 ///
 /// At the predicate rather than at every entry: asked where a walk is entered,
-/// the question read the call boundary 31.73% dearer on the 3.12 instruction
-/// gate, and a predicate is a call into Python many times its price. `PyPy`
+/// the question reads the call boundary 31.73% dearer on 3.12
+/// (`scripts/perf_gate.py --binding-boundary`), and a predicate is a call into
+/// Python many times its price. `PyPy`
 /// stops such a chain in a check of its own, which ends the process
 /// (`docs/explanation/boundaries.md`).
 #[cfg(all(not(PyPy), not(Py_3_14), not(target_env = "musl")))]
@@ -610,8 +612,7 @@ fn stack_address() -> usize {
 }
 
 /// An address on the current native stack: a local's, in the frame it is
-/// inlined into, kept in memory as the reading [`ROOM_STEP`] was measured
-/// with.
+/// inlined into, kept in memory, the reading [`ROOM_STEP`] is sized against.
 #[cfg(PyPy)]
 #[inline]
 fn stack_address() -> usize {

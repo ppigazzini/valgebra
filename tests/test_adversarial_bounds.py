@@ -687,8 +687,8 @@ def test_a_value_past_the_walk_bound_names_the_bound() -> None:
 
 #: Whether the interpreter links musl, where no check stops a re-entering
 #: predicate: before 3.14 the walk reads no stack there, since musl gives the
-#: main thread the stack mapped so far, and 3.15.2's own check ended in a
-#: segmentation fault on a thread of 128 KiB in the release smoke.
+#: main thread the stack mapped so far, and there 3.15.2's own check ends in a
+#: segmentation fault on a thread of 128 KiB.
 _musl = "musl" in (sysconfig.get_config_var("HOST_GNU_TYPE") or "")
 
 
@@ -703,8 +703,8 @@ def test_a_predicate_reentering_its_validator_raises_rather_than_crashing() -> N
 
     Each call re-enters the walk with nothing between two of them that
     CPython 3.12 or 3.13 checks against the native stack: about 3 KiB a call
-    beside one unit of a C-recursion limit of thousands, so the chain ended
-    3.12.16 in a segmentation fault on every thread of 1 MiB or less under the
+    beside one unit of a C-recursion limit of thousands, so, unchecked, the chain
+    ends 3.12.16 in a segmentation fault on every thread of 1 MiB or less under the
     default recursion limit, and on the main thread under a limit of 10,000.
     Before 3.14 the walk reads the thread's stack before it calls a predicate
     and raises with less than `CALL_OUT_RESERVE` left; 3.14 and later raise at

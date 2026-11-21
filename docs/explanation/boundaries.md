@@ -194,11 +194,12 @@ predicate and raises it there, with 32 KiB left. Before 3.14 the question is
 the predicate's alone: an `__eq__` or an `isinstance` hook that re-enters is
 not asked. On musl neither check stands: the walk does not read the stack,
 whose reading for the main thread is the stack mapped so far, and CPython
-3.15.2's own check ended in a segmentation fault on a thread of 128 KiB. On PyPy the process ends in PyPy's own stack check, inside
+3.15.2's own check ends in a segmentation fault on a thread of 128 KiB. On PyPy the process ends in PyPy's own stack check, inside
 `cpyext`, with no nesting between the calls. No check reads the walk between
 two calls, though, so where each re-entry walks levels of nesting near the end
 of the stack, the walk's own frames can run past it and the process ends:
-CPython 3.15 did, re-entering under sixty levels of lists on a 1 MiB thread.
+CPython 3.15 does where a predicate re-enters under sixty levels of lists on a
+1 MiB thread.
 Give a re-entering predicate a base case, and run it on a thread of 1 MiB or
 more.
 

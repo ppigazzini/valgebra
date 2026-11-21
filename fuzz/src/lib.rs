@@ -378,8 +378,8 @@ fn names_no_definition(schema: &Schema, defs: &[Schema]) -> bool {
 /// A table that is not -- `d0 = d0`, or two definitions naming each other with
 /// no constructor between -- has no fixpoint or more than one, and the types a
 /// theory of recursion reasons about are contractive by definition
-/// [LN26, Def. 2.1]: an equation system that is not is rejected rather than read
-/// [LN26, §4.7]. Every producer of a table rejects one too (`recursive` and a
+/// [LN26, Def. 2.1], and an equation system that is not is rejected rather than
+/// read [LN26, §4.7]. Every producer of a table rejects one too (`recursive` and a
 /// PEP 695 alias ask `Schema::occurs_unguarded_under`), so no law of sets is
 /// about it: the emptiness and the inclusion the rules give it can disagree
 /// without either being wrong. The generator draws such tables all the same,

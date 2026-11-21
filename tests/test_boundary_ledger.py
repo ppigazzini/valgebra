@@ -190,7 +190,7 @@ ROWS: dict[str, Row] = {
     "A value aimed outside the other schema.": Decides(
         # The subject's key is guessed outside `Literal["a"]`, and the first
         # value there is the string beside it: `{"aa": 0}`, which the `str`
-        # clause refuses. Read as one value of each kind, the key was `None`,
+        # clause refuses. Read as one value of each kind, the key would be `None`,
         # which the other clause admits under an `int`.
         {complement(Literal["a"]): int},
         {str: str, complement(str): int},

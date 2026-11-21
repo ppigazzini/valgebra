@@ -752,7 +752,9 @@ program that builds validators per request, and to no validation call.
   comparison over every bound, a value of every kind and an operand of every kind.
   A float the two floats admit is admitted where the constraint is read, with no
   call into the bound's own reading, which a refusal and every other value still
-  take: a record of three refined fields reads 0.7% to 1% fewer instructions.
+  take: a record of three refined fields reads 0.7% to 1% fewer instructions on the
+  profiled wheels than the 0.0.30 wheels, as `scripts/perf_inspect.py count` reads
+  its `refined_fields` shape.
 - **An error the walk answers with is dropped out of line.** Dropping one asks
   whether the thread is attached to the interpreter, a thread-local the
   extension reaches through a call into the dynamic linker, and inlined into a
@@ -933,8 +935,9 @@ program that builds validators per request, and to no validation call.
   pattern read 7.4% fewer instructions on the profiled CPython 3.15 wheel. One
   pattern, alone or beside length bounds, is read from the index once for the list,
   and an exact `str` is its text matched against it (`pattern_list`): two hundred
-  strings under one pattern read 15% fewer instructions again on the profiled
-  CPython 3.12 wheel. Order
+  strings under one pattern read 15% fewer instructions on the profiled CPython 3.12
+  wheel than with the pattern found at each element, as `scripts/perf_inspect.py
+  count` reads its `pattern` shape. Order
   bounds on an `int` whose operands a machine word holds are one range read once for
   the list, and an exact `int` that fits a word is compared with it where it lies
   (`machine_range_list`): a thousand integers under one bound read 74% fewer
@@ -944,7 +947,9 @@ program that builds validators per request, and to no validation call.
   holds are one interval read once for the list, each end open or closed, and an
   exact `float` is compared with it where it lies (`float_range_list`): a thousand
   floats under one bound read 43% to 49% fewer instructions on the profiled wheels
-  of CPython 3.11 to 3.15 than 0.0.30's. Length bounds on a `str` are one range of code
+  of CPython 3.11 to 3.15 than the 0.0.30 wheels, which read each float through the
+  constraints' loop, as `scripts/perf_inspect.py count` reads its `refined_float`
+  shape. Length bounds on a `str` are one range of code
   points read once for the list, and an exact `str`'s length is compared with it
   (`length_range_list`): a thousand strings under a minimum and a maximum length
   read 77% fewer instructions on the profiled CPython 3.15 wheel. Any other element

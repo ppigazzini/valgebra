@@ -753,8 +753,9 @@ most of what they cost, and each asks the test directly:
   A float those two floats admit is admitted where the constraint is read
   (`check_constraint`), with no call into `order_bound`, which a refusal, for
   its report, and every other value still take: a record of three refined
-  fields reads 0.7% to 1% fewer instructions on the profiled wheels than
-  0.0.30's.
+  fields reads 0.7% to 1% fewer instructions on the profiled wheels than the
+  0.0.30 wheels, as `scripts/perf_inspect.py count` reads its `refined_fields`
+  shape.
   Under the standard library's `Decimal`, which the index marks, the float is
   compared as the `Decimal` it equals (`compared`): Python's comparison of
   the two reads the thread's `decimal` context, whose `FloatOperation` trap
@@ -904,10 +905,11 @@ and a raise per value past the word, which `Comparing an order bound` under
 the comparisons at every edge of the word. Where every constraint of a `float` is
 an order bound whose operand the index holds as a float, the bounds are one
 interval read once for the list, each end open or closed (`float_range`), and an
-exact `float` is its two comparisons (`float_range_list`), where it went through
-the constraints' loop and read its operand from the index at every element: a
-thousand floats under one bound read 43% to 49% fewer instructions on the
-profiled wheels than 0.0.30's. A float is a field read off the object, so the
+exact `float` is its two comparisons (`float_range_list`), where an element's own
+check goes through the constraints' loop and reads its operand from the index each
+time: a thousand floats under one bound read 43% to 49% fewer instructions on the
+profiled wheels than the 0.0.30 wheels, which read every element so, as
+`scripts/perf_inspect.py count` reads its `refined_float` shape. A float is a field read off the object, so the
 read cannot raise, as an integer past the word's does.
 `a_list_of_floats_under_bounds_reads_as_each_element_reads` holds the interval
 to each element's own reading over every pair of bounds, two at one operand
@@ -920,8 +922,8 @@ length the walk reads by its storage, is the element's own check.
 `a_list_of_bounded_strings_reads_as_the_bounds_read_it` holds the range to the
 bounds. Where one constraint of a `str` is a pattern the index compiled and every
 other is a length bound, the compiled pattern is read from the index once for the
-list (`pattern_range`), where each element's check found it there by the
-pattern's address, and an exact `str` holding no lone surrogate is its text
+list (`pattern_range`), where an element's own check finds it there by the
+pattern's address each time, and an exact `str` holding no lone surrogate is its text
 matched against it, with its length against the range where a bound stands
 (`pattern_list`): two hundred strings under one pattern read 15% fewer
 instructions on the profiled CPython 3.12 wheel than with the pattern found at
@@ -1115,16 +1117,17 @@ overflow before the bound does, and [the limits page](../guides/limits.md) says
 so: explained on a thread of 128 KiB, a value a hundred lists deep ends CPython
 3.15 in a segmentation fault. Reading the stack itself beside `descend`, once a
 step deeper as the walk asks PyPy's check, turns that overflow into
-`recursion_limit`, and it is not in: the stack address taken where a walk is
-entered and compared at each level read the call boundary 14.42% dearer and
+`recursion_limit`, and it is not in: taking the stack address where a walk is
+entered and comparing it at each level reads the call boundary 14.42% dearer and
 twenty-five nested lists 10.39% on the 3.15 instruction gate
-(`--binding-boundary`, `--binding-deep`), seven times its ceiling. A probe
+(`scripts/perf_gate.py --binding-boundary --binding-deep`), seven times the
+ceiling that script holds those shapes to. A probe
 asked by level rather than by address -- the depth compared with a ceiling the
 last answer raised -- costs nothing a level and is unsound: a sibling branch
 whose frames are larger reaches the same level deeper on the stack, past what
 the answer read. The thread's bounds are read before a predicate is called,
-on CPython before 3.14 (`room_for_python` in `check/ctx.rs`), where a chain
-of re-entries had no check at all; that question is asked where the walk
+on CPython before 3.14 and off musl (`room_for_python` in `check/ctx.rs`),
+where no interpreter check stands between two re-entries; that question is asked where the walk
 calls into Python, which costs many times more, and past a walk's first
 predicate it is one subtraction and one comparison against the thread's limit
 the walk keeps (`short_of_the_reserve`). A proposal starts from the
@@ -1142,8 +1145,8 @@ deeper than where the probe last answered that there was room
 `recursion_limit` where PyPy has none: the reserve is the room a level's own
 Python -- a predicate, an `isinstance` hook, the explaining walk's rendering
 -- runs and raises in. Siblings at one depth never ask. On CPython the probe
-compiles to nothing; before 3.14 the question asked there is the predicate's
-(above).
+compiles to nothing; before 3.14 and off musl the question asked there is the
+predicate's (above).
 `test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room` in
 `tests/test_adversarial_bounds.py` holds it.
 

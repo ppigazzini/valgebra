@@ -138,7 +138,7 @@ const LEAF_READING: u32 = 64;
 ///
 /// **This bound is cost.** Each goal's lowering arms builds of its own, so
 /// without it a query reading many goals spends a build's allowance on each: a
-/// meet of two recursive records over the JSON values declines seventeen goals
+/// meet of two recursive records over the JSON values declines many goals
 /// holding the fixpoint, each of which spends its allowance and answers nothing.
 /// A goal holding no reference is lowered under its builds' own allowances:
 /// drawn from this pool too, such goals lose answers over the record, mapping
@@ -1325,7 +1325,8 @@ impl Schema {
     /// rules' to take apart, into goals of its parts, each read here where it
     /// declines, and a pair of references is decided on their trail: read whole,
     /// such goals cost two lists of lists around a back edge, a hundred deep, seven
-    /// times the query's time and gave no answer.
+    /// times the query's time and answer nothing
+    /// (`a_second_asking_does_not_read_the_whole_pair_again`).
     ///
     /// Read once a query and held ([`Leaves`]), and charged each time it is asked,
     /// so the memo changes no answer and no allowance: a query relating two

@@ -1109,9 +1109,9 @@ fn order_bound(
 /// it does not hold asks the operand's class.
 ///
 /// Out of line, with the index's `Decimal` marks in a table beside its floats:
-/// the question inlined into [`order_bound`] over one table of both read the
-/// refined-float shape 3.19% over its base on the instruction gate, and the
-/// two together read it 0.80% under.
+/// inlined into [`order_bound`] over one table of both, the question reads the
+/// refined-float shape 3.19% over its base, and out of line beside a table of
+/// its own 0.80% under (`scripts/perf_gate.py --binding-refined-float`).
 ///
 /// [`decimal_operand`]: crate::check::index::ValidatorIndex::decimal_operand
 #[inline(never)]
