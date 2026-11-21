@@ -130,6 +130,14 @@ answer of its own, or a repair to a change not yet released.
   `valgebra-jsonschema` no answer moves, and against 0.0.30's recording no decision is lost and none
   is slower.
 
+- **How it works.**
+  The explanation opens with a page that follows one schema from its annotation to both answers: the
+  frontend and the normal form, the walk that answers membership in one call into Rust over the
+  object held, and the deciders that answer inclusion with `subset`, `not_subset` or `undecided`;
+  where valgebra sits beside a parser, a static checker and its two companions; and what it does not
+  cover. Each step has a diagram, a `mermaid` block the site draws in its own palette, light or
+  dark, and GitHub draws from the same text, and its examples run as written.
+
 ### Changed
 
 - **A list of floats under order bounds is read as one interval.** Where every constraint of a

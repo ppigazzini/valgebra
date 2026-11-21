@@ -29,6 +29,11 @@ assert users.is_valid({"name": "Ada", "age": 36})
 assert not users.is_valid({"name": "Ada", "age": -1})
 ```
 
+A set answers two questions: whether a value you hold belongs to it, and whether every value
+of one set belongs to another, `subset`, `not_subset` or `undecided`.
+[How it works](explanation/how-it-works.md) follows a schema from its annotation to both
+answers, with a diagram for each step.
+
 !!! warning "Pre-alpha"
     valgebra is under active development and published to PyPI. The APIs
     described here work, and every `0.0.x` release may break them, saying where

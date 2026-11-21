@@ -121,6 +121,15 @@ inside `list[...]` -- is a row of that script's ledger with its reason, never
 an ignore comment in the block: a reader copies the block and not the reason,
 and an ignore written for one checker is noise to the other three.
 
+**A diagram is a `mermaid` block, never an image.** It is text the page carries,
+which the site and GitHub draw alike and grep reads, where an image stops tracking
+what it pictured and no lint reads it. A diagram shows which part reads or decides
+what, never a number, and each node names a function, a form or a set the text
+beside it states. On a published page it sets no colors of its own: the site draws
+it in its palette, light or dark. Parse it with Mermaid 11, the major version the
+site loads, before it lands, since a block that does not parse is drawn as an
+error box and the build passes it.
+
 **Cut anything that does not help implement or verify.** Background a reader
 could get from the typing spec belongs in [the references page](references.md) as
 a link. Length is not thoroughness; it is where rot hides. This binds a generated

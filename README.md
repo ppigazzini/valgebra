@@ -9,6 +9,8 @@ by composition rather than bundled as a special combinator. The schema compiles
 to a Rust validator, so a check is cheap enough to run on every request.
 
 📖 **Documentation: <https://ppigazzini.github.io/valgebra/>**
+[How it works](https://ppigazzini.github.io/valgebra/explanation/how-it-works/) follows a schema
+from its annotation to its two answers, membership and inclusion, a diagram for each step.
 
 🤖 **For AI assistants and coding agents:** the documentation is also published as
 [`llms.txt`](https://ppigazzini.github.io/valgebra/llms.txt) (a curated manifest)

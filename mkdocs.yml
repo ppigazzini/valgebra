@@ -52,6 +52,7 @@ nav:
       - Static checkers: guides/static-checking.md
   - Release notes: changelog.md
   - Explanation:
+      - How it works: explanation/how-it-works.md
       - Foundations: explanation/foundations.md
       - Soundness argument: explanation/soundness.md
       - Decidability boundary: explanation/decidability.md
@@ -85,7 +86,15 @@ validation:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  # A diagram is a `mermaid` block, text the page carries: Material loads Mermaid on a page
+  # holding one and draws it in the site's palette, light or dark, and GitHub draws the same
+  # block. The formatter is named by a Python tag, which is why the YAML hook parses this
+  # file with --unsafe.
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -183,6 +192,7 @@ plugins:
         Release notes:
           - changelog.md: Every released version, what it changed, and what to do on upgrade.
         Explanation:
+          - explanation/how-it-works.md: What an annotation becomes here, the two questions its set answers, the path each question takes through the Rust core, and what it does not cover.
           - explanation/foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
           - explanation/soundness.md: Why membership checking is sound on its own terms.
           - explanation/decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.

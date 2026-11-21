@@ -11,6 +11,9 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
+        # mkdocs.yml names the Mermaid fence's formatter by a Python tag, which a safe
+        # load refuses; the hook checks the syntax, and the site build loads the file.
+        args: [--unsafe]
       # The fuzz seed corpus is binary fuzzer input, not text: the whitespace and
       # newline fixers would corrupt the bytes the fuzzer replays.
       - id: end-of-file-fixer
