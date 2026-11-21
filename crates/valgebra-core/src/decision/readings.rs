@@ -754,6 +754,44 @@ impl Schema {
         possibly(self, &mut KindWalk::new(oracle, defs, false))
     }
 
+    /// The kinds this schema may hold where it is a guard, the complement of a
+    /// container of anything: every kind but the container's, since `list[Any]`,
+    /// `set[Any]` and `dict[Any, Any]` hold every list, set and dict, subclasses
+    /// included, and what is outside one holds none [FCB08, Def. 4.1]. `None` for
+    /// any other schema. The kind walk reads only `tuple` and `frozenset` whole,
+    /// since a map's key readings take a kind it holds whole for a key to build a
+    /// dict on, and no list, set or dict is a key. This is the guard a
+    /// translation from JSON Schema writes for a keyword of one kind, `~list | X`
+    /// and `~dict | X`.
+    pub(super) fn kinds_a_guard_holds(&self) -> Option<Kinds> {
+        let Schema::Complement(inner) = self else {
+            return None;
+        };
+        a_container_of_anything(inner).map(|kind| EVERY_KIND & !bit(kind))
+    }
+
+    /// Whether this schema is a guard ([`kinds_a_guard_holds`](Self::kinds_a_guard_holds))
+    /// that may hold no kind some member of a meet other than the one at `at` may,
+    /// where `kinds` are what each member may hold: a value is of one kind
+    /// [FCB08, (5)], so the two share none. Each member is read over, a reference
+    /// through its definition, which reads no hypothesis, as the part of a
+    /// supertype is told apart from a subject. This is what a translation from
+    /// JSON Schema's guard needs beside a member it does not spell: `~dict | R`
+    /// met with `{"a": int}` is `R` met with it, and `[T] | ~list` met with
+    /// `list[str]` is `[T]`. A branch of another shape is left to the complements
+    /// beside it: dropped by its kinds, the JSON values' `None` beside a string, a
+    /// narrowed meet is found wherever the JSON values meet a constant, and each
+    /// is read under an allowance a declining reading spends, which lost a record
+    /// guarded three deep its proof and took it five times as long.
+    pub(super) fn a_guard_apart_from(&self, kinds: &[Kinds], at: usize) -> bool {
+        self.kinds_a_guard_holds().is_some_and(|held| {
+            kinds
+                .iter()
+                .enumerate()
+                .any(|(beside, theirs)| beside != at && held & theirs == 0)
+        })
+    }
+
     /// Whether every value this schema holds is of `kind`, or of a kind a value of
     /// `kind` also has: the walk above reads no other. `int` spans `bool`, a boolean
     /// being an integer.
@@ -1369,6 +1407,34 @@ const fn sharing(kind: Kind) -> Kinds {
     match kind {
         Kind::Bool | Kind::Int => bit(Kind::Bool) + bit(Kind::Int),
         other => bit(other),
+    }
+}
+
+/// The kind a container of anything holds every value of, and no other:
+/// `list[Any]`, `tuple[Any, ...]`, `set[Any]`, `frozenset[Any]` or `dict[Any,
+/// Any]`. `None` for any other schema.
+fn a_container_of_anything(schema: &Schema) -> Option<Kind> {
+    let anything = |schema: &Schema| matches!(schema, Schema::Anything(_));
+    match schema {
+        Schema::Seq { container, shape }
+            if shape.prefix.is_empty() && shape.tail.as_deref().is_some_and(anything) =>
+        {
+            Some(match container {
+                SeqKind::List => Kind::List,
+                SeqKind::Tuple => Kind::Tuple,
+            })
+        }
+        Schema::Coll { container, element } if anything(element) => Some(match container {
+            CollKind::Set => Kind::Set,
+            CollKind::FrozenSet => Kind::FrozenSet,
+        }),
+        Schema::KeyedMap { fields, defaults }
+            if fields.is_empty()
+                && matches!(&defaults[..], [clause] if anything(&clause.key) && anything(&clause.value)) =>
+        {
+            Some(Kind::Dict)
+        }
+        _ => None,
     }
 }
 

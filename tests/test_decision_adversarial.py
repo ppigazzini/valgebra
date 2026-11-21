@@ -878,6 +878,33 @@ def test_records_met_over_a_guarded_fixpoint_are_related_as_one_record() -> None
     assert clauses.is_valid({"tags": ["a"], "other": [None]})
 
 
+# THEORY: kinds-decompose-emptiness
+def test_a_guard_beside_a_member_of_the_kind_it_complements_is_its_branch() -> None:
+    """A guard's complement of a whole kind shares no value with a member of it.
+
+    A translation from JSON Schema guards a keyword to its kind, `~dict | R` and
+    `[T] | ~list`, and meets it with the object or array it applies to, which it
+    spells as a record or a list rather than as `dict` or `list`. The complement
+    of every dict holds no record, and the complement of every list no list of
+    strings, so the meet is the records', and below the record the narrowed
+    items give. This is what an `allOf` member narrowing an array field's items
+    compiles to.
+    """
+    tag = Literal["a", "b"]
+    guard = intersection(union([tag], complement(list[Any])), _JSON)
+    held = intersection(
+        {"tags": [str], str: _JSON},
+        union({"tags?": guard, str: _JSON}, complement(dict[Any, Any])),
+        _JSON,
+    )
+    assert held.relation_to(Validator({"tags": [tag]}).open()) == "subset"
+    assert held.relation_to(Validator({"tags": [Literal["a"]]}).open()) == (
+        "not_subset"
+    )
+    assert held.is_valid({"tags": ["b"], "n": 1})
+    assert not held.is_valid({"tags": ["c"]})
+
+
 class _WeirdInt(int):
     """An `int` subclass whose comparisons answer `True` whatever they are asked."""
 

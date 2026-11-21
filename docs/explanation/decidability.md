@@ -413,6 +413,8 @@ answers `"undecided"`.
     `[T] | ~list` met with `json`, the form a translation from JSON Schema
     writes for an `allOf` member narrowing an array's items, meets a field
     `[str]` in `[str] & [T]`, since a list of strings is no value of `~list`.
+    The same holds a level up, where the translation guards the record to
+    objects with `~dict`, which holds no record.
 
     ```python
     from typing import Any, Literal
@@ -430,6 +432,11 @@ answers `"undecided"`.
     guarded = intersection(union([Literal["a"]], complement(list[Any])), json)
     tags = intersection({"tags": [str], str: json}, {"tags?": guarded, str: json})
     assert tags.relation_to({"tags": [Literal["a"]], str: json}) == "subset"
+    objects = intersection(
+        {"tags": [str], str: json},
+        union({"tags?": guarded, str: json}, complement(dict[Any, Any])),
+    )
+    assert objects.relation_to({"tags": [Literal["a"]], str: json}) == "subset"
     ```
 
     A clause keyed by **literals** is read one constant at a time, each

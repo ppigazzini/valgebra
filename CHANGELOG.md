@@ -20,6 +20,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a predicate re-entering its validator raises RecursionError before 3.14
 - feat: a pair is refuted on a value aimed outside the supertype
 - feat: a goal holding a reference is read by the sets where a connective tops it
+- feat: a guard is dropped from a meet beside a member of its kind
 
 -->
 
@@ -80,6 +81,19 @@ answer of its own, or a repair to a change not yet released.
   refuted, 8 against the suite's labels: in each `const`, which draft 4 does not have, leaves the
   subject every value, and `jsonschema` and `jsonschema-rs` admit `[1]` there and refuse it in the
   supertype.
+
+- **A guard beside a member of its kind is dropped from a meet.** The complement of a container of
+  anything -- `~list[Any]`, `~dict[Any, Any]` and the like -- holds no value of the container's
+  kind, so beside a member of that kind alone it is dropped from its union, the meet being the
+  same set: `list[str] & ([T] | ~list)` is read as `list[str] & [T]`, and `{"a": int} & (R |
+  ~dict)` as the record met with `R`. That is the guard a translation from JSON Schema writes for a
+  keyword of one kind, beside the object or array it spells as a record or a list, and the form
+  `valgebra-jsonschema` compiles an `allOf` member narrowing an array field's items to,
+  `{"tags": [str], str: json} & ({"tags?": ([T] | ~list) & json, str: json} | ~dict) & json`, is
+  `subset` of `{"tags": [T]}.open()`, where it was `undecided`. A branch that is no such guard is
+  not dropped by its kinds. On the containment suite read through `valgebra-jsonschema`, one more
+  2020-12 question is proven, as the suite labels it; against 0.0.30's recording no decision is
+  lost and none is slower.
 
 ### Changed
 

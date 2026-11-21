@@ -1284,10 +1284,11 @@ impl Schema {
     /// **A goal holding a reference is read where a connective tops one side.**
     /// The rules read a meet member by member and a union branch by branch, where
     /// the sets read the normal form, every union distributed [FCB08, Def. 4.1].
-    /// So `list[int] & (list[bool] | ~list) & J` is below `list[bool]` on the
-    /// clause `list[int] & ~list` being empty by kind, which no member and no
-    /// branch says alone. The sets cut the reference once and prove through the
-    /// cut [AC93, §3.4]. A goal topped by a constructor or a reference is the
+    /// So `list[int] & (list[bool] | ~list[int | str]) & J` is below
+    /// `list[bool]` on the clause `list[int] & ~list[int | str]` being empty,
+    /// which no member and no branch says alone: the complement is of no member
+    /// and of no whole kind. The sets cut the reference once and prove through
+    /// the cut [AC93, §3.4]. A goal topped by a constructor or a reference is the
     /// rules' to take apart, into goals of its parts, each read here where it
     /// declines, and a pair of references is decided on their trail: read whole,
     /// such goals cost two lists of lists around a back edge, a hundred deep, seven

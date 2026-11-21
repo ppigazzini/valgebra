@@ -907,15 +907,18 @@ partition both deciders read; `Region` is derived from it, never maintained
 beside it, and a scalar atom's region is the set of constants its basic type
 denotes [FCB08, §4.2]. A meet shares no value with what one of its members
 shares none with, being below each [FCB08, Def. 4.1], so a meet a union holds
-as a branch is read by its kinds too. And a kind is a value: a subject that
+as a branch is read by its kinds too, and a guard in a union in a meet, the
+complement of a container of anything, is dropped beside a member of the
+container's kind alone, the meet being the same set: the guard holds no value of
+that kind, the container holding every one [FCB08, Def. 4.1]. And a kind is a value: a subject that
 holds every value of a kind the supertype holds none of is outside it, each
 kind being its own question [FCB08, (4)] and inhabited. **[LOAD-BEARING: kinds-decompose-emptiness]**
 
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
-IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::meet_disjoint_with, decision/readings.rs::Schema::spills_a_kind, decision/readings.rs::Schema::misses_a_kind, decision/readings.rs::Schema::kinds_held_whole, decision/readings.rs::Schema::kinds_possibly_held, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness, decision/readings.rs::spills_a_kind_into, descr/mod.rs::Descr::minus, descr/mod.rs::<Arc as Guard>::leaves
+IMPLEMENTED-BY: decision.rs::has_disjoint_pair, decision/readings.rs::Schema::disjoint_with, decision/readings.rs::Schema::meet_disjoint_with, decision/readings.rs::Schema::spills_a_kind, decision/readings.rs::Schema::misses_a_kind, decision/readings.rs::Schema::kinds_held_whole, decision/readings.rs::Schema::kinds_possibly_held, decision/readings.rs::Schema::atom_region, decision/emptiness.rs::intersection_verdict, decision/products.rs::seq_splits_across_union, descr/mod.rs::Descr::within, descr/mod.rs::Descr::emptiness, decision/readings.rs::spills_a_kind_into, descr/mod.rs::Descr::minus, descr/mod.rs::<Arc as Guard>::leaves, decision/readings.rs::Schema::a_guard_apart_from, decision/readings.rs::Schema::kinds_a_guard_holds
 
-HELD-BY: the_same_shape_under_two_kinds_does_not_meet, a_kind_read_whole_or_absent_agrees_with_membership, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question, a_meet_is_disjoint_from_what_one_of_its_members_is, a_pair_read_disjoint_shares_no_value, test_a_meet_with_a_union_of_guarded_patterns_is_empty, a_difference_is_the_meet_with_the_complement, what_a_set_leaves_is_what_its_complement_holds
+HELD-BY: the_same_shape_under_two_kinds_does_not_meet, a_kind_read_whole_or_absent_agrees_with_membership, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question, a_meet_is_disjoint_from_what_one_of_its_members_is, a_pair_read_disjoint_shares_no_value, test_a_meet_with_a_union_of_guarded_patterns_is_empty, a_difference_is_the_meet_with_the_complement, what_a_set_leaves_is_what_its_complement_holds, a_branch_of_a_kind_no_member_holds_is_dropped_from_the_meet, a_guard_holds_no_value_of_the_container_of_anything_it_complements, test_a_guard_beside_a_member_of_the_kind_it_complements_is_its_branch
 
 **A set type is a powerset, and a line of them is empty where one powerset
 covers it.** `set[T]` and `frozenset[T]` denote the finite sets whose members
@@ -1426,7 +1429,7 @@ members' branches make with the rest [FCB08, Def. 4.1], which distributes
 every union it holds. The rules distribute a meet holding no reference only
 where its normal form spans four clauses at most, the bound ty's intersection
 builder caps its own normal form at, and past that narrow its unions by the
-complements beside them. Four is a peer's tuning and no result. The
+complements beside them and drop a guard beside a member of its kind. Four is a peer's tuning and no result. The
 narrowing and the capped distribution split one budget between two readings
 that each decide answers the other cannot, so a repair that moves the split
 trades answers rather than adding them. A binary decision tree holds the

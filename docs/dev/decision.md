@@ -1467,15 +1467,14 @@ the rules again with `reads_leaves` set, and a goal they decline is lowered ther
 
 A goal holding a reference is lowered only where a meet, a union or a complement
 tops one side. The rules read a connective member by member and branch by branch,
-and the sets read its normal form: `list[int] & (list[bool] | ~list) & J` is below
-`list[bool]` on the clause `list[int] & ~list`, empty by kind, which no member and no
-branch says alone, and the cut reference only widens the subject. That is the field
-two records met give when one guards it to its kind over the JSON fixpoint, the form
-a translation from JSON Schema writes for an `allOf` member narrowing an array's
-items, and the pair whole is past the depth, the outer meet a level of it. A goal a
-constructor or a reference tops on both sides is the rules' to take apart, into
-goals of its parts or onto their trail, and lowered whole such goals took two lists
-of lists around a back edge, a hundred deep, from 0.84 ms to 5.9 ms for no answer. Asked of every goal the rules decline, the relation matrix
+and the sets read its normal form: `list[int] & (list[bool] | ~list[int | str]) & J`
+is below `list[bool]` on the clause `list[int] & ~list[int | str]`, empty, which no
+member and no branch says alone, and the cut reference only widens the subject. Two
+records met whose field is such a goal are past the depth whole, the outer meet a
+level of it, and the field is not. A goal a constructor or a reference tops on both
+sides is the rules' to take apart, into goals of its parts or onto their trail, and
+lowered whole such goals took two lists of lists around a back edge, a hundred deep,
+from 0.84 ms to 5.9 ms for no answer. Asked of every goal the rules decline, the relation matrix
 read ninety-six times its instructions, because a goal declined on the way to an answer
 another rule gives is the common case. Asked here it pays only on a pair that declines
 and holds a constructor or a reference (`holds_parts`), a pair of leaves being what the
@@ -1825,7 +1824,19 @@ it, and the meet is empty where one shares no value with the rest: a union
 narrowed to one branch is that branch, and a guard narrowed to a meet sets its
 conjuncts beside the rest, so a member can meet the complement of a union
 holding it with no union left to narrow
-(`a_narrowed_meet_is_read_beside_itself_once_more`). A narrowed meet is
+(`a_narrowed_meet_is_read_beside_itself_once_more`). A guard is dropped too, the
+complement of a container of anything, where a member beside it is of the
+container's kind alone, since the guard holds no value of that kind: that is
+what a translation from JSON Schema's guard needs beside a member it does not
+spell, `~dict | R` met with a record, and `[T] | ~list` met with `list[str]`
+(`a_branch_of_a_kind_no_member_holds_is_dropped_from_the_meet`). The guard's
+kinds are read apart from the kind walk, which a map's key readings share and
+which holds no list, set or dict whole, since none is a key. A branch of another
+shape is not dropped by its kinds: dropped so, the JSON values' `None` beside a
+string, a narrowed meet is found wherever the JSON values meet a constant, each
+read under an allowance a declining reading spends, and a record guarded three
+deep in `scripts/metamorphic_gate.py` lost its proof and took five times as
+long. A narrowed meet is
 the same set, read with its own unions distributed; where that ends undecided,
 the meet as written is distributed through its reference once more, whose guard
 union distributes into a shape a reading decides (a fixpoint of words met with

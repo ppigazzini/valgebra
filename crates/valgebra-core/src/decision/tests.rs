@@ -1576,6 +1576,118 @@ fn a_union_in_a_meet_is_narrowed_by_the_members_beside_it() {
     assert!(!structural(&guarded_once, &tagged(Schema::Str)));
 }
 
+// THEORY: kinds-decompose-emptiness
+/// A guard in a union in a meet that may hold no kind a member beside it may is
+/// dropped, the meet being the same set [FCB08, (5)]. The complement of a
+/// container of anything holds no value of its kind, so `list[int] & (list[bool]
+/// | ~list)` is `list[int] & list[bool]`, and `{"a": int} & ({"a": bool} |
+/// ~dict)` the two records. The complement of part of a kind may hold that
+/// kind, and is kept, and so is a branch that is no guard, whatever its kind.
+#[test]
+fn a_branch_of_a_kind_no_member_holds_is_dropped_from_the_meet() {
+    let budget = Budget::new(DECISION_BUDGET);
+    let cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let list = |item: Schema| Schema::list(SeqShape::homogeneous(item));
+    let outside = |inner: Schema| Schema::Complement(Arc::new(inner));
+    let narrowed = |members: &[Schema]| super::emptiness::narrowed_meet(members, &cx);
+    let lists = [
+        list(Schema::Int),
+        Schema::union([list(Schema::Bool), outside(list(Schema::ANYTHING))]),
+    ];
+    assert_eq!(
+        narrowed(&lists),
+        Some(Schema::meet_within(
+            vec![list(Schema::Int), list(Schema::Bool)],
+            &[]
+        ))
+    );
+    let record = |a: Schema| Schema::record(vec![field("a", a, true)], Openness::Closed);
+    let every_dict = Schema::keyed_map(
+        Vec::new(),
+        vec![MapClause {
+            key: Schema::ANYTHING,
+            value: Schema::ANYTHING,
+        }],
+    );
+    let records = [
+        record(Schema::Int),
+        Schema::union([record(Schema::Bool), outside(every_dict)]),
+    ];
+    assert_eq!(
+        narrowed(&records),
+        Some(Schema::meet_within(
+            vec![record(Schema::Int), record(Schema::Bool)],
+            &[]
+        ))
+    );
+    let part = [
+        list(Schema::Int),
+        Schema::union([
+            list(Schema::Bool),
+            outside(list(Schema::union([Schema::Int, Schema::Str]))),
+        ]),
+    ];
+    assert_eq!(narrowed(&part), None, "a list of strings is outside it");
+    let scalar = [
+        list(Schema::Int),
+        Schema::union([list(Schema::Bool), Schema::NoneType]),
+    ];
+    assert_eq!(narrowed(&scalar), None, "`None` is no guard");
+    let mixed = [
+        Schema::union([Schema::Int, list(Schema::Int)]),
+        Schema::union([list(Schema::Bool), outside(list(Schema::ANYTHING))]),
+    ];
+    assert_eq!(narrowed(&mixed), None, "an integer is outside every list");
+}
+
+// THEORY: kinds-decompose-emptiness
+/// The complement of a container of anything holds no value of the container's
+/// kind, every list, tuple, set, frozenset or dict being one of the container's
+/// own, and may hold every value of another kind. No other schema is a guard: a
+/// container, the complement of a container of part of a kind, of one with a
+/// prefix, or of a map with a field or a narrower clause.
+#[test]
+fn a_guard_holds_no_value_of_the_container_of_anything_it_complements() {
+    let any = Schema::ANYTHING;
+    let every = any.kinds_possibly_held(&NoLeafRelations, &[]);
+    let outside = |inner: &Schema| Schema::Complement(Arc::new(inner.clone()));
+    let clause = |key: Schema, value: Schema| MapClause { key, value };
+    let wholes = [
+        Schema::list(SeqShape::homogeneous(any.clone())),
+        Schema::tuple(SeqShape::homogeneous(any.clone())),
+        Schema::set(any.clone()),
+        Schema::frozen_set(any.clone()),
+        Schema::keyed_map(Vec::new(), vec![clause(any.clone(), any.clone())]),
+    ];
+    for whole in &wholes {
+        let own = whole.kinds_possibly_held(&NoLeafRelations, &[]);
+        assert_eq!(
+            outside(whole).kinds_a_guard_holds(),
+            Some(every & !own),
+            "{whole:?}"
+        );
+        assert_eq!(whole.kinds_a_guard_holds(), None, "a container is no guard");
+    }
+    let parts = [
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+        Schema::set(Schema::Int),
+        Schema::frozen_set(Schema::Int),
+        Schema::tuple(SeqShape {
+            prefix: vec![Schema::Int].into(),
+            tail: Some(Arc::new(any.clone())),
+        }),
+        Schema::keyed_map(
+            vec![field("a", Schema::Int, true)],
+            vec![clause(any.clone(), any.clone())],
+        ),
+        Schema::keyed_map(Vec::new(), vec![clause(Schema::Str, any.clone())]),
+        Schema::keyed_map(Vec::new(), vec![clause(any.clone(), Schema::Int)]),
+    ];
+    for part in &parts {
+        assert_eq!(outside(part).kinds_a_guard_holds(), None, "{part:?}");
+    }
+}
+
 /// A narrowed meet inside a fixpoint answers. The subject is the JSON-like
 /// fixpoint met with the complement of its own lists, `μt. (int | list[t] |
 /// dict[str, t]) & ~list[t]`, against `μt. int | dict[str, t]`, the same set:
@@ -13700,7 +13812,10 @@ mod leaves {
                 list_of(Schema::Int),
                 Schema::union([
                     list_of(Schema::Bool),
-                    Schema::Complement(Arc::new(list_of(Schema::ANYTHING))),
+                    Schema::Complement(Arc::new(list_of(Schema::union([
+                        Schema::Int,
+                        Schema::Str,
+                    ])))),
                 ]),
                 Schema::Ref(DefIx::new(0)),
             ]
