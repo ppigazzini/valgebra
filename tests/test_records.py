@@ -5,8 +5,18 @@ from collections.abc import Iterator
 from typing import Annotated, Any, Literal, TypedDict
 
 import pytest
+from annotated_types import MinLen
 
-from valgebra import ValidationError, Validator, anything, nothing
+from valgebra import (
+    ValidationError,
+    Validator,
+    anything,
+    complement,
+    intersection,
+    nothing,
+    recursive,
+    union,
+)
 
 
 def test_record_accepts_a_matching_dict() -> None:
@@ -585,3 +595,27 @@ def test_a_record_below_a_mapping_keyed_by_str_admits_no_key_of_another_type() -
     assert record.is_valid(value), "the walk finds the field where the dict does"
     assert not mapping.is_valid(value), "and the mapping's key is a `str`"
     assert record.relation_to(mapping) != "subset"
+
+
+def test_a_field_s_set_is_asked_of_the_record_holding_it() -> None:
+    """Every question of a field's set is a relation on the record holding it.
+
+    The set a field takes over a record set is the least set the record set is
+    below a record requiring the field in [Cas23, §4.2]. So that set is below
+    `T` exactly where the record set is below the record requiring the field in
+    `T`, and a value is in it where the record set meets the record fixing the
+    field to it. Here a sibling narrows a list field's items, as a translation
+    from JSON Schema writes an `allOf` member: the items are `"a"` or `"b"`, a
+    member carries `["b"]`, and none carries `"c"`. No projection operator is
+    exported, as the architecture page's refusals say.
+    """
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    tag = Literal["a", "b"]
+    guarded = intersection(union([tag], complement(list[Any])), json)
+    held = intersection({"tags": [str]}, {"tags?": guarded})
+
+    assert held.relation_to({"tags": [tag]}) == "subset"
+    assert held.relation_to({"tags": [Literal["a"]]}) == "not_subset"
+    carries_b = intersection(held, {"tags": Annotated[list[Literal["b"]], MinLen(1)]})
+    assert Validator(carries_b).relation_to(nothing) == "not_subset"
+    assert held.relation_to({"tags": [complement(Literal["c"])]}) == "subset"

@@ -596,6 +596,22 @@ predicate instead (`CALL_OUT_RESERVE`, read through `stacker`), as 3.14 reads
 them at a Python frame. Held by `test_no_source_file_writes_unsafe` in
 `tests/test_crate_attributes.py`.
 
+**A projection, the set one field of a record set takes.** That set is the least
+the record set is below a record requiring the field in [Cas23, §4.2], so each
+question of it is a relation on the record set: it is below `T` where the record
+set is below the record requiring the field in `T`, and it holds a value where
+the record set meets the record fixing the field to that value. Both are
+relations the deciders answer, the second as an emptiness, and an array field's
+items are asked the same way, through the record requiring them. What a relation
+does not give is the set as a value to walk or to draw members from, and drawing
+members of a schema is a companion's. Exported, the operator would be a second
+spelling of those questions, and exact only where the record set splits into
+record atoms [Cas23, Thm. 4.2]. Through a predicate or a class's hook it would be
+a superset, so a value drawn from it need be no field of any member. A proposal
+starts from a question no relation answers, and the operator's law over records,
+maps, complements and fixpoints, each with its property test. Held by
+`test_a_field_s_set_is_asked_of_the_record_holding_it` in `tests/test_records.py`.
+
 ## Where to look next
 
 A change to what a schema *means* is [the schema IR page](schema-ir.md) and
