@@ -4181,17 +4181,37 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
 /// set of two integers, and neither side spells one. The members come from
 /// [`sized_like`], so a set's are distinct, and each value is kept only where
 /// it is a member of `mine`, since a value of `mine` is the one a refutation
-/// stands on.
+/// stands on. A bound on a set's element is told the same way a level in, by a
+/// set holding a value of `mine`'s element at a width the bound refuses:
+/// `frozenset[set[float]]` below `frozenset[Any]` of members of at most one is
+/// refuted by a frozenset holding a set of two floats, whose class hashes.
 fn sized_past(mine: &Schema, theirs: &Schema) -> Vec<Obj> {
     let pool = const_pool();
     let mut widths = Vec::new();
     every_bound_width(theirs, &mut widths);
-    widths
+    let mut values: Vec<Obj> = widths
         .into_iter()
         .flat_map(|len| len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN))
         .flat_map(|width| sized_like(mine, width, MEMBER_FUEL))
         .filter(|value| member_full(mine, value, &pool))
-        .collect()
+        .collect();
+    if let (
+        Schema::Coll { container, element },
+        Schema::Coll {
+            container: other,
+            element: bounded,
+        },
+    ) = (unrefined(mine), unrefined(theirs))
+        && container == other
+    {
+        values.extend(
+            sized_past(element, bounded)
+                .into_iter()
+                .map(|value| gather(*container, vec![value]))
+                .filter(|value| member_full(mine, value, &pool)),
+        );
+    }
+    values
 }
 
 /// Every length bound a schema names, over any base, through the wrappers
@@ -8120,6 +8140,37 @@ fn a_length_bound_at_a_position_is_probed_one_past_it() {
     );
     let a = list(SeqShape::fixed([floats, Schema::Ref(DefIx::new(1))]));
     let b = list(SeqShape::fixed([pair, Schema::Ref(DefIx::new(1))]));
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(a_value_parts(&subject, &other));
+}
+
+// THEORY: subtyping-is-inclusion
+/// A length bound on a set's element is probed one past it, a level in.
+///
+/// `list[frozenset[set[float]], D1]` below `list[frozenset[Any of at most one],
+/// D1]`, with `D1` the fixpoint `int | list[not D1]`, is refuted: a set whose
+/// class hashes is a member of a frozenset, and one holding two floats lies
+/// outside the bound. The universe built the bound's widths at the frozenset and
+/// none inside it, so the refutation read as one with no value under it.
+#[test]
+fn a_length_bound_on_a_set_s_element_is_probed_one_past_it() {
+    let defs = fixpoint_defs();
+    let list = |head: Schema| {
+        Schema::list(SeqShape::fixed([
+            Schema::frozen_set(head),
+            Schema::Ref(DefIx::new(1)),
+        ]))
+    };
+    let a = list(Schema::set(Schema::Float));
+    let b = list(Schema::refine(
+        Schema::ANYTHING,
+        vec![Constraint::MaxLen(1)],
+    ));
     assert_eq!(
         a.subtype_relation_under(&b, &NoLeafRelations, &defs),
         Relation::Fails
