@@ -16225,6 +16225,39 @@ fn a_record_refined_by_lengths_is_the_record_they_leave() {
     );
 }
 
+// THEORY: records-maps-and-structs
+/// Closed records met are empty where a key they require has types meeting in
+/// nothing, and a field type that is itself a meet is spliced into that meet, so
+/// a union among its conjuncts is a member the readings of a meet narrow. `{a: list[int]}`, `{a?: (list[None] | ~list) &
+/// ~float}` and `{a: list[bool]}` of at least one item meet in nothing: the guard
+/// holds no list beside the lists, so the items are `int`, `None` and `bool` at
+/// once. Without the guarded field the meet holds `{"a": [True]}`.
+#[test]
+fn a_meet_among_a_key_s_types_is_spliced_into_theirs() {
+    let list = |item: Schema| Schema::list(SeqShape::homogeneous(item));
+    let record = |schema: Schema, required: bool| {
+        Schema::record(vec![field("a", schema, required)], Openness::Closed)
+    };
+    let guarded = Schema::meet([
+        Schema::union([list(Schema::NoneType), list(Schema::ANYTHING).complement()]),
+        Schema::Float.complement(),
+    ]);
+    let at_least_one = || Schema::refine(list(Schema::Bool), vec![Constraint::MinLen(1)]);
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+    let members = [
+        record(list(Schema::Int), true),
+        record(guarded, false),
+        record(at_least_one(), true),
+    ];
+    assert_eq!(keyed_map_meet_verdict(&members, &mut cx), Verdict::Empty);
+    let unguarded = [
+        record(list(Schema::Int), true),
+        record(at_least_one(), true),
+    ];
+    assert_ne!(keyed_map_meet_verdict(&unguarded, &mut cx), Verdict::Empty);
+}
+
 /// A mapping keyed by words under a length that counts every word, read as the
 /// record of those names.
 mod a_counted_mapping {

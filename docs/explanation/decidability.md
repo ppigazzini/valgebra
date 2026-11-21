@@ -414,10 +414,14 @@ answers `"undecided"`.
     writes for an `allOf` member narrowing an array's items, meets a field
     `[str]` in `[str] & [T]`, since a list of strings is no value of `~list`.
     The same holds a level up, where the translation guards the record to
-    objects with `~dict`, which holds no record.
+    objects with `~dict`, which holds no record. Whether the records hold a
+    value reads the same field meet, so a third record requiring at least one
+    `"c"` among the tags leaves them none.
 
     ```python
-    from typing import Any, Literal
+    from typing import Annotated, Any, Literal
+
+    from annotated_types import MinLen
 
     from valgebra import complement, intersection, recursive, union
 
@@ -432,6 +436,8 @@ answers `"undecided"`.
     guarded = intersection(union([Literal["a"]], complement(list[Any])), json)
     tags = intersection({"tags": [str], str: json}, {"tags?": guarded, str: json})
     assert tags.relation_to({"tags": [Literal["a"]], str: json}) == "subset"
+    carries_c = {"tags": Annotated[list[Literal["c"]], MinLen(1)], str: json}
+    assert intersection(tags, carries_c).is_empty()
     objects = intersection(
         {"tags": [str], str: json},
         union({"tags?": guarded, str: json}, complement(dict[Any, Any])),

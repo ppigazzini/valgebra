@@ -1491,6 +1491,18 @@ and holds a constructor or a reference (`holds_parts`), a pair of leaves being w
 reading of the whole read. The emptiness of a meet holding one complement asks it too,
 which keeps `is_empty` and the relation answering alike.
 
+**A meet among a key's types is spliced into the key's meet.** Keyed maps met hold no
+value where a key one of them requires has types meeting in nothing, and
+`keyed_map_meet_verdict` splices the conjuncts of a type that is itself a meet into
+that meet: the guard a translation writes for an `allOf` member, `([T] | ~list) & J`,
+puts its union among the members, which the narrowed meet reads in its clause. Held as
+one member, the guard is one no reading takes apart, and `{tags: [str]}`,
+`{tags?: ([Literal["a"]] | ~list) & J}` and a record requiring at least one `"c"`
+decline where their field meets in nothing. Only the splice is applied, not the
+constructors' folds: `X & anything` folds to `X`, and the meet distributes over a union
+`X` whose own reading stops at a member the partition cannot read
+(`a_meet_of_closed_maps_is_inhabited_where_its_keys_meet`).
+
 The reading of a whole pair spends no step, so it reads alike however often it is read.
 So the pair at this asking's root is not lowered (`read_whole`), where the sets have read
 it, which the emptiness of a meet has not, and a second asking starts past it

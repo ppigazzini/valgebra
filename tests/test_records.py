@@ -619,6 +619,8 @@ def test_a_field_s_set_is_asked_of_the_record_holding_it() -> None:
     carries_b = intersection(held, {"tags": Annotated[list[Literal["b"]], MinLen(1)]})
     assert Validator(carries_b).relation_to(nothing) == "not_subset"
     assert held.relation_to({"tags": [complement(Literal["c"])]}) == "subset"
+    carries_c = intersection(held, {"tags": Annotated[list[Literal["c"]], MinLen(1)]})
+    assert Validator(carries_c).relation_to(nothing) == "subset"
 
 
 # THEORY: a-refinement-narrows-its-base

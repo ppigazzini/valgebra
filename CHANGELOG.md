@@ -23,6 +23,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a guard is dropped from a meet beside a member of its kind
 - feat: a meet reads a complement pushed in and a branch in its clause
 - feat: a length bound beside a record leaves the record it counts
+- feat: a meet among a key's types is read beside the key's other types
 
 -->
 
@@ -129,6 +130,15 @@ answer of its own, or a repair to a change not yet released.
   refined record's emptiness is read off it. On the containment suite and the corpus read through
   `valgebra-jsonschema` no answer moves, and against 0.0.30's recording no decision is lost and none
   is slower.
+
+- **A meet among a key's types is read beside the key's other types.** Records met hold no value
+  where a key one of them requires has types meeting in nothing, and a type that is itself a meet
+  is now spliced into that meet, so a field one record guards to its kind, `([T] | ~list) & json`,
+  is read in its clause beside the others. `{"tags":
+  [str]}` met with `{"tags?": ([Literal["a"]] | ~list) & json}` and a record requiring a list of at
+  least one `"c"` is empty, where it was `undecided`: the tags are strings, `"a"` and `"c"` at once.
+  On the containment suite and the corpus read through `valgebra-jsonschema` no answer moves, and
+  against 0.0.30's recording no decision is lost and none is slower.
 
 - **How it works.**
   The explanation opens with a page that follows one schema from its annotation to both answers: the

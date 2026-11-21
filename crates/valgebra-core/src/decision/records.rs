@@ -96,8 +96,16 @@ pub(super) fn keyed_map_meet_verdict(members: &[Schema], cx: &mut Cx<'_>) -> Ver
     let mut required_hold = Verdict::Inhabited;
     for (name, (types, _)) in keys.iter().filter(|(_, (_, required))| *required) {
         let held = if types.len() > 1 {
-            let meet = Schema::Intersection(types.iter().copied().cloned().collect());
-            meet.verdict_rec(cx)
+            // A type that is itself a meet is spliced into the key's, so its
+            // unions are members the readings of a meet narrow: a field guarded
+            // to its kind beside a field of that kind is read as the one meet it
+            // is. Nothing else is folded: a meet with `anything` among its types
+            // distributes over a union the union's own reading stops in.
+            let spliced = types.iter().flat_map(|ty| match ty {
+                Schema::Intersection(parts) => &**parts,
+                other => std::slice::from_ref(*other),
+            });
+            Schema::Intersection(spliced.cloned().collect()).verdict_rec(cx)
         } else {
             Verdict::Inhabited
         };
