@@ -132,6 +132,19 @@ pub(crate) const RESPELLING_AGAIN: u32 = 65_536;
 /// many of them one asking reads: sixty-four under [`RESPELLING`].
 const LEAF_READING: u32 = 64;
 
+/// The units the goals holding a reference that one query declines are lowered
+/// with between them ([`Schema::a_goal_declined`]): one build's allowance,
+/// [`WORK`], for every such goal of the query rather than for each.
+///
+/// **This bound is cost.** Each goal's lowering arms builds of its own, so
+/// without it a query reading many goals spends a build's allowance on each: a
+/// meet of two recursive records over the JSON values declines seventeen goals
+/// holding the fixpoint, each of which spends its allowance and answers nothing.
+/// A goal holding no reference is lowered under its builds' own allowances:
+/// drawn from this pool too, such goals lose answers over the record, mapping
+/// and `TypedDict` families, the refusal [`budget::under`] records.
+const GOALS_WORK: u64 = crate::descr::lower::WORK;
+
 thread_local! {
     /// Whether a split of a pair on a set is under way on this thread
     /// ([`Schema::split_on_a_set_it_negates`]): a half is not split again, so a
@@ -1337,11 +1350,28 @@ impl Schema {
             a_bound_is_met();
             return Relation::Unknown;
         }
-        let key = (cx.query(), self.clone(), other.clone());
+        let query = cx.query();
+        let key = (query, self.clone(), other.clone());
         if let Some(answer) = LEAVES.with_borrow(|held| held.get(&key).copied()) {
             return answer;
         }
-        let answer = self.descriptor_contained_in(other, cx.oracle, cx.defs);
+        let answer = if self.has_reference() || other.has_reference() {
+            let left = match GOALS_POOL.get() {
+                (owner, left) if owner == query => left,
+                _ => GOALS_WORK,
+            };
+            if left == 0 {
+                a_bound_is_met();
+                return Relation::Unknown;
+            }
+            let (answer, left) = budget::pooled(left, || {
+                self.descriptor_contained_in(other, cx.oracle, cx.defs)
+            });
+            GOALS_POOL.set((query, left));
+            answer
+        } else {
+            self.descriptor_contained_in(other, cx.oracle, cx.defs)
+        };
         LEAVES.with_borrow_mut(|held| {
             if held.len() >= READINGS_HELD {
                 held.clear();
@@ -3481,6 +3511,9 @@ const READINGS_HELD: usize = 4096;
 thread_local! {
     /// The readings of the queries on this thread, by query number.
     static READINGS: RefCell<Readings> = RefCell::new(Readings::default());
+    /// The query whose declined goals [`GOALS_WORK`] last drew on, and the units
+    /// left to them.
+    static GOALS_POOL: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
     /// The pairs the last askings on this thread read by the sets, by query number.
     static LEAVES: RefCell<Leaves> = RefCell::new(Leaves::default());
     /// The values the last askings on this thread read by the sets, by query number.

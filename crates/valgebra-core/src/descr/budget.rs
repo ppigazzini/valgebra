@@ -149,11 +149,62 @@ pub(crate) fn law() -> Allowance {
 /// readings, so a pool small enough to cut the queries that decline cuts
 /// answers with them: sixteen readings' worth lost a `subset` on three of four
 /// seeds. What a unit costs is the bound worth holding, and `polar::product`
-/// holds it.
+/// holds it. The goals holding a reference that a query declines are the one
+/// reading drawn from a pool (`pooled`): no goal holding none draws on it.
 pub fn under<T>(units: u64, build: impl FnOnce() -> T) -> T {
-    let _allowance = armed(units);
-    build()
+    let pool = POOL.with(Cell::get);
+    if pool == u64::MAX {
+        let _allowance = armed(units);
+        return build();
+    }
+    let units = units.min(pool);
+    let allowance = armed(units);
+    let answer = build();
+    let spent = units - LEFT.with(Cell::get);
+    drop(allowance);
+    POOL.with(|left| left.set(left.get().saturating_sub(spent)));
+    answer
 }
+
+thread_local! {
+    /// What the builds of one pooled reading may still spend between them, or
+    /// [`u64::MAX`] outside one ([`pooled`]).
+    static POOL: Cell<u64> = const { Cell::new(u64::MAX) };
+}
+
+/// The pool a [`pooled`] reading draws on, given back as the reading ends,
+/// including where it unwinds.
+struct Pool(u64);
+
+impl Drop for Pool {
+    fn drop(&mut self) {
+        POOL.with(|pool| pool.set(self.0));
+    }
+}
+
+/// Run `reading` with every build it arms drawing on `units` between them, and
+/// say what it left.
+///
+/// A build arms what it asks for or what the pool holds, the smaller, and the
+/// pool is charged what the build spent once it ends. A build armed inside
+/// another sees the pool before the one around it is charged, so a reading
+/// spends at most the pool once per level its builds nest, which is three: a
+/// lowering's or a difference's, inside the reading of one goal. That is the
+/// bound a reading asked once per goal a query declines needs, where one
+/// allowance per build is not: each goal's builds spend theirs, so a query
+/// declining many goals spends a reading's worth on each and may answer none of
+/// them ([`under`] says why a pool over every reading of a query is refused).
+pub(crate) fn pooled<T>(units: u64, reading: impl FnOnce() -> T) -> (T, u64) {
+    let outer = POOL.with(|pool| pool.replace(units.min(pool.get())));
+    let guard = Pool(outer);
+    let answer = reading();
+    let left = POOL.with(Cell::get);
+    drop(guard);
+    (answer, left)
+}
+
+#[cfg(test)]
+mod pool_tests;
 
 #[cfg(test)]
 mod tests {

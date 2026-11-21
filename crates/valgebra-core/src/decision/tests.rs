@@ -7481,6 +7481,59 @@ fn a_value_of_no_kind_refutes_past_a_cut() {
     assert_eq!(pairs_read_by_the_sets() - before, 1);
 }
 
+/// The goals holding a reference that one query declines are lowered from one
+/// pool of [`GOALS_WORK`](super::GOALS_WORK) units between them: a query whose
+/// pool is spent reads no such goal by the sets and leaves it unknown, a reading
+/// draws the pool down by what its builds spent, and the next query starts a
+/// pool of its own. A goal holding no reference draws on no pool.
+#[test]
+fn a_query_s_declined_goals_are_lowered_from_one_pool() {
+    use super::goal_tests::goals::pairs_read_by_the_sets;
+    let word = |pattern: &str| Schema::refine(Schema::Str, vec![Constraint::Regex(pattern.into())]);
+    let defs = [Schema::union([
+        Schema::Int,
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ])];
+    let holding = |pattern: &str| Schema::union([word(pattern), Schema::Ref(DefIx::new(0))]);
+    let (plain, plain_other) = (word("a+"), word("b+"));
+    let (subject, supertype) = (holding("a+"), holding("b+"));
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+    cx.reads_leaves = true;
+    super::GOALS_POOL.set((cx.query(), 0));
+    let before = pairs_read_by_the_sets();
+    assert_eq!(
+        subject.a_goal_declined(&supertype, &mut cx),
+        Relation::Unknown
+    );
+    assert_eq!(
+        pairs_read_by_the_sets(),
+        before,
+        "a spent pool reads nothing"
+    );
+    assert_eq!(
+        plain.a_goal_declined(&plain_other, &mut cx),
+        Relation::Fails,
+        "a goal holding no reference draws on no pool"
+    );
+    assert_eq!(pairs_read_by_the_sets() - before, 1);
+    let budget = Budget::new(DECISION_BUDGET);
+    let mut cx = Cx::new(&NoLeafRelations, &defs, &budget);
+    cx.reads_leaves = true;
+    assert_eq!(
+        subject.a_goal_declined(&supertype, &mut cx),
+        Relation::Fails
+    );
+    assert_eq!(
+        pairs_read_by_the_sets() - before,
+        2,
+        "a new query, a new pool"
+    );
+    let (owner, left) = super::GOALS_POOL.get();
+    assert_eq!(owner, cx.query());
+    assert!(left < super::GOALS_WORK, "the reading drew the pool down");
+}
+
 /// A goal the last asking hands the sets is read once a query, and charged as read
 /// each time it is asked, so the memo changes no answer and no allowance; another
 /// query reads it again.

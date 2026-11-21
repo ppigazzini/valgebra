@@ -24,6 +24,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a meet reads a complement pushed in and a branch in its clause
 - feat: a length bound beside a record leaves the record it counts
 - feat: a meet among a key's types is read beside the key's other types
+- fix: a query's declined goals holding a reference share one allowance -- internal
 
 -->
 

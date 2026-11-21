@@ -1486,7 +1486,13 @@ a pair stops for the whole pair: at a cut, at what it cannot lower, past the dep
 So `bool` below `Annotated[int, Lt(8)]` decides alone and declined beside a recursion,
 a class key or a third attribute record. A pair everything else declined is asked of
 the rules again with `reads_leaves` set, and a goal they decline is lowered there
-(`a_goal_declined`), for `LEAF_READING` steps since no step counts a lowering.
+(`a_goal_declined`), for `LEAF_READING` steps since no step counts a lowering. A
+goal holding a reference arms builds of its own, and the ones a query declines
+draw one build's allowance between them (`GOALS_WORK`, `budget::pooled`): a meet
+of two recursive records over the JSON values declines seventeen of them, each of
+which would spend its own allowance and answer nothing. A goal holding no
+reference draws on no pool, since one drawn by every goal of a query loses
+answers on the record families (`budget::under`).
 
 A goal holding a reference is lowered only where a meet, a union or a complement
 tops one side. The rules read a connective member by member and branch by branch,
