@@ -129,6 +129,26 @@ def test_regex_marker_repr_eq_and_hash() -> None:
     assert hash(marker) == hash(Regex(r"[0-9]+"))
 
 
+def test_a_regex_marker_holds_its_pattern_alone() -> None:
+    """A marker's fields are its identity, so it holds no text beside its pattern.
+
+    A text beside the pattern, as one a failure would name, fails either way it is
+    read. Held in the identity, one pattern under two texts is two constraints of
+    one set, which a refinement's deduplication keeps apart; left out of it,
+    deduplication keeps one of them, and a failure names whichever text the build
+    met first. So two validators that compare equal word a failure alike.
+    """
+    assert Regex.__slots__ == ("pattern",)
+    once = Validator(Annotated[str, Regex(r"[0-9]+")])
+    twice = Validator(Annotated[str, Regex(r"[0-9]+"), Regex(r"[0-9]+")])
+    assert once == twice
+    with pytest.raises(ValidationError) as from_once:
+        once.validate("x")
+    with pytest.raises(ValidationError) as from_twice:
+        twice.validate("x")
+    assert from_once.value.errors == from_twice.value.errors
+
+
 def test_a_regex_marker_compares_as_a_marker_and_defers_otherwise() -> None:
     """Equality with anything else is the other operand's to answer."""
     marker = Regex(r"[0-9]+")

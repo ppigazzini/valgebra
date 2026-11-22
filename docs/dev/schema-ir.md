@@ -409,6 +409,18 @@ the classes of those two libraries are nominal, where a fixpoint is not its own
 unfolding. `test_opening_a_fixpoint_is_opening_its_unfolding` in
 `tests/test_laws.py` fails on it.
 
+**A display text on `Regex`, so a failure names the pattern a caller wrote rather
+than the one valgebra was given.** Refused. A translator writes a pattern in this
+engine's dialect, and a failure names that text: valgebra-jsonschema writes
+`^[a-f]{2}$` unanchored with its classes as code points. A marker's fields are its
+identity, and a text beside the pattern fails either way it is read. In the
+identity, one pattern under two texts is two constraints of one set, which a
+refinement's deduplication keeps apart; out of it, deduplication keeps one, and
+a failure names whichever text the build met first. The wording is the
+translator's: valgebra-jsonschema's `Compiler.reworded` names a failure in the
+schema's text. `test_a_regex_marker_holds_its_pattern_alone` in
+`tests/test_pattern.py` fails on either reading.
+
 ### Arguments for the carrier change, and why each fails
 
 | argument | why it fails |
