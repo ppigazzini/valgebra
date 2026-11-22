@@ -428,7 +428,10 @@ to the other passes every one. Each such site notes the reading it took in
 so the shipped extension carries none of it, and
 `crates/valgebra-py/src/check/walk/taken_tests.rs` holds each value to the
 reading chosen for it: a list read through a snapshot at each end of the band
-the running interpreter compiles, and in place one past it.
+the running interpreter compiles and in place one past it, a `dict[str, int]`
+by the loop written for it, a parsed object by its record's plan or by a search
+as the record's width says, and an explained record holding exactly its keys
+without the scan for undeclared ones.
 
 The **frontend** carries an annotation corpus in
 `crates/valgebra-py/src/build/interpreter.rs`: a table of annotations as a

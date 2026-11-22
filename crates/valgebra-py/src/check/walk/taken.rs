@@ -18,6 +18,14 @@ use rustc_hash::FxHashMap;
 pub(super) enum Reading {
     /// A list copied into a tuple, whose elements are then read borrowed.
     Snapshot,
+    /// A mapping of `str` keys to `int` values read by the loop over those
+    /// two type tests.
+    StrIntMap,
+    /// A parsed object read as a record through the record's plan rather than
+    /// by a search of the object per field.
+    PlannedRecord,
+    /// An explained record's scan for the keys it does not declare.
+    UndeclaredScan,
 }
 
 thread_local! {

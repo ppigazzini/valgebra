@@ -4,9 +4,11 @@
 //! ([`taken`](super::taken)): a value sent to the other reading keeps every
 //! answer and fails here.
 
-use pyo3::types::PyModule;
+use jiter::JsonValue;
+use pyo3::types::{PyDict, PyModule};
 use valgebra_core::SeqShape;
 
+use super::record::{RecordReading, SMALL_OBJECT, keyed_map_matches_json};
 use super::sequence::SNAPSHOT_BAND;
 use super::taken::{Reading, counted};
 use super::*;
@@ -105,6 +107,123 @@ fn a_list_is_snapshotted_from_one_end_of_the_band_to_the_other() {
                     );
                 }
             }
+        }
+    });
+}
+
+/// A mapping of `str` keys to `int` values is read by the loop over those two
+/// type tests, which the instruction gate's mapping shape measures, admitted
+/// or refused; a mapping of other kinds by the loop over any two.
+#[test]
+fn a_mapping_of_str_to_int_takes_the_loop_written_for_it() {
+    Python::attach(|py| {
+        let mapping = |key, value| Schema::mapping(MapClause { key, value });
+        for (schema, source, admitted, written) in [
+            (
+                mapping(Schema::Str, Schema::Int),
+                "{'a': 1, 'b': 2}",
+                true,
+                1,
+            ),
+            (
+                mapping(Schema::Str, Schema::Int),
+                "{'a': 1, 'b': 'x'}",
+                false,
+                1,
+            ),
+            (mapping(Schema::Str, Schema::Float), "{'a': 1.5}", true, 0),
+            (mapping(Schema::Int, Schema::Int), "{1: 2}", true, 0),
+        ] {
+            let index = build_index(py, &schema, &[], &[]);
+            let value = evaluated(py, None, source);
+            assert!(value.is_instance_of::<PyDict>());
+            let walk = (&schema, &[][..], &[][..]);
+            assert_eq!(
+                taken(Reading::StrIntMap, walk, &index, &value, WalkMode::Fast),
+                (admitted, written),
+                "{schema:?} at {source}"
+            );
+        }
+    });
+}
+
+/// A parsed object is read through its record's plan, except by a record
+/// whose clause reads keys and declares no more fields than a small object
+/// holds, which searches the object for each field instead.
+#[test]
+fn a_record_reading_its_keys_searches_a_small_parsed_object() {
+    Python::attach(|py| {
+        let reads_keys = vec![MapClause {
+            key: Schema::Str,
+            value: Schema::Str,
+        }];
+        for (width, defaults, planned) in [
+            (1, reads_keys.clone(), 0),
+            (SMALL_OBJECT, reads_keys.clone(), 0),
+            (SMALL_OBJECT + 1, reads_keys, 1),
+            (1, Vec::new(), 1),
+        ] {
+            let fields = (0..width)
+                .map(|at| Field {
+                    name: format!("f{at}").into(),
+                    schema: Schema::Int,
+                    required: at == 0,
+                })
+                .collect();
+            let schema = Schema::keyed_map(fields, defaults);
+            let Schema::KeyedMap { fields, defaults } = &schema else {
+                unreachable!("a keyed map")
+            };
+            let index = build_index(py, &schema, &[], &[]);
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &[],
+                defs: &[],
+                index: &index,
+                state: &state,
+                mode: WalkMode::Fast,
+            };
+            let reading = RecordReading::of(fields, defaults, &ctx);
+            let object = [("f0".into(), JsonValue::Int(1))];
+            assert_eq!(
+                counted(Reading::PlannedRecord, || {
+                    keyed_map_matches_json(&reading, py, &object, ctx)
+                }),
+                (true, planned),
+                "{width} fields beside {} clauses",
+                defaults.len()
+            );
+        }
+    });
+}
+
+/// An explained record that holds exactly the keys it declares has no
+/// undeclared key to report, which the count of the fields it found shows, and
+/// is explained without the scan for them; one holding a key more is scanned.
+#[test]
+fn a_record_holding_exactly_its_keys_is_explained_without_a_scan() {
+    Python::attach(|py| {
+        let field = |name: &str| Field {
+            name: name.into(),
+            schema: Schema::Int,
+            required: true,
+        };
+        let schema = Schema::keyed_map(vec![field("a"), field("b")], Vec::new());
+        let index = build_index(py, &schema, &[], &[]);
+        for (source, scanned) in [("{'a': 1, 'b': 'x'}", 0), ("{'a': 1, 'b': 'x', 'c': 3}", 1)] {
+            let value = evaluated(py, None, source);
+            let walk = (&schema, &[][..], &[][..]);
+            assert_eq!(
+                taken(
+                    Reading::UndeclaredScan,
+                    walk,
+                    &index,
+                    &value,
+                    WalkMode::Explain
+                ),
+                (false, scanned),
+                "{source}"
+            );
         }
     });
 }

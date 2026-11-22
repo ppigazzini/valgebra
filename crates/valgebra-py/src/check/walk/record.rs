@@ -1062,6 +1062,8 @@ pub(super) fn scalar_map_matches(
     let state = ctx.state;
     let (admitted, scan) = match (key_kind, value_kind) {
         (Scalar::Str, Scalar::Int) => {
+            #[cfg(test)]
+            super::taken::note(super::taken::Reading::StrIntMap);
             scalar_map_loop(dict, state, |key| key.is_str(), |value| value.is_int())
         }
         _ => scalar_map_loop(
@@ -1331,6 +1333,8 @@ pub(super) fn keyed_map_matches_json(
     if let Some(plan) = plan.filter(|plan| {
         plan.by_name.len() == fields.len() && resolves_through_the_plan(undeclared, fields.len())
     }) {
+        #[cfg(test)]
+        super::taken::note(super::taken::Reading::PlannedRecord);
         // The document's value for each declared field, last occurrence winning
         // as `json.loads` does, gathered before any of them is checked: an
         // earlier duplicate that fails is not the entry the document means.
@@ -1721,6 +1725,8 @@ fn undeclared_explained(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) {
+    #[cfg(test)]
+    super::taken::note(super::taken::Reading::UndeclaredScan);
     let ctx = frame.ctx;
     // Built here rather than in the caller, because the scan is the only reader
     // and a record that answers by count never reaches it.
