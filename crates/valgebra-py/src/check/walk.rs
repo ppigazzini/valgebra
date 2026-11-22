@@ -1958,3 +1958,12 @@ mod memo_tests;
 
 #[cfg(test)]
 mod label_tests;
+
+// Noted by the readings chosen for their cost, behind `cfg(test)` at each
+// site, and read by `taken_tests`: compiled into every test build, since the
+// sites are, and into no other.
+#[cfg(test)]
+mod taken;
+
+#[cfg(all(test, feature = "interpreter-tests"))]
+mod taken_tests;

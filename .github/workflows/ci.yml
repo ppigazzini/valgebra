@@ -398,7 +398,9 @@ jobs:
           # would describe the tests. Excluded, the figure is read with the flow
           # above, against a cleaned profile in a target directory of its own,
           # which is the only reading that is the lane's. The suites draw, so a figure
-          # moves in its third digit between runs.
+          # moves in its third digit between runs. `walk/taken.rs` is a test
+          # module of the same kind, the notes the walk's readings leave for
+          # their tests, compiled into no shipped build.
           #
           # The region floor is the one that notices a branch with an arm nobody
           # reached, and it is seven points below the line figure here. The line
@@ -415,7 +417,7 @@ jobs:
           # touched moving alike. The floor follows the count, not the code.
           # `tests/test_coverage_scope.py` holds this scope to the corpus files
           # the tree has, in both directions.
-          ignore='valgebra-core|valgebra-py/src/workload\.rs|/interpreter\.rs$|tests\.rs$'
+          ignore='valgebra-core|valgebra-py/src/workload\.rs|/walk/taken\.rs$|/interpreter\.rs$|tests\.rs$'
           cargo llvm-cov report --summary-only \
             --ignore-filename-regex "$ignore" \
             --fail-under-lines 96 --fail-under-regions 90

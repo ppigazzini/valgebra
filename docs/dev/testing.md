@@ -421,6 +421,15 @@ chain ten deep -- and the test of a room's two counts fills the trail to nine
 short of its bound rather than nesting a dict a hundred deep, so a sweep that
 disables the memo reads a failure rather than a walk that does not end.
 
+A reading the walk chooses for its cost answers as the reading beside it does,
+so no case of the corpus tells which one ran, and a mutant that sends a value
+to the other passes every one. Each such site notes the reading it took in
+`crates/valgebra-py/src/check/walk/taken.rs`, behind a `cfg(test)` at the site,
+so the shipped extension carries none of it, and
+`crates/valgebra-py/src/check/walk/taken_tests.rs` holds each value to the
+reading chosen for it: a list read through a snapshot at each end of the band
+the running interpreter compiles, and in place one past it.
+
 The **frontend** carries an annotation corpus in
 `crates/valgebra-py/src/build/interpreter.rs`: a table of annotations as a
 caller writes them beside the schema each must build, spelled as that schema's

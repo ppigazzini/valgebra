@@ -1050,8 +1050,10 @@ side: the binding sweep and the coverage lane pin 3.13, where the snapshot
 reading compiles in, and the bench lane pins 3.15, where the reading in place
 does, so the instruction gate holds the cost of that reading and of no other.
 The product suite holds the answers on every interpreter, since the readings
-answer alike. What no lane holds is the cost of the snapshot reading and of the
-free-threaded one, which is the doc comment's measurement and nothing more.
+answer alike, and `taken_tests.rs` beside the walk which reading a list takes
+at each end of the band the running interpreter compiles. What no lane holds is
+the cost of the snapshot reading and of the free-threaded one, which is the
+doc comment's measurement and nothing more.
 
 ## A gate that compared nothing must not pass
 

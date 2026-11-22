@@ -1824,6 +1824,8 @@ pub(super) fn literal_list_matches(
 #[cfg(any(Py_3_12, PyPy))]
 #[inline]
 fn snapshot_of<'py>(list: &Bound<'py, PyList>) -> PyResult<Bound<'py, PyTuple>> {
+    #[cfg(test)]
+    super::taken::note(super::taken::Reading::Snapshot);
     list.as_sequence().to_tuple()
 }
 
@@ -1846,6 +1848,8 @@ fn snapshot_of<'py>(list: &Bound<'py, PyList>) -> PyResult<Bound<'py, PyTuple>> 
     static IS_ENABLED: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     static DISABLE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
     static ENABLE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    #[cfg(test)]
+    super::taken::note(super::taken::Reading::Snapshot);
     let py = list.py();
     let held = IS_ENABLED
         .import(py, "gc", "isenabled")?
