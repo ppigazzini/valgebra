@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::ir::{ClassIx, CollKind, ConstIx, Constraint, Constraints, DefIx, DefShift, SeqKind};
+use crate::ir::{
+    ClassIx, CollKind, ConstIx, Constraint, Constraints, DefIx, DefShift, Openness, SeqKind,
+};
 
 fn field(name: &str, schema: Schema) -> Field {
     Field {
@@ -605,4 +607,52 @@ fn the_table_does_not_keep_a_dropped_node_alive() {
 fn sharing_a_child_shares_the_parent_over_it() {
     let (one, two) = nesting_built_twice(&|inner| Schema::Complement(inner));
     assert!(Arc::ptr_eq(&one, &two));
+}
+
+/// A list a constructor builds empty is one allocation wherever it is built, so
+/// two schemas holding one are one node: a mapping's fields, a closed record's
+/// clauses and the empty tuple's prefix. No build here asks the node table
+/// anything, so the second node reads the slot the first one wrote.
+#[test]
+fn two_nodes_over_an_empty_list_are_one_node() {
+    let builds: [fn() -> Schema; 3] = [
+        || Schema::mapping(clause(Schema::Str, Schema::Int)),
+        || Schema::record(vec![field("a", Schema::Int)], Openness::Closed),
+        || Schema::tuple(SeqShape::fixed([])),
+    ];
+    for build in builds {
+        let (one, two) = (node(build()), node(build()));
+        assert!(Arc::ptr_eq(&one, &two), "{one:?} was built twice");
+    }
+}
+
+/// Each kind's empty list is one list of its own, the same at every build and
+/// not the block std hands out for every empty slice of every element type:
+/// over that one block a relation between two dataclasses reads 3.1% more
+/// instructions (`scripts/perf_gate.py --binding-relation`).
+#[test]
+fn each_kind_s_empty_list_is_one_of_its_own() {
+    use crate::ir::{Clauses, Fields, Members, no_clauses, no_fields, no_members};
+    let at = |list: *const u8| list as usize;
+    let pairs = [
+        (
+            at(no_clauses().as_ptr().cast()),
+            at(no_clauses().as_ptr().cast()),
+            at(Clauses::default().as_ptr().cast()),
+        ),
+        (
+            at(no_fields().as_ptr().cast()),
+            at(no_fields().as_ptr().cast()),
+            at(Fields::default().as_ptr().cast()),
+        ),
+        (
+            at(no_members().as_ptr().cast()),
+            at(no_members().as_ptr().cast()),
+            at(Members::default().as_ptr().cast()),
+        ),
+    ];
+    for (once, again, std_s) in pairs {
+        assert_eq!(once, again, "an empty list built twice is two");
+        assert_ne!(once, std_s, "an empty list is std's shared block");
+    }
 }
