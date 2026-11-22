@@ -134,16 +134,19 @@ pub(crate) fn plan(
         }
         reach = closed;
     }
-    let calling = defs
-        .iter()
-        .enumerate()
-        .filter(|(_, body)| calls_code(py, body, pool))
-        .fold(0u128, |bits, (at, _)| bits | 1 << at);
-    let remembered = reach
-        .iter()
-        .enumerate()
-        .filter(|(at, reached)| (calling >> at) & 1 == 0 && *reached & calling == 0)
-        .fold(0u128, |bits, (at, _)| bits | 1 << at);
+    let calling = definitions(
+        defs.iter()
+            .enumerate()
+            .filter(|(_, body)| calls_code(py, body, pool))
+            .map(|(at, _)| at),
+    );
+    let remembered = definitions(
+        reach
+            .iter()
+            .enumerate()
+            .filter(|(at, reached)| (calling >> at) & 1 == 0 && *reached & calling == 0)
+            .map(|(at, _)| at),
+    );
     let mut shared = FxHashSet::default();
     if remembered != 0 {
         for node in std::iter::once(schema).chain(defs) {
@@ -170,6 +173,12 @@ fn height(schema: &Schema) -> usize {
     let mut below = 0;
     for_each_child(schema, &mut |child| below = below.max(height(child)));
     below + 1
+}
+
+/// The definitions at these indices, one bit each, every index inside the
+/// plan's table: an index met twice is in the set once.
+fn definitions(indices: impl Iterator<Item = usize>) -> u128 {
+    indices.fold(0, |bits, at| bits | 1 << at)
 }
 
 /// `named` together with everything the definitions it names reach.
@@ -667,7 +676,7 @@ impl Kept {
 mod tests {
     use valgebra_core::{DefIx, Schema};
 
-    use super::{PLANNED_DEFINITIONS, names};
+    use super::{PLANNED_DEFINITIONS, definitions, names};
 
     /// A reference names its own bit up to the last definition the plan's
     /// table holds, and a reference past it names none: a bit past a `u128`'s
@@ -680,5 +689,13 @@ mod tests {
         assert_eq!(names(&at(PLANNED_DEFINITIONS)), 0);
         let both = Schema::Union(vec![at(PLANNED_DEFINITIONS), at(3)].into());
         assert_eq!(names(&both), 1 << 3);
+    }
+
+    /// The set a plan folds its definitions into holds each index once, an
+    /// index met twice as one met once.
+    #[test]
+    fn a_definition_met_twice_is_in_the_set_once() {
+        assert_eq!(definitions([3, 0, 3].into_iter()), 0b1001);
+        assert_eq!(definitions(std::iter::empty()), 0);
     }
 }
