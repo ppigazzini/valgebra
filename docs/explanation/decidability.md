@@ -588,7 +588,12 @@ answers `"undecided"`.
   is there a pattern counting code points or bytes, a few states a code point,
   and the sets read one up to about 250 code points or 2,000 bytes before its
   table passes the state bound; past 4,094 the bound is refused before it is
-  built. A tuple or a record holding such a string beside a part only the sets
+  built. A pattern on a `str` is read against a bound by the least and the
+  most length of its strings instead, at any bound:
+  `Annotated[str, Regex("[a-f0-9]{24}")]` is `subset` of
+  `Annotated[str, MaxLen(n)]` for every `n` from 24, and
+  `Annotated[str, Regex(".*-x")]` is `not_subset` of every `MaxLen`, on a
+  string past it. A tuple or a record holding such a string beside a part only the sets
   read is read a part at a time, a product holding a value where each part does
   and none where one part holds none: `tuple[Annotated[str, MaxLen(5120)], M]`,
   for `M` the meet a translation writes for `{"type": "integer", "minimum": 0}`,

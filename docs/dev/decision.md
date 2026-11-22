@@ -408,12 +408,11 @@ distributed, each branch met with the members beside it and that union's copies 
 and the meet is below the supertype where every clause is [BBC+26, (anyOf-l)] and outside it
 where one is. A clause holding a union distributes it in its own turn [BBC+26, §6], and a
 respelled question inside it spends the asking's steps (`NARROWING`), so the asking's budget
-bounds the whole: the distribution deciding a `oneOf` of two pairs below the `if` a
-translation from JSON Schema writes spends 156,908 steps, past both respelling allowances.
-In the first asking it lost answers, since it spent the steps the readings after it decided
-with -- the excluded middle over the translation of an object, `J <= X | (~X & J)`, read
-undecided (`test_a_meet_read_for_its_emptiness_is_narrowed_as_written`) -- so it is a further
-asking only, which takes no answer away. A meet supertype needs no reading of its own: its
+bounds the whole product of the unions' widths. Asked in the first asking, it would spend
+the steps the readings after it decide with -- the excluded middle over the translation of
+an object, `J <= X | (~X & J)`, which
+`test_a_meet_read_for_its_emptiness_is_narrowed_as_written` holds decided -- so it is a
+further asking only, which takes no answer away. A meet supertype needs no reading of its own: its
 member questions reach the subject's distribution through the rules.
 
 **A pattern's lengths answer a length bound without counting it** (`Dfa::lengths` in
@@ -423,7 +422,7 @@ words are read off its table: the shortest and the longest path from the start t
 accepting state through the states that lead on to one, a cycle among them leaving no
 most, and a byte counted where it opens a code point. A length bound's own table counts
 seven states a code point under `MAX_STATES`, so a `MaxLen` of a few hundred characters
-fits none, and a relation that lowered it declined. Read off the pattern, a `Regex` on a
+fits none, and a relation that lowers it declines. Read off the pattern, a `Regex` on a
 `str` entails a bound its words keep to (`a_pattern_keeps_to` in `descr/lower.rs`, which
 `constraint_entailed` asks), and refutes one a word breaks, as long as its most, or
 longer than any bound where it has none (`a_word_breaks_a_length` in
@@ -1877,10 +1876,10 @@ spans four clauses at most -- the product of its unions' widths, the bound ty's
 intersection builder caps its normal form at, where no branch is a union or a
 meet holding a union or a meet, whose own unions a width does not count, and a
 branch that is a meet of atoms is the one clause its members join (`one_clause`)
--- so a meet of two keywords guarded to their kind, `OBJ & (~OBJ | R) & (~OBJ |
-Q)`, is read clause by clause, and so is a record met with
-`(has(w) & has(w, t)) | ~has(w)`, which a field holding a predicate keeps from
-the sets. The meet is a goal of
+-- so a meet of two keywords guarded to their kind,
+`OBJ & (~OBJ | R) & (~OBJ | Q)`, is read clause by clause, and so is a record
+met with `(has(w) & has(w, t)) | ~has(w)`, which a field holding a predicate
+keeps from the sets. The meet is a goal of
 its own, its members sorted and without repeats, held open beside the query's
 budget while the path below decides it -- except a meet distributed for its
 normal form alone, which no reference reaches and which, held open, would have

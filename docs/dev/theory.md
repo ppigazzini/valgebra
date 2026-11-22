@@ -1435,27 +1435,27 @@ IMPLEMENTED-BY: decision/emptiness.rs::held_verdict, decision/emptiness.rs::Open
 HELD-BY: a_meet_read_back_is_a_reading_of_it, a_meet_read_back_spends_what_a_reading_of_it_spends_now, a_spent_query_reads_its_bounds_under_steps_of_its_own, a_respelled_pair_stops_at_its_allowance
 
 **A meet is distributed four clauses wide, and narrowed past that.** The
-sources decide a meet on its normal form [FCB08, Def. 6.1, Lem. 6.2], the union
-of the meets its union members' branches make with the rest, a meet
+sources decide a meet on its normal form [FCB08, Def. 6.1, Lem. 6.2], the
+union of the meets its union members' branches make with the rest, a meet
 distributing over a union in every set-theoretic interpretation
-[FCB08, Def. 4.1], which distributes every union it holds. The rules distribute a meet holding no
-reference only where its normal form spans four clauses at most, the bound ty's
-intersection builder caps its own normal form at, a branch that is a meet of
-atoms counted as the one clause its members join, and past that narrow its unions by the
-complements beside them, each branch read in the clause it makes with the
-members beside it where the meet is related to a supertype, and drop a guard
-beside a member of its kind. Related to a supertype, a meet the other readings
-leave is brought to almost-DNF a union at a time [BBC+26, §5.2], below the
-supertype where every clause is [BBC+26, (anyOf-l)], and read lazily
-[BBC+26, §6], so one union is distributed, a clause holding another distributes
-it in its own turn, and the query's own steps bound the whole. Four is a peer's
-tuning and no result. The
-narrowing and the capped distribution split one budget between two readings
-that each decide answers the other cannot, so a repair that moves the split
-trades answers rather than adding them. A binary decision tree holds the
-combination as one structure, its paths the clauses [LN26, §3]; it is not
-built here, since on the narrowing family the cost is in the meets the rules
-build as they descend, each a term of its own.
+[FCB08, Def. 4.1], which distributes every union it holds. The rules
+distribute a meet holding no reference only where its normal form spans four
+clauses at most, the bound ty's intersection builder caps its own normal form
+at, a branch that is a meet of atoms counted as the one clause its members
+join, and past that narrow its unions by the complements beside them, each
+branch read in the clause it makes with the members beside it where the meet
+is related to a supertype, and drop a guard beside a member of its kind.
+Related to a supertype, a meet the other readings leave is brought to
+almost-DNF a union at a time [BBC+26, §5.2], below the supertype where every
+clause is [BBC+26, (anyOf-l)], and read lazily [BBC+26, §6], so one union is
+distributed, a clause holding another distributes it in its own turn, and the
+further asking's own steps bound the whole. Four is a peer's tuning and no
+result. The narrowing and the capped distribution split one budget between
+two readings that each decide answers the other cannot, so a repair that
+moves the split trades answers rather than adding them. A binary decision tree
+holds the combination as one structure, its paths the clauses [LN26, §3]; it
+is not built here, since on the narrowing family the cost is in the meets the
+rules build as they descend, each a term of its own.
 **[DEVIATION: a-meet-is-distributed-four-clauses-wide]**
 
 SOURCE: §13.1 "**product** of the sub-forms. That blow-up is why a DNF-based decision needs"

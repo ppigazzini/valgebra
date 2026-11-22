@@ -695,12 +695,10 @@ fn a_meet_rewritten_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) ->
 ///
 /// Asked only in a root question's further asking ([`asked_distributed`]), after
 /// every other reading of the meet, with that asking's own steps and trail, and a
-/// respelled question inside it is asked with them too ([`NARROWING`]). A distribution given steps of its own would be counted by
-/// nothing above it: one query asks a meet distributed hundreds of times, from
-/// each reading that reaches it, and the respelling's allowances are short of
-/// what one asks -- the distribution deciding `OUT <= PAIR`, a `oneOf` of two
-/// pairs below the `if` a translation from JSON Schema writes, spends 156,908
-/// steps, past [`RESPELLING_AGAIN`].
+/// respelled question inside it is asked with them too ([`NARROWING`]). A
+/// distribution given steps of its own would be counted by nothing above it, and
+/// one query asks a meet distributed from each reading that reaches it, so the
+/// asking's budget bounds the whole product of the unions' widths.
 #[inline(never)]
 fn a_meet_distributed_below(members: &Members, other: &Schema, cx: &mut Cx<'_>) -> Relation {
     if !DISTRIBUTING.with(Cell::get) {
