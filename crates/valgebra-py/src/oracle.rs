@@ -1617,10 +1617,17 @@ fn is_data_descriptor<'py>(
     if let Some((_, answer)) = descriptors.iter().find(|(seen, _)| seen.is(&ty)) {
         return Ok(*answer);
     }
-    let answer = special_has(&ty, intern!(ty.py(), "__set__"))?
-        || special_has(&ty, intern!(ty.py(), "__delete__"))?;
+    let answer = describes_data(&ty)?;
     descriptors.push((ty, answer));
     Ok(answer)
+}
+
+/// Whether `ty` defines `__set__` or `__delete__`, which makes each of its
+/// instances a data descriptor. The one reading of it, for a type read once
+/// per class and for the builtin types read once per process alike.
+fn describes_data(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    Ok(special_has(ty, intern!(ty.py(), "__set__"))?
+        || special_has(ty, intern!(ty.py(), "__delete__"))?)
 }
 
 /// Whether `ty` is a data descriptor's type, where `ty` is one of the builtin
@@ -1675,9 +1682,7 @@ fn builtin_descriptor(ty: &Bound<'_, PyType>) -> PyResult<Option<bool>> {
         ]);
         for class in classes {
             let class = class.cast_into::<PyType>()?;
-            let answer = special_has(&class, intern!(py, "__set__"))?
-                || special_has(&class, intern!(py, "__delete__"))?;
-            read.push((class.as_ptr() as usize, answer));
+            read.push((class.as_ptr() as usize, describes_data(&class)?));
         }
         Ok::<_, PyErr>(read.into_boxed_slice())
     })?;
