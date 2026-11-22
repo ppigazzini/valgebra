@@ -552,6 +552,20 @@ def _record_outside_a_checkout(tree: Path) -> None:
     path.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
 
 
+def _accept_a_gone_survivor(tree: Path) -> None:
+    """Accept, in the core's baseline, a survivor of a function the tree lacks.
+
+    Read and written as the record it is, so the plant lands whether the
+    baseline accepts survivors or, swept clean, holds none.
+    """
+    path = tree / "scripts" / "mutation_baseline.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["_accepted"][
+        "crates/valgebra-core/src/planted.rs: replace planted -> u8 with 0"
+    ] = "a survivor of a function the tree no longer has"
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def _prove_nothing(tree: Path) -> None:
     """Record every decision unproven: a corpus asking a question with one answer."""
     path = tree / _REFERENCE
@@ -2694,14 +2708,7 @@ PLANTS = (
         # An accepted survivor whose function is gone.
         "tests/test_mutation_scope.py",
         ("scripts/mutation_baseline.json",),
-        lambda tree: _edit(
-            tree,
-            "scripts/mutation_baseline.json",
-            '  "_accepted": {\n',
-            '  "_accepted": {\n'
-            '    "crates/valgebra-core/src/planted.rs: replace planted -> u8 with 0":'
-            ' "a survivor of a function the tree no longer has",\n',
-        ),
+        _accept_a_gone_survivor,
         trips=("test_no_accepted_survivor_has_outlived_its_subject",),
     ),
     Plant(

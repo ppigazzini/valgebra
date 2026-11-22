@@ -1132,6 +1132,20 @@ fn a_record_meet_is_empty_only_where_a_required_key_cannot_hold() {
         closed(vec![field("a", Schema::Int, true)]),
         closed(vec![field("b", Schema::Int, true)]),
     ]));
+    // Rule two reads no type: a key one map alone gives a type has no meet to
+    // read, the map's own rule reading that type, so the rule spends no step.
+    let budget = Budget::new(DECISION_BUDGET);
+    assert_eq!(
+        keyed_map_meet_verdict(
+            &[
+                closed(vec![field("a", Schema::Int, true)]),
+                closed(vec![field("b", Schema::Int, true)]),
+            ],
+            &mut Cx::new(&NoLeafRelations, &[], &budget),
+        ),
+        Verdict::Empty
+    );
+    assert_eq!(budget.left(), DECISION_BUDGET, "a lone type is met");
     // The map that lacks the key must be closed. A clause admits keys the
     // field list does not name, so an open map is no obstacle.
     assert!(!meet_is_empty(&[
