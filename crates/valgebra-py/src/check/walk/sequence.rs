@@ -2190,16 +2190,13 @@ pub(super) fn scan_list<'py>(
     with_critical_section(list.as_any(), || {
         let items = list.len();
         let mut iter = list.iter();
-        let mut seen = 0;
-        while seen < items {
+        for at in 0..items {
             if list.len() != items {
                 return Scan::Unreadable;
             }
             let Some(item) = iter.next() else {
                 break;
             };
-            let at = seen;
-            seen += 1;
             if visit(at, &item).is_break() {
                 return Scan::Stopped;
             }
