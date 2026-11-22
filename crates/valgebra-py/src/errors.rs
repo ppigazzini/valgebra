@@ -15,6 +15,7 @@ use valgebra_core::{PathSegment, Violation};
 
 use crate::codes::{JSON_INVALID, VALIDATION_ERROR};
 use crate::exception::ValidationError;
+use crate::panics::a_refused_allocation;
 
 /// The class name for an error label, falling back to its repr.
 ///
@@ -38,22 +39,15 @@ pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> PyResult<String> {
 /// unraisable, and the panic reaches the caller as `PanicException`, a
 /// `BaseException` that neither `except MemoryError` nor `except Exception`
 /// reads. Caught here at the entry point and raised as `MemoryError`; any other
-/// panic goes on as it would. The panic is told by its message, which a `PyO3`
-/// release could reword, and `tests/test_fatal_signals.py` refuses allocations
-/// at each place a call reaches and reads `MemoryError` back.
+/// panic goes on as it would. The panic is told by its message
+/// ([`a_refused_allocation`]), and `tests/test_fatal_signals.py` refuses
+/// allocations at each place a call reaches and reads `MemoryError` back.
 pub(crate) fn refused_memory_is_memory_error<T>(call: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)) {
         Ok(answer) => answer,
         Err(payload) => {
-            let says = |text: &str| text.contains("pointer is null");
-            if payload
-                .downcast_ref::<&str>()
-                .is_some_and(|text| says(text))
-                || payload
-                    .downcast_ref::<String>()
-                    .is_some_and(|text| says(text))
-            {
-                Err(pyo3::exceptions::PyMemoryError::new_err(()))
+            if a_refused_allocation(&*payload) {
+                Err(PyMemoryError::new_err(()))
             } else {
                 std::panic::resume_unwind(payload)
             }

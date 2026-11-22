@@ -837,8 +837,9 @@ Three sweeps, each with its own committed baseline: the core crate, the
 binding's soundness surfaces — the files `BINDING_SWEPT` in `ci.yml` lists,
 which both binding sweeps read: the membership walk with the context it
 carries and the precompute it reads, the `Value` both input paths run over, the
-frontend and the four surfaces beside it, equality, the oracle and the failure
-codes — and the files the shipped extension is the only caller of.
+frontend and the four surfaces beside it, equality, the oracle, the failure
+codes and the reading of a refused allocation's panic — and the files the
+shipped extension is the only caller of.
 `scripts/mutation_gate.py` fails in **five** directions — a survivor the
 baseline does not accept, an accepted entry that no mutant answers to, an
 accepted entry naming a file the tree does not track, an accepted note naming no

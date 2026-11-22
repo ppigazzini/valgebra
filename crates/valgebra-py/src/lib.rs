@@ -22,6 +22,7 @@ mod exception;
 mod finite;
 mod input;
 mod oracle;
+mod panics;
 mod render;
 mod validator;
 mod witness;

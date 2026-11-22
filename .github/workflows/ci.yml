@@ -99,6 +99,7 @@ env:
     crates/valgebra-py/src/finite.rs
     crates/valgebra-py/src/witness.rs
     crates/valgebra-py/src/codes.rs
+    crates/valgebra-py/src/panics.rs
 
 jobs:
   rust-lint:
