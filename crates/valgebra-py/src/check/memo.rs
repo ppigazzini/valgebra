@@ -452,12 +452,16 @@ impl Memo {
         self.bits.get() & Self::ARMED != 0
     }
 
-    /// Run `walk` with the memo armed.
+    /// Run `walk` with the memo armed, and leave it armed after as it was
+    /// before: a member armed inside an armed one returns to it armed.
     pub(crate) fn armed<R>(&self, walk: impl FnOnce() -> R) -> R {
-        let outer = self.bits.get() & Self::ARMED;
-        self.bits.set(self.bits.get() | Self::USED | Self::ARMED);
+        let outer = self.is_armed();
+        self.bits.set(self.bits.get() | Self::USED);
+        self.bits.set(self.bits.get() | Self::ARMED);
         let answer = walk();
-        self.bits.set(self.bits.get() & !Self::ARMED | outer);
+        if !outer {
+            self.bits.set(self.bits.get() & !Self::ARMED);
+        }
         answer
     }
 }
@@ -676,7 +680,7 @@ impl Kept {
 mod tests {
     use valgebra_core::{DefIx, Schema};
 
-    use super::{PLANNED_DEFINITIONS, definitions, names};
+    use super::{Memo, PLANNED_DEFINITIONS, definitions, names};
 
     /// A reference names its own bit up to the last definition the plan's
     /// table holds, and a reference past it names none: a bit past a `u128`'s
@@ -697,5 +701,29 @@ mod tests {
     fn a_definition_met_twice_is_in_the_set_once() {
         assert_eq!(definitions([3, 0, 3].into_iter()), 0b1001);
         assert_eq!(definitions(std::iter::empty()), 0);
+    }
+
+    /// Arming marks the memo used for the rest of the call and armed for the
+    /// member's walk, and leaves it armed after as it found it: an inner
+    /// member returns to an outer one still armed, and a second arming finds
+    /// the memo used. The count of definitions entered runs through it all.
+    #[test]
+    fn arming_keeps_the_use_and_restores_the_flag_it_found() {
+        let memo = Memo::default();
+        assert!(!memo.enter(), "no node has armed the memo yet");
+        memo.armed(|| {
+            assert!(memo.is_armed());
+            assert!(memo.enter());
+            memo.armed(|| assert!(memo.is_armed() && memo.enter()));
+            assert!(
+                memo.is_armed(),
+                "an inner member returns to the outer armed"
+            );
+        });
+        assert!(!memo.is_armed());
+        memo.armed(|| assert!(memo.enter(), "a second arming finds the memo used"));
+        assert!(!memo.is_armed());
+        assert!(memo.enter(), "the memo stays used for the call");
+        assert_eq!(memo.entered(), (5 * Memo::ENTERED) | Memo::USED);
     }
 }
