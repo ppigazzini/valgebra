@@ -430,8 +430,9 @@ so the shipped extension carries none of it, and
 reading chosen for it: a list read through a snapshot at each end of the band
 the running interpreter compiles and in place one past it, a `dict[str, int]`
 by the loop written for it, a parsed object by its record's plan or by a search
-as the record's width says, and an explained record holding exactly its keys
-without the scan for undeclared ones.
+as the record's width says, an explained record holding exactly its keys
+without the scan for undeclared ones, the readers of the index's readings asked
+only where the index holds one, and a kept list's scalars by their type.
 
 The **frontend** carries an annotation corpus in
 `crates/valgebra-py/src/build/interpreter.rs`: a table of annotations as a

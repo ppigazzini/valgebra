@@ -4,6 +4,8 @@
 //! ([`taken`](super::taken)): a value sent to the other reading keeps every
 //! answer and fails here.
 
+use std::sync::Arc;
+
 use jiter::JsonValue;
 use pyo3::types::{PyDict, PyModule};
 use valgebra_core::SeqShape;
@@ -63,6 +65,11 @@ fn evaluated<'py>(
         None,
     )
     .expect("the value evaluates")
+}
+
+/// The values `schema` refuses.
+fn not(schema: Schema) -> Schema {
+    Schema::Complement(Arc::new(schema))
 }
 
 /// A list is read through a snapshot exactly where its length lies in the band
@@ -225,5 +232,125 @@ fn a_record_holding_exactly_its_keys_is_explained_without_a_scan() {
                 "{source}"
             );
         }
+    });
+}
+
+/// The list arm hands a union, a meet, a complement and a reference to the
+/// readers of the index's readings only where the index holds one: with none,
+/// no such reader is asked, and with one, each is.
+#[test]
+fn a_list_asks_the_readers_of_readings_only_where_the_index_holds_one() {
+    Python::attach(|py| {
+        let tree = Schema::Ref(DefIx::new(0));
+        let defs = [Schema::Union(
+            vec![
+                Schema::Int,
+                Schema::Str,
+                Schema::list(SeqShape::homogeneous(tree.clone())),
+            ]
+            .into(),
+        )];
+        let union = Schema::Union(vec![Schema::NoneType, not(Schema::Str)].into());
+        let meet = Schema::Intersection(vec![not(Schema::Bool), not(Schema::Str)].into());
+        let complement = not(Schema::Union(vec![Schema::Int, Schema::Str].into()));
+        for (element, source, reader) in [
+            (union, "[None, 1]", Reading::LeafList),
+            (meet, "[1, 0.5]", Reading::LeafList),
+            (complement, "[None, 0.5]", Reading::LeafList),
+            (tree, "[1, [2, 'x']]", Reading::TreeList),
+        ] {
+            let schema = Schema::list(SeqShape::homogeneous(element));
+            let value = evaluated(py, None, source);
+            let read = build_index(py, &schema, &defs, &[]);
+            let mut walked = build_index(py, &schema, &defs, &[]);
+            walked.forget_readings();
+            assert!(read.has_readings() && !walked.has_readings());
+            let walk = (&schema, &defs[..], &[][..]);
+            let (admitted, asked) = taken(reader, walk, &read, &value, WalkMode::Fast);
+            assert!(
+                admitted && asked > 0,
+                "{schema:?}: {reader:?} asked {asked}"
+            );
+            assert_eq!(
+                taken(reader, walk, &walked, &value, WalkMode::Fast),
+                (true, 0),
+                "{schema:?} with no reading"
+            );
+        }
+    });
+}
+
+/// A deciding walk of a list of leaves writes no location, the elements it
+/// hands the walk included: the buffers [`Unwritten`] holds stay empty and own
+/// nothing, which is what lets it forget them.
+#[test]
+fn a_deciding_walk_of_a_list_of_leaves_writes_no_location() {
+    Python::attach(|py| {
+        let schema = Schema::list(SeqShape::homogeneous(not(Schema::Bytes)));
+        let index = build_index(py, &schema, &[], &[]);
+        assert!(index.has_readings());
+        let module = module(py, "leaves_left_to_the_walk", "class S(str):\n    pass\n");
+        let value = evaluated(py, Some(&module), "[1, object(), S('x'), 2 ** 80]");
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let mut unwritten = Unwritten::default();
+        assert!(member(
+            &schema,
+            &Value::Py(&value),
+            &mut unwritten.frame(ctx)
+        ));
+        assert_eq!(unwritten.path.capacity(), 0, "a location was written");
+        assert_eq!(unwritten.out.capacity(), 0, "a violation was written");
+    });
+}
+
+/// In a walk a memo keeps, a list of a tree's reference reads each scalar it
+/// holds by its type, as the walk without the memo does, and walks only what
+/// the type does not settle.
+#[test]
+fn a_kept_list_of_a_tree_reads_its_scalars_by_their_type() {
+    Python::attach(|py| {
+        let tree = Schema::Ref(DefIx::new(0));
+        let defs = [Schema::Union(
+            vec![
+                Schema::Int,
+                Schema::list(SeqShape::homogeneous(tree.clone())),
+            ]
+            .into(),
+        )];
+        let schema = Schema::Union(
+            vec![
+                Schema::list(SeqShape::homogeneous(tree.clone())),
+                Schema::list(SeqShape::homogeneous(Schema::Union(
+                    vec![tree, Schema::Bytes].into(),
+                ))),
+            ]
+            .into(),
+        );
+        let index = build_index(py, &schema, &defs, &[]);
+        let value = evaluated(py, None, "[b'x', [1, 2, 3]]");
+        let state = WalkState::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &defs,
+            index: &index,
+            state: &state,
+            mode: WalkMode::Fast,
+        };
+        let read = counted(Reading::KeptScalar, || {
+            member(
+                &schema,
+                &Value::Py(&value),
+                &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
+            )
+        });
+        assert!(state.memo.in_use(), "the memo was not armed");
+        assert_eq!(read, (true, 3));
     });
 }

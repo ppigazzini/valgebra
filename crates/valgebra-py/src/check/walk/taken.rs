@@ -26,6 +26,13 @@ pub(super) enum Reading {
     PlannedRecord,
     /// An explained record's scan for the keys it does not declare.
     UndeclaredScan,
+    /// The reader of a list of leaves, asked.
+    LeafList,
+    /// The reader of a list of a tree's reference, asked.
+    TreeList,
+    /// A scalar of a list or a mapping of a tree, in a walk a memo keeps, read
+    /// by its type.
+    KeptScalar,
 }
 
 thread_local! {

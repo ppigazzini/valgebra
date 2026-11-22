@@ -215,6 +215,8 @@ pub(super) fn tree_list_read(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
+    #[cfg(test)]
+    super::taken::note(super::taken::Reading::TreeList);
     let ctx = frame.ctx;
     if !prefix.is_empty() || ctx.mode != WalkMode::Fast {
         return None;
@@ -469,6 +471,8 @@ fn kept_element_read(
         _ => None,
     };
     if let Some(admitted) = answered {
+        #[cfg(test)]
+        super::taken::note(super::taken::Reading::KeptScalar);
         *read = true;
         frame.ctx.state.memo.enter();
         return admitted;

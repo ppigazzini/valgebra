@@ -1035,6 +1035,8 @@ pub(super) fn leaf_list_read(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
+    #[cfg(test)]
+    super::taken::note(super::taken::Reading::LeafList);
     let ctx = frame.ctx;
     let plan = ctx.index.leaf(element)?;
     // An element's walk opens its level below the list's, and the plan's
