@@ -1377,7 +1377,8 @@ fn raised_text(error: &Bound<'_, PyBaseException>, ctx: Ctx<'_>) -> String {
     shorten(format!("{name}: {text}"), SUMMARY_CHARS)
 }
 
-/// Drop an error a constraint reads as its answer, out of line.
+/// Drop an error a constraint reads as its answer, out of line: the error is
+/// moved in, and dropped where the function returns.
 ///
 /// Dropping an error reads a thread-local -- whether the thread is attached to
 /// the interpreter -- and inlined into [`check_refine`]'s loop over its
@@ -1389,9 +1390,7 @@ fn raised_text(error: &Bound<'_, PyBaseException>, ctx: Ctx<'_>) -> String {
 /// probe of the extension can.
 #[cold]
 #[inline(never)]
-fn set_aside(err: PyErr) {
-    drop(err);
-}
+fn set_aside(_err: PyErr) {}
 
 /// Record a constraint's failure. The message is rendered here and nowhere
 /// else: a check that passes never reads the operand it would have named, and
