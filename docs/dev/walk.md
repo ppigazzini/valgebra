@@ -600,7 +600,7 @@ every element one test settles take that copy where it pays: one scalar kind and
 a union of them here, one class, a union of literals, a tuple of scalars and a
 named tuple of them below. What each reading costs per element, in place and
 through the copy on each interpreter, is measured in the doc comment on
-`snapshot_pays` in `crates/valgebra-py/src/check/walk/sequence.rs`, the one
+`SNAPSHOT_BAND` in `crates/valgebra-py/src/check/walk/sequence.rs`, the one
 place those figures live.
 
 Which reading is cheaper is a property of the **interpreter**, so the walk asks

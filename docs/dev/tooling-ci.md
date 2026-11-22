@@ -1041,13 +1041,16 @@ binding's coverage floor counts and no CPython test can reach.
 one side.** `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x`
 and `Py_GIL_DISABLED` flags, so a `cfg!` on one compiles a different reading per
 interpreter. Such a site says in its doc comment which behavior of which
-release it answers, with the measurement for each reading; `snapshot_pays` in
-the sequence walk is the one site. Each lane that measures reads one side: the
-binding sweep and the coverage lane pin 3.13, where the snapshot reading
-compiles in, and the bench lane pins 3.15, where the reading in place does, so
-the instruction gate holds the cost of that reading and of no other. The
-product suite holds the answers on every interpreter, since the readings answer
-alike. What no lane holds is the cost of the snapshot reading and of the
+release it answers, with the measurement for each reading; `SNAPSHOT_BAND` in
+the sequence walk, the lengths `snapshot_pays` reads a list through a snapshot
+at, is the one site. The site holds constants alone, chosen by the flags, and
+the comparison that reads them, `in_band`, is compiled on every interpreter, so
+the sweep's 3.13 judges every mutant of it. Each lane that measures reads one
+side: the binding sweep and the coverage lane pin 3.13, where the snapshot
+reading compiles in, and the bench lane pins 3.15, where the reading in place
+does, so the instruction gate holds the cost of that reading and of no other.
+The product suite holds the answers on every interpreter, since the readings
+answer alike. What no lane holds is the cost of the snapshot reading and of the
 free-threaded one, which is the doc comment's measurement and nothing more.
 
 ## A gate that compared nothing must not pass

@@ -481,7 +481,7 @@ interpreter version ([the releasing page](releasing.md)), because the walk
 chooses its readings by the interpreter it is built against:
 `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x` and
 `Py_GIL_DISABLED` flags, and which reading of a list is cheaper differs by
-interpreter, as the doc comment on `snapshot_pays` in
+interpreter, as the doc comment on `SNAPSHOT_BAND` in
 `crates/valgebra-py/src/check/walk/sequence.rs` measures. A stable-ABI build
 compiles once against the floor's flags, so every interpreter would take the
 floor's reading, and against the limited API. The mechanism is the reason, and
