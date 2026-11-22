@@ -1346,7 +1346,7 @@ fn pattern_list(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
-    let bounded = least > 0 || most < usize::MAX;
+    let bounded = (least, most) != (0, usize::MAX);
     let mut ok = true;
     let scan = scan_list(list, |_, item| {
         ok &= match exact_text(item) {
