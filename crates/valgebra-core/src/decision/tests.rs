@@ -14360,6 +14360,36 @@ mod leaves {
         );
     }
 
+    /// A union is empty where each member is, read a member at a time where the
+    /// set of the whole is refused, and a product holding it is empty by that
+    /// component: the union of two patterns sharing no word, which only the sets
+    /// empty, and of a product beside a string of at most 584 code points, which
+    /// only its components do, holds no value, so a tuple of it holds none either.
+    #[test]
+    fn a_union_beside_a_component_past_the_bounds_is_empty_by_its_members() {
+        let none = Schema::meet([pattern("a+"), pattern("b+")]);
+        let words = Schema::refine(Schema::Str, vec![Constraint::MaxLen(584)]);
+        let pair = Schema::tuple(SeqShape::fixed([words, none.clone()]));
+        let either = Schema::union([none, pair]);
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&Pure, &[], &budget);
+        assert_eq!(
+            either.verdict_rec(&mut cx),
+            Verdict::Unknown,
+            "the rules leave it open"
+        );
+        assert!(
+            !either.denotes_no_value(&Pure, &[]),
+            "and the sets refuse it whole"
+        );
+        let holding = Schema::tuple(SeqShape::fixed([either]));
+        assert!(holding.is_empty_with(&Pure, &[]));
+        assert_eq!(
+            holding.subtype_relation_under(&Schema::Nothing, &Pure, &[]),
+            Relation::Holds
+        );
+    }
+
     /// A value the sets read is held for the query and charged each time it is asked,
     /// so the memo changes no allowance, and what is held is what is read back.
     #[test]
@@ -16882,6 +16912,32 @@ mod readings_another_route_shadows {
             &field(Schema::Int),
             &cx
         ));
+    }
+
+    /// A subject sharing no value with any branch of a union is refuted below
+    /// it, by the cheap disjointness and by the full reading alike, where the
+    /// union of no branches left is a pair the rules decline: a pattern's words
+    /// against `int | float`.
+    #[test]
+    fn a_subject_meeting_no_branch_is_refuted_below_the_union() {
+        let words = refine(Schema::Str, Constraint::Regex("a+".into()));
+        let branches = [Schema::Int, Schema::Float];
+        for full in [false, true] {
+            let budget = Budget::new(DECISION_BUDGET);
+            let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+            assert_eq!(
+                words.below_the_branches_it_can_meet(&branches, full, &mut cx),
+                Relation::Fails,
+                "full: {full}"
+            );
+        }
+        let budget = Budget::new(DECISION_BUDGET);
+        let mut cx = Cx::new(&NoLeafRelations, &[], &budget);
+        assert_eq!(
+            words.is_subtype_rec(&Schema::Union(Vec::new().into()), &mut cx),
+            Relation::Unknown,
+            "the union of no branch is declined"
+        );
     }
 }
 
