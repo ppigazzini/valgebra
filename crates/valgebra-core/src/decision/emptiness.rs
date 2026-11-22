@@ -844,7 +844,7 @@ fn intersection_verdict(meet: &Schema, members: &[Schema], cx: &mut Cx<'_>) -> (
     }
     let mut maps_hold = Verdict::Unknown;
     let empty = any_empty
-        || region.known().is_some_and(Region::is_empty)
+        || region.verdict().is_empty()
         || has_complementary_pair(members, cx.oracle, &[])
         || has_a_pattern_and_its_complement(members, cx)
         || has_disjoint_pair(members, cx.oracle)

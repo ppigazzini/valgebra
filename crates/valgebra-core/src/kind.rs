@@ -48,8 +48,10 @@ use crate::verdict::Verdict;
 ///
 /// 6 scalar regions plus the non-scalar region is 7 of `u8`'s 8 bits. The
 /// representation is sized to the partition, so an 8th region still fits and a
-/// 9th would overflow `1 << 8` at compile time — the width is the guard against
-/// a silent wrap.
+/// 9th would shift its bit out of the byte in [`Region::at`], an overflow a
+/// constant refuses at compile time and a debug build refuses where
+/// `every_kind_lands_in_the_partition_and_the_scalars_land_apart` reads each
+/// kind's region — the width is the guard against a silent wrap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub(crate) struct Region(u8);
@@ -63,7 +65,13 @@ impl Region {
     /// Everything that is no scalar kind -- containers, instances, callables,
     /// and the rest -- in one region. No schema names it alone, which is why
     /// one bit is enough for every kind that falls in it.
-    const NON_SCALAR: Region = Region(1 << 6);
+    const NON_SCALAR: Region = Region::at(6);
+
+    /// The set holding the region at `place` alone: one bit of the byte, so
+    /// two places are two disjoint sets.
+    const fn at(place: u32) -> Region {
+        Region(1 << place)
+    }
 
     /// Every region in either set, the union of the sets [FCB08, Def. 4.1].
     #[inline]
@@ -168,14 +176,6 @@ impl Regions {
             Regions::Known(regions) if regions.is_empty() => Verdict::Empty,
             Regions::Known(_) => Verdict::Inhabited,
             Regions::Unknown => Verdict::Unknown,
-        }
-    }
-
-    /// The regions, where they are known.
-    pub(crate) const fn known(self) -> Option<Region> {
-        match self {
-            Regions::Known(regions) => Some(regions),
-            Regions::Unknown => None,
         }
     }
 }
@@ -296,12 +296,12 @@ impl Kind {
     /// opaque rather than claiming a region for it (see [`Regions`]).
     pub(crate) const fn region(self) -> Region {
         match self {
-            Kind::NoneType => Region(1 << 0),
-            Kind::Bool => Region(1 << 1),
-            Kind::Int => Region(1 << 2),
-            Kind::Float => Region(1 << 3),
-            Kind::Str => Region(1 << 4),
-            Kind::Bytes => Region(1 << 5),
+            Kind::NoneType => Region::at(0),
+            Kind::Bool => Region::at(1),
+            Kind::Int => Region::at(2),
+            Kind::Float => Region::at(3),
+            Kind::Str => Region::at(4),
+            Kind::Bytes => Region::at(5),
             Kind::List | Kind::Tuple | Kind::Set | Kind::FrozenSet | Kind::Dict => {
                 Region::NON_SCALAR
             }
