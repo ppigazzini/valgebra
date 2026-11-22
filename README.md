@@ -1,5 +1,7 @@
 # valgebra
 
+MIT or Apache-2.0, at your option.
+
 **A closed, minimal Boolean algebra of schemas for Python.** A schema denotes
 a *set of Python values*, and validating asks whether a value you already hold is
 a member — no copy, no coercion. `union`, `intersection`, `complement`,
@@ -369,6 +371,12 @@ pip install valgebra
 # or
 uv add valgebra
 ```
+
+valgebra has no runtime dependency, so a deployment pins its version. Beside
+[valgebra-jsonschema](https://github.com/ppigazzini/valgebra-jsonschema) or
+[valgebra-planning](https://github.com/ppigazzini/valgebra-planning), each
+companion's `constraints.txt` at a release's tag names the valgebra release that
+companion was tested with, and is the set to pin together.
 
 To build from source instead — for development or an unsupported platform —
 requires [`uv`](https://docs.astral.sh/uv/) and stable Rust (edition 2024, MSRV
