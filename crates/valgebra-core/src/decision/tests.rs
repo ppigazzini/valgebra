@@ -7485,7 +7485,8 @@ fn a_value_of_no_kind_refutes_past_a_cut() {
 /// pool of [`GOALS_WORK`](super::GOALS_WORK) units between them: a query whose
 /// pool is spent reads no such goal by the sets and leaves it unknown, a reading
 /// draws the pool down by what its builds spent, and the next query starts a
-/// pool of its own. A goal holding no reference draws on no pool.
+/// pool of its own. A goal holding a reference on either side draws on it, and
+/// one holding none draws on no pool.
 #[test]
 fn a_query_s_declined_goals_are_lowered_from_one_pool() {
     use super::goal_tests::goals::pairs_read_by_the_sets;
@@ -7511,6 +7512,14 @@ fn a_query_s_declined_goals_are_lowered_from_one_pool() {
         before,
         "a spent pool reads nothing"
     );
+    for (one, other) in [(&subject, &plain_other), (&plain, &supertype)] {
+        assert_eq!(one.a_goal_declined(other, &mut cx), Relation::Unknown);
+        assert_eq!(
+            pairs_read_by_the_sets(),
+            before,
+            "a reference on one side draws on the pool"
+        );
+    }
     assert_eq!(
         plain.a_goal_declined(&plain_other, &mut cx),
         Relation::Fails,
@@ -14933,6 +14942,9 @@ mod one_member {
         let required = Schema::keyed_map(vec![field("a", Schema::Int, true)], Vec::new());
         let exactly = Schema::refine(required, vec![Constraint::MinLen(1), Constraint::MaxLen(1)]);
         assert_eq!(holding(&exactly), Relation::Fails);
+        // The rules read it so before any reading of the leaves: a greatest
+        // length equal to the required count admits them.
+        assert_eq!(exactly.verdict_under(&Pure), Verdict::Inhabited);
         // A maximum past the required fields leaves them the value.
         let at_most = Schema::refine(optional.clone(), vec![Constraint::MaxLen(1)]);
         assert_eq!(holding(&at_most), Relation::Fails);
@@ -16785,6 +16797,22 @@ mod readings_another_route_shadows {
         let cx = Cx::new(&a_plain_value::Table, &[], &budget);
         let both = Schema::Union(vec![word(0), word(1)].into());
         assert_ne!(both.decided_as_respelled(&word(0), &cx), Relation::Holds);
+    }
+
+    /// A meet with the table's complement the rules read empty proves the
+    /// subject below the table where the subject holds a complement of its own,
+    /// which leaves two in the meet and no one set to read the subject below:
+    /// `a | b | c` less `c` against `a | b`.
+    #[test]
+    fn a_meet_with_the_tables_complement_proves_beside_a_complement_of_its_own() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let less = Schema::meet([
+            Schema::union([word(0), word(1), word(2)]),
+            word(2).complement(),
+        ]);
+        let table = Schema::union([word(0), word(1)]);
+        assert_eq!(less.decided_as_respelled(&table, &cx), Relation::Holds);
     }
 
     /// A collection holds the empty one whatever its element, and no bound on
