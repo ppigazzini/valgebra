@@ -1,7 +1,6 @@
 {
   "_comment": "Mutation survivors accepted as a baseline for the binding sweep (the membership walk, the context it carries, and the frontend). The nightly ratchet fails when a survivor appears outside this set, and when an entry is no longer a survivor. Regenerate with `python scripts/mutation_gate.py --baseline walk --update` after a sweep, and only ever let this set shrink. Entries are the survivor line without its line:col position, so they survive unrelated code motion.",
   "_accepted": {
-    "crates/valgebra-py/src/check/memo.rs: replace < with <= in name_into": "`<=` differs from `<` only at a reference naming index 128, the first past the plan's `u128`. `plan` names nothing for a table longer than `PLANNED_DEFINITIONS`, and a validator's references name its own definitions, so no reference the plan reads names that index. The comparison keeps an index outside the table from shifting a `u128` past its width, a panic in a debug build and a wrapped bit in a release one, for a schema no validator holds.",
     "crates/valgebra-py/src/check/memo.rs: replace | with ^ in Memo::armed #2": "The arming, `bits | USED | ARMED`, read as `bits | USED ^ ARMED`: `^` binds tighter than `|`, so the mutant is `bits | (USED ^ ARMED)`, and on two distinct bits `^` is `|`. The word set is the same word.",
     "crates/valgebra-py/src/check/memo.rs: replace | with ^ in Memo::armed #3": "The restore, `bits & !ARMED | outer`: `outer` is the armed flag the member was walked inside, or nothing, and the mask has just cleared that flag, so `^` sets it where `|` does and leaves it clear where `|` does. The word after the member is the same word.",
     "crates/valgebra-py/src/check/memo.rs: replace | with ^ in plan #1": "`calling`, the definitions whose own bodies call code, folds one bit per definition, `1 << at` at the definition's own index, and the enumeration reaches each index once: no bit is folded in twice, and on bits folded in once `^` sets what `|` sets. The set is the same, and so is every bit of the plan read from it.",
@@ -28,7 +27,6 @@
     "crates/valgebra-py/src/oracle.rs: replace || with && in builtin_descriptor": "Each type `builtin_descriptor` reads defines both `__set__` and `__delete__` or neither (property, the getset and member descriptors both; the functions, strings, containers and the other descriptor types neither, on every interpreter this builds for), so `has __set__ || has __delete__` and `has __set__ && has __delete__` answer alike for each."
   },
   "survivors": [
-    "crates/valgebra-py/src/check/memo.rs: replace < with <= in name_into",
     "crates/valgebra-py/src/check/memo.rs: replace | with ^ in Memo::armed #2",
     "crates/valgebra-py/src/check/memo.rs: replace | with ^ in Memo::armed #3",
     "crates/valgebra-py/src/check/memo.rs: replace | with ^ in plan #1",

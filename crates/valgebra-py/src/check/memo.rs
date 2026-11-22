@@ -662,3 +662,23 @@ impl Kept {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use valgebra_core::{DefIx, Schema};
+
+    use super::{PLANNED_DEFINITIONS, names};
+
+    /// A reference names its own bit up to the last definition the plan's
+    /// table holds, and a reference past it names none: a bit past a `u128`'s
+    /// width is no bit, and shifting to it would wrap or panic.
+    #[test]
+    fn a_reference_past_the_plans_table_names_no_definition() {
+        let at = |index| Schema::Ref(DefIx::new(index));
+        let last = PLANNED_DEFINITIONS - 1;
+        assert_eq!(names(&at(last)), 1 << last);
+        assert_eq!(names(&at(PLANNED_DEFINITIONS)), 0);
+        let both = Schema::Union(vec![at(PLANNED_DEFINITIONS), at(3)].into());
+        assert_eq!(names(&both), 1 << 3);
+    }
+}
