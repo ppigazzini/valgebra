@@ -168,16 +168,27 @@ pub struct Validator {
 }
 
 impl Validator {
-    /// Assemble a validator from its parts, deferring the precompute to first
-    /// use. Every construction path goes through here so the index is never
-    /// copied between validators.
+    /// Assemble a validator from its parts with no pattern compiled, its index
+    /// finding its own ([`holding`](Self::holding)).
     pub(crate) fn new(schema: Schema, literals: Vec<Py<PyAny>>, definitions: Vec<Schema>) -> Self {
+        Self::holding(schema, literals, definitions, RegexIndex::default())
+    }
+
+    /// Assemble a validator from its parts and the `patterns` compiled for it,
+    /// deferring the precompute to first use. Every construction path goes
+    /// through here so the index is never copied between validators.
+    fn holding(
+        schema: Schema,
+        literals: Vec<Py<PyAny>>,
+        definitions: Vec<Schema>,
+        patterns: RegexIndex,
+    ) -> Self {
         Validator {
             schema,
             literals,
             definitions,
             index: OnceLock::new(),
-            patterns: RegexIndex::default(),
+            patterns,
             keys: PyOnceLock::new(),
             hash: OnceLock::new(),
         }
@@ -314,14 +325,12 @@ impl Validator {
             ));
         }
         // Most schemas hold no pattern, and the walk above has said so.
-        if !whole.holds_a_pattern {
-            return Ok(Validator::new(schema, literals, definitions));
-        }
-        let patterns = compile_patterns(&schema, &definitions).map_err(PyValueError::new_err)?;
-        Ok(Validator {
-            patterns,
-            ..Validator::new(schema, literals, definitions)
-        })
+        let patterns = if whole.holds_a_pattern {
+            compile_patterns(&schema, &definitions).map_err(PyValueError::new_err)?
+        } else {
+            RegexIndex::default()
+        };
+        Ok(Validator::holding(schema, literals, definitions, patterns))
     }
 
     /// Rebuild this validator with `f` applied to the root schema and to every

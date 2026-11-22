@@ -81,8 +81,17 @@ def test_the_baselines_and_the_workflow_are_read_at_all() -> None:
     # the failure mode a ledger has: it passes loudest when it is broken.
     assert _pinned("nightly-mutants-walk") == "3.13"
     assert _pinned("nightly-mutants") is None
+    # A baseline that accepts nothing carries no note, and is read all the
+    # same: its notes are an empty set beside an empty list of survivors. Every
+    # baseline is read as one, and the reading of a note is held on one written
+    # the way a note argues from its sweep, since the baselines may hold none.
     for path in BASELINES:
-        assert len(_notes(path)) >= 5, f"{path} carries no accepted notes"
+        recorded = json.loads((ROOT / path).read_text(encoding="utf-8"))
+        assert {"_accepted", "survivors"} <= set(recorded), f"{path} is no baseline"
+        assert isinstance(_notes(path), dict), f"{path} holds no table of notes"
+    note = "equivalent on the interpreter this sweep runs, CPython 3.13"
+    assert _ABOUT_THIS_SWEEP.search(note), "a note about the sweep is not read as one"
+    assert _VERSION.findall(note) == ["3.13"], "a note's release is not read"
 
 
 @pytest.mark.parametrize(("path", "job"), list(BASELINES.items()))
