@@ -527,7 +527,7 @@ Joints = np.ndarray[tuple[Literal[29]], np.dtype[np.float32]]
 
 
 def within(q: np.ndarray) -> bool:
-    return bool(np.all((LOWER <= q) & (q <= UPPER)))
+    return bool(np.all((q >= LOWER) & (q <= UPPER)))
 
 
 command = Validator(Annotated[Joints, at.Predicate(within)])
