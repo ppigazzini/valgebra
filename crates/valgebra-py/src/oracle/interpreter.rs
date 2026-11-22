@@ -2202,7 +2202,9 @@ rusty_fork_test! {
     /// `__slots__`, if any, is an exact `str` or tuple of them, and never for a
     /// generic namespace; a name no slot names, of a builtin value type, is
     /// marked by its type. Read off the table, since a relation answers alike
-    /// with the reading kept or read again.
+    /// with the reading kept or read again. A name of a `str` subclass is
+    /// written into the class's dict itself: `setattr` makes a name an exact
+    /// `str`, and so does `type()` from CPython 3.16.
     #[test]
     fn a_namespace_is_kept_where_its_reading_runs_no_code() {
         Python::attach(|py| {
@@ -2212,7 +2214,9 @@ rusty_fork_test! {
                   class Slotted:\n    __slots__ = ('x',)\n\
                   class Listed:\n    __slots__ = ['x']\n\
                   class Odd(str):\n    pass\n\
-                  Keyed = type('Keyed', (), {Odd('odd'): 1})\n\
+                  class Keyed:\n    pass\n\
+                  import gc\n\
+                  gc.get_referents(Keyed.__dict__)[0][Odd('odd')] = 1\n\
                   class Fresh:\n    pass\n",
                 c"kept.py",
                 c"kept",
