@@ -322,11 +322,12 @@ assert admits("(?i)i", "I")
 assert not admits("(?i)i", "\u0131")  # dotless i
 assert re.fullmatch("(?i)i", "\u0131") is not None
 
-# Property escapes. `\p{...}` is a pattern only this engine accepts.
+# Property escapes. `\p{...}` is a pattern `re` accepts from CPython 3.16 alone.
 assert admits(r"\p{L}+", "ab")
 
-# Class-set operators. `--`, `&&` and `~~` combine classes here and are literal
-# characters to Python, so a class carrying one is refused rather than read.
+# Class-set operators. `--`, `&&` and `~~` combine classes here, and `re` reads
+# them as characters or, from CPython 3.16, two of them as this engine does, so a
+# class carrying one is refused rather than read.
 raised = False
 try:
     admits(r"[\w~~\d]", "a")
@@ -409,19 +410,22 @@ assert not admits("(?i)\ua7ce", "\ua7cf")
 assert (re.fullmatch("(?i)\ua7ce", "\ua7cf") is not None) == (unicode >= (17,))
 ```
 
-The third of the first four is the loud case: `re.compile(r"\p{L}+")` raises,
-so a pattern that works here fails there and a reader finds out at once. The first two are the
+The third of the first four is the loud case: `re.compile(r"\p{L}+")` raises
+before CPython 3.16, so a pattern that works here fails there and a reader finds
+out at once; from 3.16 `re` reads the escape too. The first two are the
 quiet ones — both engines build the pattern and answer differently — and they
 are the reason a library holding itself to `re`'s decisions cannot adopt `Regex`
 behind a fallback that triggers on compile failure.
 
 The fourth is neither, because it is not accepted: a character class carrying
 `--`, `&&`, `~~` or a nested `[` raises a `ValueError` naming the operator, in
-the words `re` uses where it warns. `re` answers the four three ways:
-`[\w--\d]` raises, `[\w&&\d]` and `[\w~~\d]` warn that it may one day read them
-as operators, and `[a[bc]]` compiles without a word. This engine reads all four
-as operators now, so a pattern `re` accepts denotes two sets and nothing about
-compiling it says which.
+the words `re` uses where it warns. Before CPython 3.16 `re` answers the four
+three ways: `[\w--\d]` raises, `[\w&&\d]` and `[\w~~\d]` warn that it may one day
+read them as operators, and `[a[bc]]` compiles without a word. From 3.16 it reads
+`--` and `&&` as this engine does, still warns on `~~`, and reads `[a[bc]]` as
+before. This engine reads all four as operators, so on an interpreter where `re`
+does not, a pattern `re` accepts denotes two sets; a schema denotes one set on
+every interpreter, so all four are refused on each.
 Refusing is the loud direction, and it is the one a reader can act on. Escape
 the characters to mean them literally — `[\w\~\~\d]` — or write the classes
 out. A POSIX class (`[[:alpha:]]`) is the one nested `[` that is read rather

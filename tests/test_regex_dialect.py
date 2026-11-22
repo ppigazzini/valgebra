@@ -52,12 +52,21 @@ def test_case_folding_stops_at_the_dotless_pair() -> None:
     assert re.fullmatch("(?i)i", dotted) is not None
 
 
-def test_a_property_escape_builds_here_and_not_in_python() -> None:
-    """A pattern only one engine accepts is the loudest case, and the rarest."""
+def test_a_property_escape_builds_here_and_where_re_builds_it_means_the_same() -> None:
+    """A pattern only one engine accepts is the loudest case, and the rarest.
+
+    `re` refuses the escape before CPython 3.16 and reads it from there, and
+    where it reads it, it reads the same letters this engine does.
+    """
     assert _matches(r"\p{L}+", "ab")
 
-    with pytest.raises(re.error):
-        re.compile(r"\p{L}+")
+    re.purge()
+    try:
+        letters = re.compile(r"\p{L}+")
+    except re.error:
+        return
+    assert letters.fullmatch("ab") is not None
+    assert letters.fullmatch("1") is None
 
 
 @pytest.mark.parametrize(
@@ -87,21 +96,36 @@ def test_a_class_set_operator_is_refused_rather_than_read(
 def test_what_python_does_with_each_refused_form() -> None:
     """`re`'s three answers, which are why the refusal covers all three.
 
-    The forms are not one case. `re` **raises** on a doubled hyphen, **warns**
-    that it may one day read the two symbol operators, and says **nothing at
-    all** about a nested set — so a reader who ported a pattern would find out
-    at once, eventually, or never. The last is the one this refusal is most for,
+    The forms are not one case. Before CPython 3.16 `re` **raises** on a doubled
+    hyphen, **warns** that it may one day read the two symbol operators, and says
+    **nothing at all** about a nested set — so a reader who ported a pattern
+    would find out at once, eventually, or never. From 3.16 it reads the doubled
+    hyphen and the doubled ampersand as this engine does and still warns on the
+    third. Each answer is read off `re` itself, so the test holds whichever one
+    the interpreter gives. The nested set is the one this refusal is most for,
     and it is the one no reservation in `re` would have caught.
     """
+    re.purge()
     with warnings.catch_warnings():
-        # It warns *and* raises, and the raise is the part being pinned.
+        # It warns *and* raises where it raises, and the raise is the reading.
         warnings.simplefilter("ignore", FutureWarning)
-        with pytest.raises(re.error):
-            re.compile(r"[\w--\d]")
+        try:
+            difference = re.compile(r"[\w--\d]")
+        except re.error:
+            difference = None
+    if difference is not None:
+        assert difference.fullmatch("a") is not None
+        assert difference.fullmatch("1") is None
 
-    for pattern in (r"[\w&&\d]", r"[\w~~\d]"):
-        with pytest.warns(FutureWarning):
-            re.compile(pattern)
+    with warnings.catch_warnings(record=True) as warned:
+        warnings.simplefilter("always")
+        intersection = re.compile(r"[\w&&\d]")
+    if not any(issubclass(w.category, FutureWarning) for w in warned):
+        assert intersection.fullmatch("1") is not None
+        assert intersection.fullmatch("a") is None
+
+    with pytest.warns(FutureWarning):
+        re.compile(r"[\w~~\d]")
 
     with warnings.catch_warnings():
         warnings.simplefilter("error")
