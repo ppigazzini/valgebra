@@ -1,5 +1,5 @@
 ---
-description: Tasks done end to end -- a response in a test, a value whose type a checker does not know, a schema against its last version, stored data against a new schema, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, a message routed by its shape.
+description: Tasks done end to end -- a response in a test, a value whose type a checker does not know, a schema against its last version, stored data against a new schema, a configuration file, a model's tool call, a response from an API the code does not own, a field of a FastAPI request, joint limits on a numpy array, a message routed by its shape.
 ---
 
 # Recipes
@@ -505,6 +505,49 @@ assert answer.status_code == 422
 The endpoint and the handler are called here as the functions they are.
 Posted to `/events`, the same payment is answered `422`, with each error's
 path sent as a JSON list.
+
+## Joint limits on a numpy array
+
+A robot's command is a `float32` vector, one limit per joint. The array's shape and dtype are a
+type valgebra reads; a bound on every element is a predicate over the array, exact on
+membership, NaN included since every comparison with it is false, and a relation reading inside
+it is `undecided`:
+
+```python
+from typing import Annotated, Literal
+
+import annotated_types as at
+import numpy as np
+
+from valgebra import Validator
+
+LOWER = np.full(29, -2.6, dtype=np.float32)
+UPPER = np.full(29, 2.6, dtype=np.float32)
+Joints = np.ndarray[tuple[Literal[29]], np.dtype[np.float32]]
+
+
+def within(q: np.ndarray) -> bool:
+    return bool(np.all((LOWER <= q) & (q <= UPPER)))
+
+
+command = Validator(Annotated[Joints, at.Predicate(within)])
+q = np.zeros(29, dtype=np.float32)
+assert command.is_valid(q)
+q[3] = 99.0
+assert not command.is_valid(q)
+q[3] = np.nan
+assert not command.is_valid(q)
+assert not command.is_valid(np.zeros(28, dtype=np.float32))
+assert command.relation_to(Joints) == "subset"
+assert Validator(Joints).relation_to(command) == "undecided"
+```
+
+The predicate is Python per call: one run of the 0.0.32 wheel on CPython 3.15 and numpy 2.5 read
+1.5 µs a call against 0.14 µs for the shape alone. The same limits as
+`list[Annotated[float, Ge(-2.6), Le(2.6)]]` over `q.tolist()` are a set every relation reads, at
+0.10 µs and 0.29 µs for the conversion. An element node, which would read the bounds on the
+array itself, is refused until a measured demand and a gate reading ask for it
+([the schema IR page](https://github.com/ppigazzini/valgebra/blob/main/docs/dev/schema-ir.md)).
 
 ## A message routed by its shape
 

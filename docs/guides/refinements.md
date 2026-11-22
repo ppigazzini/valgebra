@@ -128,6 +128,38 @@ except ValidationError as err:
 assert raised
 ```
 
+### A finite float
+
+A `float` holds `inf`, `-inf` and NaN. "Finite" is an interval, `Gt(-inf), Lt(inf)`, which a
+relation reads like any bound, so a joint limit inside it is `subset` of it. `at.IsFinite` is a
+predicate, `math.isfinite`, exact on membership and read by no decider, so a relation through
+it is `undecided`. pydantic's `FiniteFloat` carries pydantic's own `AllowInfNan(False)`, another
+library's metadata, which is ignored, as [unrecognized markers](#unrecognized-markers) are: read
+here, it admits all three.
+
+```python
+import math
+from typing import Annotated
+
+import annotated_types as at
+from pydantic.types import FiniteFloat
+
+from valgebra import Validator
+
+finite = Validator(Annotated[float, at.Gt(-math.inf), at.Lt(math.inf)])
+assert finite.is_valid(1e308)
+assert not finite.is_valid(math.inf)
+assert not finite.is_valid(math.nan)
+joint = Validator(Annotated[float, at.Ge(-2.6), at.Le(2.6)])
+assert joint.relation_to(finite) == "subset"
+
+checked = Validator(at.IsFinite[float])
+assert not checked.is_valid(math.inf)
+assert joint.relation_to(checked) == "undecided"
+
+assert Validator(FiniteFloat).is_valid(math.inf)
+```
+
 ### Which base each marker can be asked of
 
 A marker narrows a base by asking its values a question, so the base has to be

@@ -325,7 +325,10 @@ single-precision points; a refutation no decider can name a value for; and a buf
 reader under `forbid(unsafe_code)` that copies a strided view: each is its own measured
 decision. It reopens with a measured demand and that gate reading. A predicate is the
 spelling meanwhile, and `test_an_array_element_bound_is_a_predicate` in
-`tests/test_numpy_generic.py` holds it.
+`tests/test_numpy_generic.py` holds it. One adopter's robot stack asks for per-index joint
+limits on a `float32` command: a demand reported, with no corpus count and no gate reading, so
+the refusal stands, and [the recipe](../get-started/recipes.md#joint-limits-on-a-numpy-array)
+spells it.
 
 **A meet of refinements of one base folded in the constructor.** Refused.
 `Annotated[int, Ge(1)]` met with `Annotated[int, Le(9)]` and `Annotated[int, Ge(1),

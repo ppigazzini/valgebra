@@ -49,6 +49,17 @@ and Windows x64, and from 3.12 on Windows arm64. Free-threaded CPython 3.14 and
 [PyPy 3.11 and 3.12](#pypy) on manylinux. Free-threaded support starts at 3.14t;
 the earlier 3.13 free-threaded build is not a target.
 
+## Beside a Python 3.10 process
+
+valgebra supports CPython 3.11 and newer, and a robot stack on Python 3.10, as ROS 2 Humble's or
+JetPack 6's, imports no wheel of it. valgebra then runs in a process of its own, and the 3.10
+process reaches it through a protocol:
+
+- **On the server.** The check runs where the tools are served, as a gate in front of them, and
+  the 3.10 nodes call the server as they would without it.
+- **Beside the nodes.** A CPython 3.11 or newer that uv installs, `uv python install 3.12`, runs
+  the gate beside the nodes on the robot, and `rclpy` stays in its own 3.10 process.
+
 ## From source
 
 Building from source additionally requires:
