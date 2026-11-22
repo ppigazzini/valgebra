@@ -13,11 +13,24 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- feat: a pattern's word lengths decide a length bound
-- feat: a union's branch that is a meet of atoms is one clause
-- feat: a meet holding a union is asked as its clauses once all else declines
-
 -->
+
+## [0.0.32] - 2026-11-22
+
+A release of answers, with no node. Where the deciders declined, a pattern's word lengths now
+decide a length bound at any bound, a union's branch that is a meet of atoms counts as one clause of
+a meet's normal form, and a meet holding a union is asked as its clauses once every other reading
+declines. Over the 70,000 pairs each generation of a fuzzer draws, the relations give 10 answers
+more than 0.0.31 on the first generation, 62 on the second and 51 on the fourth, and lose none, and
+no call is ten times slower past 50 ms; the families of exact relations over lists, records,
+mappings, TypedDicts and recursions give 806 more and lose none. The metamorphic gate's corpus
+answers as 0.0.31's recording does, no decision of it slower. Read through `valgebra-jsonschema`,
+the JSON Schema test suite, corpus and containment studies move no count, and `valgebra-vtjson`'s
+differential suite passes.
+
+Against 0.0.31 built here from its tag, the instruction gate's ten decision workloads count within
+1.1% of its instructions.
+
 
 ### Added
 
@@ -5362,7 +5375,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.31...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.32...HEAD
+[0.0.32]: https://github.com/ppigazzini/valgebra/compare/v0.0.31...v0.0.32
 [0.0.31]: https://github.com/ppigazzini/valgebra/compare/v0.0.30...v0.0.31
 [0.0.30]: https://github.com/ppigazzini/valgebra/compare/v0.0.29...v0.0.30
 [0.0.29]: https://github.com/ppigazzini/valgebra/compare/v0.0.28...v0.0.29
