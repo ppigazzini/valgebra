@@ -413,7 +413,19 @@ the steps the readings after it decide with -- the excluded middle over the tran
 an object, `J <= X | (~X & J)`, which
 `test_a_meet_read_for_its_emptiness_is_narrowed_as_written` holds decided -- so it is a
 further asking only, which takes no answer away. A meet supertype needs no reading of its own: its
-member questions reach the subject's distribution through the rules.
+member questions reach the subject's distribution through the rules. The emptiness chain reads a
+meet in that asking by its clauses too, past the four its first askings distribute
+(`meet_through_a_reference`), a union's branch that is a meet holding a union spliced into its
+clause and its own unions distributed in turn; `is_empty` asks a further asking of a meet
+holding a union, and the relation of a supertype that is the complement of one, so the three
+spellings of one emptiness -- the set itself, the set below `nothing`, and the universe below
+its complement -- answer alike, as `below_nothing_exactly_where_read_empty` holds them. Below
+`nothing` the relation's further asking is the emptiness's own, so where the two first
+askings decline a meet the emptiness's clauses prove empty is below `nothing` too, as
+`a_meet_is_read_empty_exactly_where_it_is_below_nothing` and
+`a_meet_read_empty_by_its_clauses_is_below_nothing` hold. A union
+of such meets is read a member at a time and asked none, so the cost falls on a meet's
+question. The asking's flag is restored, not cleared, when one opened inside another closes.
 
 **A pattern's lengths answer a length bound without counting it** (`Dfa::lengths` in
 `descr/regular.rs`). Whether a regular language lies within the words of at most `n`
@@ -1871,7 +1883,8 @@ is read under the same list. A meet the rules decline with a reference among
 its members unfolds the reference into itself (`meet_through_a_reference` in
 `decision/emptiness.rs`): each branch of the definition met with the other
 members, and a union among a meet's members distributed the same way where it
-holds a reference, a meet is already being unfolded, or the meet's normal form
+holds a reference, a meet is already being unfolded, a further asking is under
+way, or the meet's normal form
 spans four clauses at most -- the product of its unions' widths, the bound ty's
 intersection builder caps its normal form at, where no branch is a union or a
 meet holding a union or a meet, whose own unions a width does not count, and a

@@ -859,7 +859,12 @@ answers `"undecided"`.
   `(a | str) & (a | bytes)` is below `a`: the clause beside `a` by that member,
   and `str & bytes` because it is empty, though construction leaves it a meet.
   The distribution costs the product of the unions' widths, and asked last it
-  spends nothing on a question another reading decides.
+  spends nothing on a question another reading decides. A meet asked for its
+  emptiness is read the same way, whether as `is_empty()`, below `nothing` or
+  as the universe below its complement, and so is a branch that is itself a
+  meet holding a union, the shape a translation from JSON Schema writes for an
+  `anyOf` of records beside `properties`: each branch a guarded record met with
+  its kind.
 
     ```python
     from valgebra import intersection, recursive, union

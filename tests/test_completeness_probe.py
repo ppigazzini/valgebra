@@ -121,6 +121,27 @@ _GE1 = Annotated[int, at.Ge(1)]
 # A fixpoint and its own unfolding: two spellings of one set.
 _LINKED = recursive(lambda t: union(None, {"a": int, "next": t}))
 
+_LEFT = Literal["left"]
+_RIGHT = Literal["right"]
+
+
+def _hands(*pairs: tuple[Any, Any]) -> Validator:
+    """Return the records whose `hand` and `holding` are one of ``pairs``, each a side.
+
+    Each pair is a guarded record met with its kind, `({hand?, holding?} | ~dict) &
+    dict`, the shape a JSON Schema `anyOf` of records beside `properties` compiles
+    to, so the union of them is one whose every branch is a meet holding a union.
+    """
+    not_a_dict = complement(dict[Any, Any])
+    branches = [
+        intersection(
+            union({"hand?": hand, "holding?": holding}, not_a_dict), dict[Any, Any]
+        )
+        for hand, holding in pairs
+    ]
+    side = union(_LEFT, _RIGHT)
+    return intersection({"hand": side, "holding": side}, union(*branches))
+
 
 # Small schemas, chosen to cross the kinds the decision procedure treats
 # differently: scalars, the gradual atom, literals, containers, records, maps,
@@ -196,6 +217,13 @@ SCHEMAS: list[tuple[str, Validator]] = [
     # A fixpoint, whose definitions table nothing else in this universe reaches.
     ("mu t.None|{a:int,next:t}", _LINKED),
     ("None|{a:int,next:mu t}", union(None, {"a": int, "next": _LINKED})),
+    # Two records whose sides differ, and the complement of the two whose sides
+    # match: the rules prove the first below the second, and the meet of the first
+    # with the second's inner set holds unions whose branches are meets holding a
+    # union, which the emptiness route reads by its clauses, so the two routes
+    # answer the pair alike.
+    ("hands differ", _hands((_LEFT, _RIGHT), (_RIGHT, _LEFT))),
+    ("~hands match", complement(_hands((_LEFT, _LEFT), (_RIGHT, _RIGHT)))),
     # The edges of each kind's universe, which a schema written for a reader
     # does not reach and a relation is decided at: the end of the integer
     # carrier, the first float no integer equals, a key kind that is a subset of
@@ -241,6 +269,10 @@ _SEED: list[Any] = [
     # without one, every relation with the fixpoint on the left looks true.
     {"a": 1, "next": None},
     {"a": 1, "next": {"a": 2, "next": None}},
+    # A record whose sides differ and one whose sides match: without them, every
+    # relation with the two records above on either side looks true.
+    {"hand": "left", "holding": "right"},
+    {"hand": "left", "holding": "left"},
     0,
     1,
     2,
@@ -417,6 +449,9 @@ ACCEPTED: dict[str, str] = {
     "Adopts <= ~str": _OPEN_WORLD.format(kind="`str`"),
     "HasX <= ~int": _OPEN_WORLD.format(kind="`int`"),
     "HasX <= ~str": _OPEN_WORLD.format(kind="`str`"),
+    "Plain <= ~hands match": _OPEN_WORLD.format(kind="`dict`"),
+    "Adopts <= ~hands match": _OPEN_WORLD.format(kind="`dict`"),
+    "HasX <= ~hands match": _OPEN_WORLD.format(kind="`dict`"),
     "Plain <= Adopts": (
         "`_Adopts`'s metaclass answers `issubclass` by running code, so the "
         "class denotes whatever that code says at the moment it is asked and "

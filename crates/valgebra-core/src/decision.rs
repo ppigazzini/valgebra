@@ -231,7 +231,13 @@ thread_local! {
 /// A root question asked a further time with its meets brought to almost-DNF
 /// ([`a_meet_distributed_below`]), under a budget of its own, where every asking
 /// before it ended undecided and its subject is a meet holding a union
-/// ([`a_meet_holding_a_union`]).
+/// ([`a_meet_holding_a_union`]), or its supertype the complement of one, or the
+/// set `is_empty` asks of is one. The emptiness chain reads a meet in it by its
+/// clauses past [`MAX_DISTRIBUTED_TERMS`](emptiness::MAX_DISTRIBUTED_TERMS), a
+/// union's branch that is a meet holding a union among them, lazily, a clause's
+/// unions in its own turn [BBC+26, §6], as the relation reads a meet subject, so
+/// below `nothing`, below the complement of the set and in `is_empty` the three
+/// ask the set's clauses alike.
 ///
 /// A distribution spends the steps the readings after it would decide with, so
 /// asked in the first asking it took answers away: the excluded middle over the
@@ -248,19 +254,20 @@ fn asked_distributed<T>(ask: impl FnOnce(&Budget) -> T) -> T {
 }
 
 /// A root question's further asking under way on this thread, closed when
-/// dropped, unwinding included.
-struct Distributing;
+/// dropped, unwinding included, to what was under way before it: an emptiness
+/// asked inside one asks a further asking of its own, and closing it must leave
+/// the one around it open.
+struct Distributing(bool);
 
 impl Distributing {
     fn open() -> Self {
-        DISTRIBUTING.with(|on| on.set(true));
-        Self
+        Self(DISTRIBUTING.with(|on| on.replace(true)))
     }
 }
 
 impl Drop for Distributing {
     fn drop(&mut self) {
-        DISTRIBUTING.with(|on| on.set(false));
+        DISTRIBUTING.with(|on| on.set(self.0));
     }
 }
 
@@ -1245,13 +1252,45 @@ impl Schema {
         } else {
             answer
         };
-        if answer == Relation::Unknown && a_meet_holding_a_union(self) {
-            return asked_distributed(|budget| {
-                let mut cx = Cx::new(oracle, defs, budget);
-                self.is_subtype_rec(other, &mut cx)
-            });
+        if answer == Relation::Unknown {
+            return self.asked_further(other, oracle, defs);
         }
         answer
+    }
+
+    /// A root question every asking left undecided, asked once more
+    /// ([`asked_distributed`]) where its subject is a meet holding a union or
+    /// its supertype the complement of one, and `Unknown` for any other pair.
+    /// Below `nothing` the question is the subject's emptiness, so it is asked
+    /// further as [`Schema::is_empty_with`] asks it, and the two procedures
+    /// give one answer where either asks again.
+    /// Out of line and cold, so the relation's entry, inlined into a caller's
+    /// loop, holds one test for it: written there, the decision workload read
+    /// 1.5% more instructions for a further asking none of its questions asks.
+    #[cold]
+    #[inline(never)]
+    fn asked_further(
+        &self,
+        other: &Schema,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+    ) -> Relation {
+        if matches!(other, Schema::Nothing) {
+            return if self.empty_asked_further(oracle, defs) {
+                Relation::Holds
+            } else {
+                Relation::Unknown
+            };
+        }
+        if !(a_meet_holding_a_union(self)
+            || matches!(other, Schema::Complement(inner) if a_meet_holding_a_union(inner)))
+        {
+            return Relation::Unknown;
+        }
+        asked_distributed(|budget| {
+            let mut cx = Cx::new(oracle, defs, budget);
+            self.is_subtype_rec(other, &mut cx)
+        })
     }
 
     /// The set representation of the pair, then both deciders asked of its

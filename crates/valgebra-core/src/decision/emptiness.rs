@@ -38,10 +38,10 @@ use super::records::{
     empty_without_the_maps_unread, keyed_map_meet_verdict, keyed_map_minus_keyed_maps,
 };
 use super::{
-    Budget, Cx, DECISION_BUDGET, LEAF_READING, LeafRelations, NARROWING, NoLeafRelations,
-    READINGS_HELD, a_bound_is_met, asked_again, asks_again, bounds_met, descending,
-    has_complementary_pair, has_disjoint_pair, pushed_complement_is_placed, respelling, spend,
-    spend_at_once,
+    Budget, Cx, DECISION_BUDGET, DISTRIBUTING, LEAF_READING, LeafRelations, NARROWING,
+    NoLeafRelations, READINGS_HELD, a_bound_is_met, a_meet_holding_a_union, asked_again,
+    asked_distributed, asks_again, bounds_met, descending, has_complementary_pair,
+    has_disjoint_pair, pushed_complement_is_placed, respelling, spend, spend_at_once,
 };
 
 /// The nodes of a refinement the sets read for a value that one step of the query
@@ -95,10 +95,28 @@ impl Schema {
         let met = bounds_met();
         let budget = Budget::new(DECISION_BUDGET);
         let first = self.emptiness_on(oracle, defs, &budget);
-        if first == Verdict::Unknown && asks_again(met, &budget) {
-            return asked_again(|budget| self.emptiness_on(oracle, defs, budget)) == Verdict::Empty;
+        let answer = if first == Verdict::Unknown && asks_again(met, &budget) {
+            asked_again(|budget| self.emptiness_on(oracle, defs, budget))
+        } else {
+            first
+        };
+        match answer {
+            Verdict::Unknown => self.empty_asked_further(oracle, defs),
+            answer => answer == Verdict::Empty,
         }
-        first == Verdict::Empty
+    }
+
+    /// Whether a set every asking left undecided is empty, asked once more
+    /// ([`asked_distributed`]) where it is a meet holding a union; `false` for any
+    /// other set. Out of line and cold, as the relation's own further asking is,
+    /// so `is_empty` holds one test for it.
+    #[cold]
+    #[inline(never)]
+    pub(super) fn empty_asked_further(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
+        if !a_meet_holding_a_union(self) {
+            return false;
+        }
+        asked_distributed(|budget| self.emptiness_on(oracle, defs, budget)) == Verdict::Empty
     }
 
     /// The verdict [`is_empty_with`](Self::is_empty_with) reads, in one
@@ -1620,6 +1638,14 @@ fn has_a_pattern_and_its_complement(members: &[Schema], cx: &mut Cx<'_>) -> bool
 /// reference already being resolved -- pushing it on `visiting` here -- reads
 /// the key, and the meet holding `{"a": None}`, empty.
 ///
+/// **In a root question's further asking a union is distributed past the
+/// bound.** The asking ([`asked_distributed`]) has steps of its own, so a meet in
+/// it is read by its clauses lazily, a clause's unions distributed in its own
+/// turn [BBC+26, §6], a branch that is a meet holding a union spliced into its
+/// clause, as the relation's further asking reads a meet subject: the meet of two
+/// translations of an `anyOf` of records, each branch `(R | ~dict) & dict`, is
+/// read empty clause by clause.
+///
 /// Asked only where the rules decline, so a meet they decide keeps its answer.
 fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
     let defs = cx.defs;
@@ -1651,7 +1677,10 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
             .iter()
             .any(|branch| matches!(branch, Schema::Ref(_)));
         let unfolds = holds_a_reference || OpenMeet::any_open(cx.budget);
-        if !(unfolds || normal_form_within(members, MAX_DISTRIBUTED_TERMS)) {
+        if !(unfolds
+            || DISTRIBUTING.with(Cell::get)
+            || normal_form_within(members, MAX_DISTRIBUTED_TERMS))
+        {
             return Verdict::Unknown;
         }
         (at, branches, unfolds)

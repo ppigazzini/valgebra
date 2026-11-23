@@ -17900,6 +17900,135 @@ fn guarded_records(rest: &Schema) -> [Schema; 6] {
     ]
 }
 
+/// Two records of `a` and `b`, one whose sides differ and one whose sides match,
+/// each a record of two `int | str` fields met with a union of guarded records met
+/// with their kind, `({a?, b?} | ~dict) & dict`, the shape a translation of an
+/// `anyOf` of records beside `properties` writes: a meet holding a union whose
+/// every branch is a meet holding a union.
+fn sides(pairs: &[(Schema, Schema)]) -> Schema {
+    let every_dict = Schema::mapping(MapClause {
+        key: Schema::ANYTHING,
+        value: Schema::ANYTHING,
+    });
+    let side = Schema::union([Schema::Int, Schema::Str]);
+    let branches = pairs.iter().map(|(a, b)| {
+        Schema::meet([
+            Schema::union([
+                closed(vec![
+                    field("a", a.clone(), false),
+                    field("b", b.clone(), false),
+                ]),
+                every_dict.clone().complement(),
+            ]),
+            every_dict.clone(),
+        ])
+    });
+    Schema::meet([
+        closed(vec![field("a", side.clone(), true), field("b", side, true)]),
+        Schema::union(branches),
+    ])
+}
+
+/// The meet of the records whose sides differ with those whose sides match, the
+/// pair a translation of two `anyOf`s writes.
+fn sides_that_differ_and_match() -> Schema {
+    let differ = sides(&[(Schema::Int, Schema::Str), (Schema::Str, Schema::Int)]);
+    let matching = sides(&[(Schema::Int, Schema::Int)]);
+    Schema::meet([differ, matching])
+}
+
+/// A meet holding a union whose branches are meets holding a union is read empty
+/// by its clauses, a meet distributing over a union [FCB08, Def. 4.1], in the
+/// further asking `is_empty`, the relation below `nothing` and the universe below
+/// the meet's complement each ask, so the three answer alike. Its clauses are past
+/// the four the first askings distribute, so each of the three declined it.
+// THEORY: a-meet-is-distributed-four-clauses-wide
+#[test]
+fn a_meet_whose_union_s_branches_hold_a_union_is_read_empty_by_its_clauses() {
+    let meet = sides_that_differ_and_match();
+    assert!(matches!(&meet, Schema::Intersection(members)
+        if members.iter().any(|member| matches!(member, Schema::Union(branches)
+            if branches.iter().all(|branch| matches!(branch, Schema::Intersection(_)))))));
+    assert!(meet.is_empty_with(&NoLeafRelations, &[]));
+    assert!(!DISTRIBUTING.with(Cell::get));
+    assert_eq!(
+        meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert_eq!(
+        Schema::ANYTHING.subtype_relation_under(&meet.clone().complement(), &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert!(!DISTRIBUTING.with(Cell::get));
+}
+
+/// The further asking is a meet's alone, as the relation's is of a meet subject: a
+/// union of two such meets, read a member at a time, is asked none by `is_empty`,
+/// below `nothing` or as the complement the universe is asked below, so its cost
+/// falls on a meet's question, and the three still answer alike.
+#[test]
+fn a_union_of_such_meets_is_asked_no_further_asking() {
+    let union = Schema::union([
+        sides_that_differ_and_match(),
+        Schema::meet([
+            sides(&[(Schema::Str, Schema::Str)]),
+            sides(&[(Schema::Int, Schema::Int), (Schema::Int, Schema::Str)]),
+        ]),
+    ]);
+    assert!(matches!(&union, Schema::Union(_)));
+    assert!(!union.is_empty_with(&NoLeafRelations, &[]));
+    assert_eq!(
+        union.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+    assert_eq!(
+        Schema::ANYTHING.subtype_relation_under(&union.clone().complement(), &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+}
+
+/// A meet the emptiness reads empty by its clauses is below `nothing` too: the
+/// relation's further asking below `nothing` is the emptiness's, so the two
+/// procedures answer alike. The meet's only common value of its two unions,
+/// the empty bytes, lies in the union its complement excludes.
+#[test]
+fn a_meet_read_empty_by_its_clauses_is_below_nothing() {
+    let _allowance = crate::descr::budget::law();
+    let meet = Schema::meet(vec![
+        Schema::complement(Schema::union(vec![
+            Schema::Int,
+            Schema::refine(Schema::Bytes, vec![Constraint::MaxLen(2)]),
+        ])),
+        Schema::union(vec![
+            Schema::Int,
+            Schema::Float,
+            Schema::refine(Schema::Int, vec![Constraint::MultipleOf(OperandIx::new(0))]),
+            Schema::refine(Schema::Bytes, vec![Constraint::MaxLen(0)]),
+        ]),
+        Schema::union(vec![Schema::Str, Schema::Bytes]),
+    ]);
+    assert!(meet.is_empty_with(&NoLeafRelations, &[]));
+    let below = meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]);
+    assert_eq!(below, Relation::Holds, "{meet:?} below nothing");
+}
+
+/// A further asking opened inside another leaves the outer one open when it
+/// closes, and the outer one closes to none: an emptiness asked inside a further
+/// asking asks one of its own.
+#[test]
+fn a_further_asking_inside_another_leaves_it_open() {
+    assert!(!DISTRIBUTING.with(Cell::get));
+    {
+        let _outer = Distributing::open();
+        {
+            let _inner = Distributing::open();
+            assert!(DISTRIBUTING.with(Cell::get));
+        }
+        assert!(DISTRIBUTING.with(Cell::get));
+    }
+    assert!(!DISTRIBUTING.with(Cell::get));
+}
+
 /// A meet subject holding a union is below a supertype where each clause of its
 /// distribution is, the rule [BBC+26, (anyOf-l)] states: `Z & (X | Y)` is below `if
 /// a = x then b = x else b = y`, which no reading of the meet as written decides, and

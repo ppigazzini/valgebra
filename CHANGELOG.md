@@ -6,12 +6,32 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **An emptiness asks a meet's clauses once all else declines, as a relation does.** A meet
+  holding a union whose branches are themselves meets holding a union, the shape a translation
+  from JSON Schema writes for an `anyOf` of records beside `properties`, each branch a guarded
+  record met with its kind, was read by its clauses below a supertype and distributed only four
+  clauses wide for its emptiness. So the meet of two such translations, one admitting the records
+  whose two fields differ and one those whose fields match, was `undecided` against `nothing` and
+  not proven empty, while the first was `subset` of the second's complement. `is_empty` now asks
+  a meet holding a union once more under a budget of its own, and so does a relation whose
+  supertype is the complement of one, and in that asking the emptiness reads the meet by its
+  clauses past four, one union at a time: `is_empty()` is `True`, and the meet below `nothing`
+  and the universe below the meet's complement are both `subset`. Below `nothing` the relation
+  asks further as the emptiness does, so a meet whose clauses the emptiness reads empty, as the
+  meet of `str | bytes`, a union holding the empty bytes and the complement of a union holding
+  them, is below `nothing` wherever it is read empty. A union of such meets is read a member at a
+  time and asked no further.
+
 <!-- changelog-roll
 
 Every feat/fix commit this section accounts for, oldest first; held to
 `git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
+
+- fix: an emptiness asks a meet's clauses once all else declines
 
 -->
 
