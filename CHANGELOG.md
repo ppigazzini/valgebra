@@ -6,6 +6,24 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+<!-- changelog-roll
+
+Every feat/fix commit this section accounts for, oldest first; held to
+`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
+a caller cannot see: a step of the set representation that changed no
+answer of its own, or a repair to a change not yet released.
+
+-->
+
+## [0.0.33] - 2026-11-23
+
+A release of one answer, with no node. A meet holding a union whose branches are themselves
+meets holding a union, the shape a translation from JSON Schema writes for an `anyOf` of records
+beside `properties`, is proven empty by its clauses where `is_empty`, the meet below `nothing`
+and the universe below its complement each declined. The metamorphic gate's corpus answers as
+0.0.32's recording does, no membership moved and no decision of it slower, and the instruction
+gate's eight core and decision workloads count within 0.1% of 0.0.32's.
+
 ### Fixed
 
 - **An emptiness asks a meet's clauses once all else declines, as a relation does.** A meet
@@ -23,17 +41,6 @@ All notable changes to valgebra are recorded here. The format follows
   meet of `str | bytes`, a union holding the empty bytes and the complement of a union holding
   them, is below `nothing` wherever it is read empty. A union of such meets is read a member at a
   time and asked no further.
-
-<!-- changelog-roll
-
-Every feat/fix commit this section accounts for, oldest first; held to
-`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
-a caller cannot see: a step of the set representation that changed no
-answer of its own, or a repair to a change not yet released.
-
-- fix: an emptiness asks a meet's clauses once all else declines
-
--->
 
 ## [0.0.32] - 2026-11-22
 
@@ -5395,7 +5402,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.32...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.33...HEAD
+[0.0.33]: https://github.com/ppigazzini/valgebra/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/ppigazzini/valgebra/compare/v0.0.31...v0.0.32
 [0.0.31]: https://github.com/ppigazzini/valgebra/compare/v0.0.30...v0.0.31
 [0.0.30]: https://github.com/ppigazzini/valgebra/compare/v0.0.29...v0.0.30
