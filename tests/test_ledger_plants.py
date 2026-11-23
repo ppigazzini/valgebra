@@ -3334,8 +3334,10 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
-            "variant: freethreaded }",
-            "variant: nogil }",
+            'target: x64, pgo: true, pythons: "3.14t\\n3.15t", '
+            "interpreter: python3.14t python3.15t, variant: freethreaded }",
+            'target: x64, pgo: true, pythons: "3.14t\\n3.15t", '
+            "interpreter: python3.14t python3.15t, variant: nogil }",
         ),
         trips=("test_every_smoke_row_names_a_wheel_set_the_release_builds",),
     ),
@@ -3347,8 +3349,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
+            'imports: "3.12 3.13 3.14", host',
             'imports: "3.13 3.14", host',
-            'imports: "3.14", host',
         ),
         trips=("test_every_release_a_build_row_names_is_loaded",),
     ),
@@ -3435,9 +3437,10 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "tests/test_release_matrix.py",
-            "GAPS: dict[tuple[str, str], str] = {\n",
+            "GAPS: dict[tuple[str, str], str] = {}\n",
             "GAPS: dict[tuple[str, str], str] = {\n"
-            '    ("ubuntu-26.04 sparc64", "3.12"): "a platform no row builds",\n',
+            '    ("ubuntu-26.04 sparc64", "3.12"): "a platform no row builds",\n'
+            "}\n",
         ),
         trips=("test_every_gap_is_one_the_matrix_has",),
     ),

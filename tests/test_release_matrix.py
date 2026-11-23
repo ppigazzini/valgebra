@@ -49,17 +49,7 @@ pytestmark = pytest.mark.repository
 FREE_THREADED_FROM = (3, 14)
 
 #: Releases a platform does not build, by platform, each with the reason.
-GAPS: dict[tuple[str, str], str] = {
-    ("windows-11-vs2026-arm aarch64", "3.11"): "the Windows arm64 set starts at 3.12",
-    (
-        "windows-11-vs2026-arm aarch64",
-        "3.14t",
-    ): "no free-threaded row builds for Windows arm64",
-    (
-        "windows-11-vs2026-arm aarch64",
-        "3.15t",
-    ): "no free-threaded row builds for Windows arm64",
-}
+GAPS: dict[tuple[str, str], str] = {}
 
 #: Rows that name no interpreters, leaving them to the build image.
 UNNAMED: dict[str, str] = {

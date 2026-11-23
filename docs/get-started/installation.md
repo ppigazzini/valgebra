@@ -44,10 +44,9 @@ pip install annotated-types typing-extensions pytest fastapi pydantic numpy
 
 Wheels are published for every supported CPython, 3.11 through 3.15, on Linux
 (manylinux and musllinux, x86_64 and aarch64), macOS (Intel and Apple silicon)
-and Windows x64, and from 3.12 on Windows arm64. Free-threaded CPython 3.14 and
-3.15 have wheels on manylinux, musllinux, macOS and Windows x64, and
-[PyPy 3.11 and 3.12](#pypy) on manylinux. Free-threaded support starts at 3.14t;
-the earlier 3.13 free-threaded build is not a target.
+and Windows (x64 and arm64). Free-threaded CPython 3.14 and 3.15 have wheels on
+the same platforms, and [PyPy 3.11 and 3.12](#pypy) on manylinux. Free-threaded
+support starts at 3.14t; the earlier 3.13 free-threaded build is not a target.
 
 ## Beside a Python 3.10 process
 

@@ -321,13 +321,13 @@ holds each row's list to the classifiers. Why no stable-ABI wheel is on
 names each interpreter, on Windows it installs them before maturin's
 `--find-interpreter` runs, and the musllinux rows build for what their image
 carries. The rows name their free-threaded interpreters the same way: Linux,
-macOS and Windows x64 by name, musllinux the free-threaded build its image
-carries, and Windows arm64 none.
+macOS and Windows by name, Windows x64 and arm64 each in a row of its own, and
+musllinux the free-threaded build its image carries.
 
 **Profile-guided where the host runs its own output.** A row marked `pgo: true`
 builds an instrumented extension, trains it with the `pgo-command` in
 `pyproject.toml` (`scripts/pgo_workload.py`), and rebuilds with the profile; the
-musllinux cross-builds, the PyPy wheels and the Windows arm64 row ship plain
+musllinux cross-builds, the PyPy wheels and the Windows arm64 rows ship plain
 release builds with the same compatibility. The macOS x86_64 row is a cross-build
 that still runs its output: Rosetta 2, which every arm64 macOS image installs,
 runs the instrumented x86_64 build. The counters count that build's own branches

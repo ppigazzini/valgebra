@@ -20,6 +20,16 @@ All notable changes to valgebra are recorded here. The format follows
   `is_empty()` is `True`, and the meet below `nothing` is `subset`. The complement of a set whose
   membership runs a callback is still never taken, and stays beside the rest.
 
+- **Windows arm64 gets a wheel for every interpreter the classifiers name.** A release shipped no
+  `cp311` wheel and no free-threaded `cp314t` or `cp315t` one for Windows arm64, though the
+  classifiers name 3.11 and stable free threading: the arm64 row kept the 3.12 floor its runner
+  image once set, and no free-threaded row built for it, so an installer there fell to the source
+  distribution, which compiles the extension. The row installs 3.11 through 3.15 from setup-python,
+  3.11 at 3.11.9, its last binary installer, and a row of its own builds the free-threaded 3.14
+  and 3.15 wheels by name, as Windows x64's does. The smoke runs the product suite on each set on
+  its floor, its newest release and each free-threaded build, the import on a free-threaded one
+  leaving the GIL off, and `tests/test_release_matrix.py` names no platform's gap.
+
 <!-- changelog-roll
 
 Every feat/fix commit this section accounts for, oldest first; held to
@@ -28,6 +38,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: an emptiness reads a meet's complements one at a time
+- fix: Windows arm64 ships the 3.11 and free-threaded wheels
 
 -->
 

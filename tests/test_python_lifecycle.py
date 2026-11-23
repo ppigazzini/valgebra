@@ -23,9 +23,9 @@ lane. Each message names the edit that turns it green. The dates are the
 schedule PEPs' own, and a PEP amended is a row edited beside its number.
 
 What this does not read: the release workflow's wheels. They are built per
-platform, and the platforms set gaps of their own -- Windows arm64 carries 3.12
-onward -- so which wheel a release ships is a different question from which
-interpreter the tree supports.
+platform, and a platform may set a gap of its own, which the release matrix
+ledger names with its reason, so which wheel a release ships is a different
+question from which interpreter the tree supports.
 
 LEDGER: every supported interpreter is one CPython's calendar supports today
 """

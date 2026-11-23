@@ -76,7 +76,7 @@ jobs:
         # count the x86_64 build's own branches and calls, so the profile is the
         # one an Intel host records, whatever the translation costs in time. Two
         # targets ship a plain (non-profiled) release build instead, with the
-        # same platform compatibility: the Windows arm64 wheel, whose
+        # same platform compatibility: the Windows arm64 wheels, whose
         # instrumentation profile fails to merge on that toolchain, and the
         # musllinux wheels, which cross-build in a glibc container that cannot
         # run a musl-linked extension to train a profile. Native musl PGO is
@@ -123,16 +123,19 @@ jobs:
           # On a host runner `--find-interpreter` builds for what the image
           # carries, and an image's tool cache is not the supported set.
           # `pythons` installs every supported interpreter first. Windows takes
-          # its free-threaded builds in a job of their own, because
-          # co-installing a release and its free-threaded build in one setup
-          # step can fail there (maturin-action's README, python/cpython#127294),
-          # and that job builds the interpreters by name. Windows arm64 installs
-          # 3.12 onward.
+          # its free-threaded builds in a job of their own, on x64 and arm64
+          # alike, because co-installing a release and its free-threaded build
+          # in one setup step can fail there (maturin-action's README,
+          # python/cpython#127294), and that job builds the interpreters by name.
+          # setup-python carries an arm64 build of every supported release,
+          # 3.11 at 3.11.9, its last binary installer, which a wheel for any 3.11
+          # loads.
           - { runner: macos-26, target: x86_64, arch: x86_64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
           - { runner: macos-26, target: aarch64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
           - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.11\n3.12\n3.13\n3.14\n3.15" }
           - { runner: windows-2025-vs2026, target: x64, pgo: true, pythons: "3.14t\n3.15t", interpreter: python3.14t python3.15t, variant: freethreaded }
-          - { runner: windows-11-vs2026-arm, target: aarch64, pythons: "3.12\n3.13\n3.14\n3.15" }
+          - { runner: windows-11-vs2026-arm, target: aarch64, pythons: "3.11\n3.12\n3.13\n3.14\n3.15" }
+          - { runner: windows-11-vs2026-arm, target: aarch64, pythons: "3.14t\n3.15t", interpreter: python3.14t python3.15t, variant: freethreaded }
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -347,7 +350,8 @@ jobs:
           - { name: macos-arm64, runner: macos-26, artifact: wheels-macos-26-aarch64-native, pythons: "3.11 3.15 3.14t 3.15t", imports: "3.12 3.13 3.14" }
           - { name: windows-x64, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-native, pythons: "3.11 3.15", imports: "3.12 3.13 3.14" }
           - { name: windows-x64-freethreaded, runner: windows-2025-vs2026, artifact: wheels-windows-2025-vs2026-x64-freethreaded, pythons: "3.14t 3.15t" }
-          - { name: windows-arm64, runner: windows-11-vs2026-arm, artifact: wheels-windows-11-vs2026-arm-aarch64-native, pythons: "3.12 3.15", imports: "3.13 3.14", host: "3.12\n3.13\n3.14\n3.15" }
+          - { name: windows-arm64, runner: windows-11-vs2026-arm, artifact: wheels-windows-11-vs2026-arm-aarch64-native, pythons: "3.11 3.15", imports: "3.12 3.13 3.14", host: "3.11\n3.12\n3.13\n3.14\n3.15" }
+          - { name: windows-arm64-freethreaded, runner: windows-11-vs2026-arm, artifact: wheels-windows-11-vs2026-arm-aarch64-freethreaded, pythons: "3.14t 3.15t", host: "3.14t\n3.15t" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 45
     # The musllinux wheels are smoked in `smoke-musl`, in Alpine containers: a
