@@ -121,6 +121,11 @@ _GE1 = Annotated[int, at.Ge(1)]
 # A fixpoint and its own unfolding: two spellings of one set.
 _LINKED = recursive(lambda t: union(None, {"a": int, "next": t}))
 
+# The JSON values, the fixpoint a translation from JSON Schema meets every set with.
+_JSON = recursive(
+    lambda j: union(None, bool, int, float, str, list[j], dict[str, j]),  # ty: ignore[invalid-type-form]
+)
+
 _LEFT = Literal["left"]
 _RIGHT = Literal["right"]
 
@@ -224,6 +229,16 @@ SCHEMAS: list[tuple[str, Validator]] = [
     # answer the pair alike.
     ("hands differ", _hands((_LEFT, _RIGHT), (_RIGHT, _LEFT))),
     ("~hands match", complement(_hands((_LEFT, _LEFT), (_RIGHT, _RIGHT)))),
+    # A list of JSON values outside the lists of integers, and the JSON values:
+    # the rules prove the first below the second, a fixpoint's relation, and the
+    # meet of the first with the second's complement holds two complements, which
+    # the emptiness route reads a complement at a time, so the two routes answer
+    # the pair alike.
+    (
+        "list[J]&~list[int]",
+        intersection(list[_JSON], complement(list[int])),  # ty: ignore[invalid-type-form]
+    ),
+    ("J", _JSON),
     # The edges of each kind's universe, which a schema written for a reader
     # does not reach and a relation is decided at: the end of the integer
     # carrier, the first float no integer equals, a key kind that is a subset of

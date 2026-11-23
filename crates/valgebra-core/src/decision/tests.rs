@@ -16134,7 +16134,7 @@ mod a_part_at_a_time {
     }
 
     /// The JSON values, `μj. None | bool | int | float | str | list[j] | dict[str, j]`.
-    fn json() -> (Schema, Vec<Schema>) {
+    pub(super) fn json() -> (Schema, Vec<Schema>) {
         let at = Schema::Ref(DefIx::new(0));
         let body = Schema::union([
             Schema::NoneType,
@@ -16172,6 +16172,126 @@ mod a_part_at_a_time {
         assert_ne!(
             one.subtype_relation_under(&meet, &Pure, &defs),
             Relation::Fails
+        );
+    }
+}
+
+/// A meet holding complements, read as its rest below each complement's inner
+/// set in turn: `R ∩ ¬I ∩ ¬J` is empty exactly where `R ∩ ¬I ⊆ J`, and exactly
+/// where `R ∩ ¬J ⊆ I` [FCB08, §4.1].
+mod a_meet_holding_complements {
+    use super::a_part_at_a_time::json;
+    use super::*;
+
+    fn list_of(item: Schema) -> Schema {
+        Schema::list(SeqShape::homogeneous(item))
+    }
+
+    fn str_map(value: Schema) -> Schema {
+        Schema::keyed_map(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value,
+            }],
+        )
+    }
+
+    /// The meet as written, the complements in the order given.
+    fn met(members: Vec<Schema>) -> Schema {
+        Schema::Intersection(members.into())
+    }
+
+    // THEORY: semantic-subtyping
+    /// A container, the complement of another and the complement of the JSON
+    /// values: empty, the container being below the JSON values once the other
+    /// complement is beside it, a fixpoint's relation the emptiness of the
+    /// difference alone does not settle. `is_empty` and the relation below
+    /// `nothing` read it alike, whichever complement comes first.
+    #[test]
+    fn a_meet_holding_the_complement_of_the_json_values_is_empty_below_them() {
+        let (json, defs) = json();
+        for (base, other) in [
+            (list_of(json.clone()), list_of(Schema::Int)),
+            (str_map(Schema::Int), str_map(Schema::Bool)),
+        ] {
+            let complements = [other.complement(), json.clone().complement()];
+            for (first, second) in [(0, 1), (1, 0)] {
+                let meet = met(vec![
+                    base.clone(),
+                    complements[first].clone(),
+                    complements[second].clone(),
+                ]);
+                assert!(meet.is_empty_with(&NoLeafRelations, &defs), "{meet:?}");
+                assert_eq!(
+                    meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &defs),
+                    Relation::Holds,
+                    "{meet:?}"
+                );
+            }
+        }
+    }
+
+    // THEORY: semantic-subtyping
+    /// The rest keeps the other complements: `(dict[str, int] ∪ bytes) ∩ ¬bytes
+    /// ∩ ¬J` is empty because the map is below the JSON values once `¬bytes`
+    /// leaves the byte strings out, and `dict[str, int] ∪ bytes` alone is not
+    /// below them.
+    #[test]
+    fn the_rest_holds_the_other_complements() {
+        let (json, defs) = json();
+        let bytes = Schema::Bytes;
+        let either = Schema::union([str_map(Schema::Int), bytes.clone()]);
+        let meet = met(vec![
+            either.clone(),
+            bytes.complement(),
+            json.clone().complement(),
+        ]);
+        assert!(meet.is_empty_with(&NoLeafRelations, &defs), "{meet:?}");
+        assert_ne!(
+            either.subtype_relation_under(&json, &NoLeafRelations, &defs),
+            Relation::Holds
+        );
+    }
+
+    // THEORY: semantic-subtyping
+    /// A meet whose rest holds a value outside a complement's inner set holds
+    /// that value: `dict[str, int] ∩ ¬dict[str, bool] ∩ ¬list[int]` holds
+    /// `{"a": 1}`, and is neither empty nor below `nothing`.
+    #[test]
+    fn a_value_of_the_rest_outside_one_inner_set_is_a_value_of_the_meet() {
+        let meet = met(vec![
+            str_map(Schema::Int),
+            str_map(Schema::Bool).complement(),
+            list_of(Schema::Int).complement(),
+        ]);
+        assert!(!meet.is_empty_with(&NoLeafRelations, &[]));
+        assert_ne!(
+            meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+            Relation::Holds
+        );
+    }
+
+    // THEORY: semantic-subtyping
+    /// The complement of a predicate is never taken as `¬I`, and stays in the
+    /// rest: `p ∩ ¬p ∩ ¬str` may hold an integer, a callback answering its two
+    /// occurrences apart, so taking `¬p` would read the rest `p ∩ ¬str` below
+    /// `p` and call the meet empty.
+    #[test]
+    fn the_complement_of_a_predicate_is_kept_in_the_rest() {
+        let opaque = Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        let meet = met(vec![
+            opaque.clone(),
+            opaque.complement(),
+            Schema::Str.complement(),
+        ]);
+        assert!(!meet.is_empty_with(&NoLeafRelations, &[]));
+        assert_ne!(
+            meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+            Relation::Holds
         );
     }
 }

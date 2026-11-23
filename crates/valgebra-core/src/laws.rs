@@ -2808,6 +2808,33 @@ proptest! {
         }
     }
 
+    // THEORY: semantic-subtyping, emptiness-and-the-relation-below-nothing-are-two-procedures
+    /// A meet holding two complements is its rest below either inner set,
+    /// `a ∧ ¬b ∧ ¬c = ∅` exactly where `a ∧ ¬b ⊆ c` [FCB08, §4.1]. Over three
+    /// drawn schemas the relation below `nothing` and the emptiness reading
+    /// answer the meet alike, and neither reads it empty where the relation
+    /// refutes the rest below `c`, a value of the rest outside `c` being a
+    /// value of the meet.
+    #[test]
+    fn a_meet_holding_two_complements_is_its_rest_below_either(
+        a in shaped_schema(),
+        b in shaped_schema(),
+        c in shaped_schema(),
+    ) {
+        let _allowance = crate::descr::budget::law();
+        let (a, b, c) = (built(&a), built(&b), built(&c));
+        let meet = Schema::meet_within(
+            [a.clone(), b.clone().complement(), c.clone().complement()],
+            &[],
+        );
+        let empty = meet.is_empty_with(&NoLeafRelations, &[]);
+        let below = meet.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]);
+        prop_assert_eq!(below.holds(), empty, "{:?}: below nothing {:?}", meet, below);
+        let rest = Schema::meet_within([a, b.complement()], &[]);
+        let refuted = rest.subtype_relation_under(&c, &NoLeafRelations, &[]) == Relation::Fails;
+        prop_assert!(!(empty && refuted), "{:?} read empty, its rest refuted below {:?}", meet, c);
+    }
+
     // THEORY: lattice-theory
     /// A reference and its complement meet in nothing, the decision reading the
     /// reference through its definition: over a definition holding a drawn set,

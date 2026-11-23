@@ -161,9 +161,11 @@ impl Schema {
         }
     }
 
-    /// A meet holding one complement, read as the relation it is, at the root
-    /// of a question every decider declined: `R ∩ ¬I` is empty exactly where
-    /// `R ⊆ I` [FCB08, §4.1], `R` the meet of the other members. The relation's
+    /// A meet holding complements, read as the relations it is, at the root of
+    /// a question every decider declined: `R ∩ ¬I` is empty exactly where
+    /// `R ⊆ I` [FCB08, §4.1], `R` the meet of the other members, each
+    /// complement of a set taken in turn as `¬I`
+    /// ([`below_one_complement`](Self::below_one_complement)). The relation's
     /// rules read a record below a record field by field where the meet's
     /// readings distribute it, so a meet of records over the JSON value whose
     /// field holds a `complex`, met with the complement of the record of JSON
@@ -175,12 +177,14 @@ impl Schema {
     /// complement; asked inside every meet a question reaches, it took the
     /// steps the questions around it decided with.
     ///
-    /// One complement, so the pair asked is the one the relation asks of the
-    /// same terms, and a meet of the members against one of their inner sets,
-    /// so a query's goals stay drawn from its own terms. `I` must denote a set:
-    /// a callback, or a class whose `isinstance` is code, may answer its two
-    /// occurrences apart, so `P ∩ ¬P` holds a value the relation `P ⊆ P` says
-    /// nothing about.
+    /// One complement at a time, so each pair asked is one the relation asks of
+    /// the same terms, a meet of the members against one of their inner sets,
+    /// and a query's goals stay drawn from its own terms: the union of the
+    /// inner sets, which `R ∩ ¬I ∩ ¬J ⊆ ∅` is too as `R ⊆ I ∪ J`, is a term
+    /// none of them wrote. `I` must denote a set: a callback, or a class whose
+    /// `isinstance` is code, may answer its two occurrences apart, so `P ∩ ¬P`
+    /// holds a value the relation `P ⊆ P` says nothing about. A complement of
+    /// such a set stays in `R` as written, a member like any other.
     ///
     /// Asked under the steps the question has left, as the relation of the same
     /// pair is, so the two spellings decide alike: under
@@ -188,9 +192,11 @@ impl Schema {
     /// length bounds below another that the relation proves, and the meet of
     /// the one with the other's complement was `undecided` beside a `subset`.
     /// The steps are an allowance of its own, charged to nothing, so they
-    /// starve no reading after it; the rules it asks never ask it again, so a
-    /// query asks it a fixed number of times and spends at most that multiple
-    /// of its budget. The relation's readings past the sets are not asked here:
+    /// starve no reading after it, and one allowance for all the complements a
+    /// meet holds, so a meet holding several spends at most what a meet holding
+    /// one does; the rules it asks never ask it again, so a query asks it a
+    /// fixed number of times and spends at most that multiple of its budget.
+    /// The relation's readings past the sets are not asked here:
     /// they reach this reading again through the respellings, each time under
     /// steps of its own and at no depth, and drawn questions overflowed the
     /// stack. The sets themselves are, of the branches of `I` the rest meets
@@ -202,28 +208,53 @@ impl Schema {
         let Schema::Intersection(members) = self else {
             return Relation::Unknown;
         };
-        let mut complements = members.iter().filter_map(|member| match member {
-            Schema::Complement(inner) => Some(inner),
-            _ => None,
-        });
-        let (Some(inner), None) = (complements.next(), complements.next()) else {
-            return Relation::Unknown;
-        };
-        if !denotes_a_set_within(inner, cx.oracle, cx.defs) {
-            return Relation::Unknown;
+        // One allowance for every complement asked, so a meet holding several
+        // spends what a meet holding one may.
+        let allowance = Budget::new(cx.budget.left());
+        for (at, member) in members.iter().enumerate() {
+            let Schema::Complement(inner) = member else {
+                continue;
+            };
+            if !denotes_a_set_within(inner, cx.oracle, cx.defs) {
+                continue;
+            }
+            let answer = Self::below_one_complement(members, at, inner, cx, &allowance);
+            if answer != Relation::Unknown {
+                return answer;
+            }
         }
+        Relation::Unknown
+    }
+
+    /// The members of a meet but the complement at `at`, asked below its inner
+    /// set: `R ∩ ¬I` is empty exactly where `R ⊆ I` [FCB08, §4.1], `R` the meet
+    /// of every other member, the other complements among them. A meet holding
+    /// two, `R ∩ ¬I ∩ ¬J`, is `R ∩ ¬I` below `J` and `R ∩ ¬J` below `I`, and
+    /// either answers it: the emptiness of a meet holding a list, the complement
+    /// of a list and the complement of the JSON values is that list below the
+    /// JSON values once the other complement is beside it, a fixpoint's
+    /// relation the rules' coinductive hypothesis proves and the emptiness of
+    /// the difference alone does not. A value of `R` outside `I` is a value of
+    /// the meet, so a refutation answers it too.
+    fn below_one_complement(
+        members: &[Schema],
+        at: usize,
+        inner: &Schema,
+        cx: &Cx<'_>,
+        allowance: &Budget,
+    ) -> Relation {
         let rest = Schema::meet_within(
             members
                 .iter()
-                .filter(|member| !matches!(member, Schema::Complement(_)))
-                .cloned(),
+                .enumerate()
+                .filter(|&(other, _)| other != at)
+                .map(|(_, member)| member.clone()),
             cx.defs,
         );
-        let allowance = Budget::new(cx.budget.left());
-        rest.is_subtype_rec(inner, &mut cx.within_this_query(&allowance))
+        rest.is_subtype_rec(inner, &mut cx.within_this_query(allowance))
             .or_else(|| rest.decided_by_its_leaves(inner, cx, false))
             .or_else(|| {
-                rest.below_the_branches_it_meets(inner, &mut cx.within_this_query(&allowance))
+                rest.below_the_branches_it_meets(inner, &mut cx.within_this_query(allowance))
             })
     }
 

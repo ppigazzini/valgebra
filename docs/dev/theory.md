@@ -162,8 +162,10 @@ spellings `a ⊆ b` has as `a ∧ ¬b = ∅`, the identity of [FCB08, §4.1]. A 
 it, and against a complement the meet of the two is asked below the empty set
 and the pair from its other side, all of them goals over the query's signed
 subterms. The identity is read the other way too: at the root of a question
-every decider declines, a meet holding one complement of a set is asked as the
-relation of its other members below that set, and a complement as the universe
+every decider declines, a meet holding complements of sets is asked, a
+complement at a time, as the relation of its other members below that
+complement's set, the other complements among them, so `a ∧ ¬b ∧ ¬c = ∅` is
+`a ∧ ¬b ⊆ c` and `a ∧ ¬c ⊆ b` [FCB08, §4.1], and a complement as the universe
 below its inner set [FCB08, Def. 4.1], by `is_empty`, by the relation below the
 empty set, and by the relation's two lattice bounds alike: a meet or a
 complement read empty is below every supertype, and a subject below a complement
@@ -186,9 +188,9 @@ refutes nothing.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision/emptiness.rs::a_class_below_the_complement_beside_it, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs, decision.rs::Schema::union_below, decision.rs::Schema::below_each_member, decision.rs::Schema::below_the_branches_it_can_meet, decision/lengths.rs::lengths_of, decision/lengths.rs::ByLength::relation_to, decision.rs::Schema::or_bounded, decision/readings.rs::one_item_outside, decision.rs::Schema::a_side_with_no_value, valgebra-py/src/oracle.rs::PoolRelations::finds_outside, valgebra-py/src/witness.rs, valgebra-py/src/witness.rs::misses, valgebra-py/src/witness.rs::Reading::missed, valgebra-py/src/witness.rs::Reading::sequences_missed, valgebra-py/src/witness.rs::Reading::records_missed, valgebra-py/src/witness.rs::Reading::guessed, valgebra-py/src/witness.rs::Reading::outside, valgebra-py/src/witness.rs::Reading::collections_missed
+IMPLEMENTED-BY: decision.rs::Schema::witnessed, decision/emptiness.rs::a_class_below_the_complement_beside_it, decision.rs::Schema::bounds_the_pair, decision.rs::Schema::below_by_emptiness, decision.rs::Schema::shares_no_value_with, decision.rs::Schema::verdict_beside, decision.rs::Schema::below_a_union, decision.rs::Schema::subtype_by_shape, decision/products.rs::linear_subtype, kind.rs::Region::subset_of, verdict.rs::Relation::of_difference, decision.rs::Schema::meet_below, decision.rs::placed_by_membership, decision.rs::Schema::decided_by_parts, decision.rs::Schema::decided_as_respelled, decision/emptiness.rs::Schema::below_the_set_it_complements, decision/emptiness.rs::Schema::below_one_complement, decision/emptiness.rs::Schema::complement_of_the_universe, decision/lengths.rs, decision.rs::Schema::union_below, decision.rs::Schema::below_each_member, decision.rs::Schema::below_the_branches_it_can_meet, decision/lengths.rs::lengths_of, decision/lengths.rs::ByLength::relation_to, decision.rs::Schema::or_bounded, decision/readings.rs::one_item_outside, decision.rs::Schema::a_side_with_no_value, valgebra-py/src/oracle.rs::PoolRelations::finds_outside, valgebra-py/src/witness.rs, valgebra-py/src/witness.rs::misses, valgebra-py/src/witness.rs::Reading::missed, valgebra-py/src/witness.rs::Reading::sequences_missed, valgebra-py/src/witness.rs::Reading::records_missed, valgebra-py/src/witness.rs::Reading::guessed, valgebra-py/src/witness.rs::Reading::outside, valgebra-py/src/witness.rs::Reading::collections_missed
 
-HELD-BY: the_two_deciders_agree_under_an_oracle, a_meet_holding_a_class_is_empty_below_the_complement_beside_it, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time, a_meet_supertype_is_decided_a_member_at_a_time, test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads, a_pair_declined_as_written_is_asked_in_its_other_spellings, a_meet_disjoint_from_a_meet_is_refuted, a_value_refutes_only_from_inside_the_subject
+HELD-BY: the_two_deciders_agree_under_an_oracle, a_meet_holding_a_class_is_empty_below_the_complement_beside_it, a_meet_holding_the_complement_of_the_json_values_is_empty_below_them, the_rest_holds_the_other_complements, a_value_of_the_rest_outside_one_inner_set_is_a_value_of_the_meet, the_complement_of_a_predicate_is_kept_in_the_rest, a_meet_holding_two_complements_is_its_rest_below_either, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment, a_placement_by_identity_spends_no_step, a_union_is_decided_a_part_at_a_time, a_meet_supertype_is_decided_a_member_at_a_time, test_a_meet_is_refuted_by_one_member_beside_one_no_decider_reads, a_pair_declined_as_written_is_asked_in_its_other_spellings, a_meet_disjoint_from_a_meet_is_refuted, a_value_refutes_only_from_inside_the_subject
 
 The distinction is not pedantry. A rule stated as the reduction and implemented
 structurally has a hole wherever an arm is missing, and the reduction's name over
@@ -1278,7 +1280,7 @@ SOURCE: §14.4 "completeness is a property of **one**"; §13.1 "`is_subtype_of` 
 
 IMPLEMENTED-BY: decision/emptiness.rs::intersection_verdict, decision.rs::Schema::inside_what_it_complements
 
-HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set
+HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_holding_two_complements_is_its_rest_below_either, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set
 
 **The domain is a family of models, one per interpreter.** Models are
 compared by the subtyping they induce, and the source decides the one a

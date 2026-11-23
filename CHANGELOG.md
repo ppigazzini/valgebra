@@ -6,12 +6,28 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **An emptiness reads a meet's complements one at a time.** A meet holding the complements of two
+  sets, one of them a fixpoint, as `list[J] & ~list[int] & ~J`, `J` the JSON values, was
+  `undecided` against `nothing` and not proven empty, while `list[J] & ~list[int]` was `subset` of
+  `J`: `is_empty` read a meet as the relation it is only where it held one complement, and the
+  emptiness of the difference alone does not settle what a fixpoint equals. `valgebra-jsonschema`
+  writes such a meet for an output schema met with a record guard's complement and the complement
+  of the guard `true`. `is_empty`, the relation below `nothing` and the relation's lattice bounds
+  now ask the meet a complement at a time, its other members, the other complements among them,
+  below that complement's set, and the complements of one meet share the steps one complement had:
+  `is_empty()` is `True`, and the meet below `nothing` is `subset`. The complement of a set whose
+  membership runs a callback is still never taken, and stays beside the rest.
+
 <!-- changelog-roll
 
 Every feat/fix commit this section accounts for, oldest first; held to
 `git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
+
+- fix: an emptiness reads a meet's complements one at a time
 
 -->
 

@@ -1111,13 +1111,21 @@ coinductive hypothesis -- a goal already being proven on the path is assumed --
 which decides a recursive schema against itself and against its own body; the
 emptiness route alone unfolds a reference once and asks the descriptor, which
 settles what kinds a body admits and not what a **fixpoint** equals. `is_empty`
-reads a meet holding one complement as the relation it is, where its own
+reads a meet holding complements as the relations it is, where its own
 readings decline, so `a & ~b` is asked as `a <= b` and the fixpoints are
-answered alike. That reading asks the relation's rules under the steps the
-question has left, as the relation is asked. What it leaves apart is a
+answered alike. A meet holding several is asked a complement at a time, the
+others kept beside the rest: `a & ~b & ~c` is `a & ~b <= c` and `a & ~c <= b`
+[FCB08, §4.1], so `list[J] & ~list[int] & ~J`, `J` the JSON values, is empty
+because the rules prove `list[J] & ~list[int]` below `J`, a fixpoint's relation
+its emptiness alone does not settle. The union `b | c` the same meet is below
+is a term no member wrote, so it is not asked. That reading asks the
+relation's rules under the steps the question has left, as the relation is
+asked, and the complements of one meet share those steps, so a meet holding
+several spends what a meet holding one may. What it leaves apart is a
 complement it does not take -- one running a callback, whose two occurrences
-may answer apart, so `P <= P` holds while `P & ~P` is not proved empty -- and a
-pair only the set readings after the rules prove, which it does not ask.
+may answer apart, so `P <= P` holds while `P & ~P` is not proved empty, which
+stays beside the rest as written -- and a pair only the set readings after the
+rules prove, which it does not ask.
 
 `tests/test_completeness_probe.py` measures the gap over the survey corpus and
 holds it to the count recorded there, which is none. That is a ratchet rather
