@@ -6,6 +6,25 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+<!-- changelog-roll
+
+Every feat/fix commit this section accounts for, oldest first; held to
+`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
+a caller cannot see: a step of the set representation that changed no
+answer of its own, or a repair to a change not yet released.
+
+-->
+
+## [0.0.34] - 2026-11-23
+
+A release of one answer, with no node. A meet holding the complements of two sets, one of them a
+fixpoint as the JSON values are, is proven empty a complement at a time, its other members asked
+below each complement's set, where every reading of its emptiness declined, and below `nothing` as
+the emptiness reads it. The metamorphic gate's corpus answers as 0.0.33's recording does, no
+membership moved and no decision of it slower, and the instruction gate's ten decision workloads
+count within 0.02% of the commit before. Windows arm64 gets the `cp311` wheel and the free-threaded
+`cp314t` and `cp315t` ones the classifiers name and earlier releases left out.
+
 ### Fixed
 
 - **An emptiness reads a meet's complements one at a time.** A meet holding the complements of two
@@ -29,18 +48,6 @@ All notable changes to valgebra are recorded here. The format follows
   and 3.15 wheels by name, as Windows x64's does. The smoke runs the product suite on each set on
   its floor, its newest release and each free-threaded build, the import on a free-threaded one
   leaving the GIL off, and `tests/test_release_matrix.py` names no platform's gap.
-
-<!-- changelog-roll
-
-Every feat/fix commit this section accounts for, oldest first; held to
-`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
-a caller cannot see: a step of the set representation that changed no
-answer of its own, or a repair to a change not yet released.
-
-- fix: an emptiness reads a meet's complements one at a time
-- fix: Windows arm64 ships the 3.11 and free-threaded wheels
-
--->
 
 ## [0.0.33] - 2026-11-23
 
@@ -5429,7 +5436,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.33...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.34...HEAD
+[0.0.34]: https://github.com/ppigazzini/valgebra/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/ppigazzini/valgebra/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/ppigazzini/valgebra/compare/v0.0.31...v0.0.32
 [0.0.31]: https://github.com/ppigazzini/valgebra/compare/v0.0.30...v0.0.31
