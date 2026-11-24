@@ -74,6 +74,7 @@ def _git(*args: str) -> str:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     ).stdout
 

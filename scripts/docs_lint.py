@@ -170,6 +170,7 @@ def tracked_files(pattern: str = "*") -> list[Path]:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     if result.returncode != 0:

@@ -65,6 +65,7 @@ def git_output(*args: str, cwd: Path) -> str | None:
             ["git", "-C", str(cwd), *args],
             capture_output=True,
             text=True,
+            encoding="locale",
             check=False,
         )
     except OSError:

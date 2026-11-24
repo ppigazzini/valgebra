@@ -117,6 +117,7 @@ def test_the_extension_loads_where_mkdocs_loads_it(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert done.returncode == 0, done.stderr

@@ -62,6 +62,7 @@ def _run(script: Path, flag: str) -> subprocess.CompletedProcess[str]:
         [sys.executable, str(script), flag],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
         timeout=60,
     )

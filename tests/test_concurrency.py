@@ -254,6 +254,7 @@ def test_the_first_validator_builds_beside_a_thread_importing_annotationlib() ->
             [sys.executable, "-c", _FIRST_BUILD_BESIDE_AN_IMPORT],
             capture_output=True,
             text=True,
+            encoding="locale",
             timeout=60,
             check=False,
         )

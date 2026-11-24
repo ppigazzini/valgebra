@@ -70,6 +70,7 @@ def _git(*args: str) -> subprocess.CompletedProcess[str]:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
         env={
             **os.environ,

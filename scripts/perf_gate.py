@@ -333,7 +333,11 @@ def measuring_toolchain() -> dict[str, str]:
     `settle_the_heap` normalizes and which glibc 2.43 reorganized.
     """
     valgrind = subprocess.run(
-        ["valgrind", "--version"], capture_output=True, text=True, check=False
+        ["valgrind", "--version"],
+        capture_output=True,
+        text=True,
+        encoding="locale",
+        check=False,
     ).stdout.strip()
     try:
         libc = os.confstr("CS_GNU_LIBC_VERSION") or "unknown"
@@ -383,6 +387,7 @@ def measure(binary: Path, *args: str, branches: bool = False) -> Measurement:
         check=True,
         capture_output=True,
         text=True,
+        encoding="locale",
         env=workload_environment(os.environ),
     )
     return parse_measurement(result.stdout, result.stderr)
@@ -675,6 +680,7 @@ def resolve_rev(rev: str) -> str:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     if result.returncode != 0:
@@ -1208,6 +1214,7 @@ def snapshot(root: Path = ROOT) -> str:
             env=env,
             capture_output=True,
             text=True,
+            encoding="locale",
         ).stdout.strip()
 
 
@@ -1288,6 +1295,7 @@ def install(wheel: Path, python: Path) -> None:
             check=True,
             capture_output=True,
             text=True,
+            encoding="locale",
         ).stdout.strip()
     )
     for old in [*site.glob("valgebra"), *site.glob("valgebra-*.dist-info")]:

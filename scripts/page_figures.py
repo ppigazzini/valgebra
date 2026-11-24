@@ -422,6 +422,7 @@ class Session:
             cwd=self.tree,
             capture_output=True,
             text=True,
+            encoding="locale",
             check=False,
         )
         if done.returncode != 0:
@@ -462,7 +463,13 @@ class Session:
     ) -> None:
         """Run a tool of no environment's, in the tree, and keep its output."""
         done = subprocess.run(
-            argv, cwd=self.tree, capture_output=True, text=True, check=False, env=env
+            argv,
+            cwd=self.tree,
+            capture_output=True,
+            text=True,
+            encoding="locale",
+            check=False,
+            env=env,
         )
         if done.returncode != 0:
             _cannot_run(f"{argv[0]} failed:\n{done.stdout}{done.stderr}")
@@ -745,6 +752,7 @@ def _found(version: str) -> Path | None:
         [uv, "python", "find", "--managed-python", version],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     return Path(done.stdout.strip()) if done.returncode == 0 else None

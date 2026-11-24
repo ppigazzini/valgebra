@@ -48,6 +48,7 @@ def _git(tree: Path, *args: str) -> str:
         ["git", "-C", str(tree), *args],  # noqa: S607
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
         env={**os.environ, **IDENTITY},
     ).stdout.strip()
@@ -99,6 +100,7 @@ def _named(tree: Path, base: str) -> subprocess.CompletedProcess[str]:
         cwd=tree,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
 
@@ -393,6 +395,7 @@ def test_a_listing_it_cannot_read_is_not_an_empty_sweep(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert named.returncode == script.EXIT_CANNOT_RUN, named.stdout

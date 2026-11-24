@@ -190,6 +190,7 @@ def test_the_step_ends_as_the_soak_does(
         env=environment,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert ended.returncode == status, (

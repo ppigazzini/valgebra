@@ -192,6 +192,7 @@ def test_the_exit_code_is_the_verdict(tmp_path: Path) -> None:
         ],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == gate.EXIT_CANNOT_RUN, result.stderr

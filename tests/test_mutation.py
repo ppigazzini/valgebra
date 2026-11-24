@@ -462,6 +462,10 @@ def test_a_collection_emptying_a_list_inside_its_copy_is_survived() -> None:
         """
     )
     ran = subprocess.run(  # noqa: S603 - the interpreter running this suite
-        [sys.executable, "-c", program], capture_output=True, text=True, check=False
+        [sys.executable, "-c", program],
+        capture_output=True,
+        text=True,
+        encoding="locale",
+        check=False,
     )
     assert (ran.returncode, ran.stdout.strip()) == (0, "True"), ran.stderr[-400:]

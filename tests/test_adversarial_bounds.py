@@ -80,6 +80,7 @@ def _run_construction_loop(body: str) -> subprocess.CompletedProcess[str]:
         [sys.executable, "-c", program],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=120,
         check=False,
     )
@@ -496,6 +497,7 @@ def test_a_recursive_meet_of_records_is_decided_rather_than_overflowing() -> Non
         [sys.executable, "-c", program],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=120,
         check=False,
     )
@@ -536,6 +538,7 @@ def _on_a_thread(program: str) -> subprocess.CompletedProcess[str]:
         [sys.executable, "-c", source],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=300,
         check=False,
     )
@@ -656,6 +659,7 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
             [sys.executable, "-c", program, str(limit)],
             capture_output=True,
             text=True,
+            encoding="locale",
             timeout=120,
             check=False,
         )
@@ -761,6 +765,7 @@ def test_a_predicate_reentering_its_validator_raises_rather_than_crashing() -> N
             [sys.executable, "-c", program, str(kib), str(limit)],
             capture_output=True,
             text=True,
+            encoding="locale",
             timeout=120,
             check=False,
         )
@@ -1190,6 +1195,7 @@ def test_a_class_named_from_many_places_is_refused_before_it_is_built() -> None:
         [sys.executable, "-c", program],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=60,
         check=False,
     )
@@ -1231,6 +1237,7 @@ def test_a_length_bound_of_a_million_is_refused_before_it_is_built() -> None:
         [sys.executable, "-c", program],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=60,
         check=False,
     )
@@ -1337,6 +1344,7 @@ def test_validators_holding_one_pattern_hold_one_program() -> None:
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=300,
         check=False,
     )
@@ -1821,6 +1829,7 @@ def test_a_step_table_beneath_a_length_bound_keeps_to_the_memory_it_may_have(
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=300,
         check=False,
     )

@@ -75,6 +75,7 @@ def run_block(block: str, doc_name: str, index: int) -> bool:
             [sys.executable, str(path)],
             capture_output=True,
             text=True,
+            encoding="locale",
             check=False,
         )
     if proc.returncode != 0:

@@ -107,6 +107,7 @@ def tree_of(rev: str | None) -> str:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     if resolved.returncode != 0:
@@ -136,6 +137,7 @@ def build_wheel(tree: str, python: Path, *, lines: bool) -> Path:
         ],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     ).stdout.strip()
     label = f"{tree[:12]}-{tag}{'-lines' if lines else ''}"
@@ -243,6 +245,7 @@ def cachegrind(command: Sequence[str], out: str = "/dev/null", pad: int = 0) -> 
         ],
         capture_output=True,
         text=True,
+        encoding="locale",
         env=env,
         check=False,
     )
@@ -338,6 +341,7 @@ def cycles(
                     [*pin, *commands[name], "counters", shape, "auto", "8"],
                     capture_output=True,
                     text=True,
+                    encoding="locale",
                     env=perf_gate.workload_environment(os.environ),
                     check=False,
                 )
@@ -451,6 +455,7 @@ def _disassembly(binary: Path, addresses: Iterable[int]) -> dict[int, str]:
         ],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     ).stdout
     found = {}
@@ -466,6 +471,7 @@ def _source_line(binary: Path, address: int) -> str:
         ["addr2line", "-i", "-e", str(binary), hex(address)],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     ).stdout.splitlines()
     for frame in frames:

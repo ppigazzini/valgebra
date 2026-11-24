@@ -235,9 +235,9 @@ def test_the_reference_is_the_last_release() -> None:
     until the published wheel is read: the top two sections are the two it may be.
     """
     reference = json.loads(
-        (ROOT / "scripts" / "metamorphic_reference.json").read_text()
+        (ROOT / "scripts" / "metamorphic_reference.json").read_text(encoding="utf-8")
     )
-    changelog = (ROOT / "CHANGELOG.md").read_text()
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     released = re.findall(r"^## \[(\d+\.\d+\.\d+)\]", changelog, re.MULTILINE)
     assert reference["version"] in released[:2], (reference["version"], released[:2])
 
@@ -249,7 +249,9 @@ def test_the_corpus_imports_nothing_but_valgebra() -> None:
     The script reads no dependency, or that step ends "could not run", and the
     gate holding time and memory to the release never reads a thing.
     """
-    tree = ast.parse((ROOT / "scripts" / "metamorphic_gate.py").read_text())
+    tree = ast.parse(
+        (ROOT / "scripts" / "metamorphic_gate.py").read_text(encoding="utf-8")
+    )
     named = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

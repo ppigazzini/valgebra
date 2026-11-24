@@ -73,6 +73,7 @@ def test_a_subinterpreter_is_refused_and_the_main_one_answers(first: str) -> Non
         [sys.executable, "-c", _SUBINTERPRETER, first],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=60,
         check=False,
     )
@@ -105,6 +106,7 @@ def test_a_second_import_in_the_interpreter_that_loaded_it_works() -> None:
         [sys.executable, "-c", _AGAIN],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=60,
         check=False,
     )
@@ -155,6 +157,7 @@ def test_an_interpreter_with_no_subinterpreter_module_is_the_main_one(
         [sys.executable, "-c", _NO_PROBE, probe],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=60,
         check=False,
     )
@@ -215,7 +218,7 @@ def test_an_interpreter_started_again_refuses_the_import(tmp_path: Path) -> None
     assert found is not None
     compiler, libdir = found
     source = tmp_path / "embed.c"
-    source.write_text(_EMBEDDER)
+    source.write_text(_EMBEDDER, encoding="utf-8")
     program = tmp_path / "embed"
     version = sysconfig.get_config_var("LDVERSION") or sysconfig.get_python_version()
     subprocess.run(  # noqa: S603 -- the compiler the test found, its own source
@@ -244,6 +247,7 @@ def test_an_interpreter_started_again_refuses_the_import(tmp_path: Path) -> None
         [str(program)],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=60,
         check=False,
         env=environment,

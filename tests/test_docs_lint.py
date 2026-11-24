@@ -290,6 +290,7 @@ def test_the_shipped_tree_is_clean() -> None:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 0, result.stdout

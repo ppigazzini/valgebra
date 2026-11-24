@@ -44,6 +44,7 @@ def _tracked(*roots: str) -> set[str]:
         capture_output=True,
         check=True,
         text=True,
+        encoding="locale",
     )
     return {name for name in listing.stdout.split("\0") if name}
 

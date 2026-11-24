@@ -221,6 +221,7 @@ def _run(argv: list[str], **env: str) -> str:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
         env={**os.environ, **env},
     )

@@ -143,6 +143,7 @@ def _ask(version: str, program: str, *argv: str) -> dict[str, list[str]] | None:
             ],
             capture_output=True,
             text=True,
+            encoding="locale",
             check=False,
             timeout=300,
         )

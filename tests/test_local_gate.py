@@ -441,6 +441,7 @@ def test_the_gate_runs_in_a_shallow_clone_with_no_tags(tmp_path: Path) -> None:
         ["git", "-C", str(tree), "rev-list", "--count", "HEAD"],  # noqa: S607
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     )
     assert depth.stdout.strip() == "1", "the clone is not shallow"
@@ -448,6 +449,7 @@ def test_the_gate_runs_in_a_shallow_clone_with_no_tags(tmp_path: Path) -> None:
         ["git", "-C", str(tree), "tag", "--list"],  # noqa: S607
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     )
     assert tags.stdout.strip() == "", "the clone carries tags a checkout would not"
@@ -727,6 +729,7 @@ def test_the_floor_build_runs_a_second_time(tmp_path: Path) -> None:
             ],
             capture_output=True,
             text=True,
+            encoding="locale",
             check=False,
             cwd=ROOT,
         )
@@ -800,6 +803,7 @@ def test_the_instruction_gate_measures_against_an_ancestor(tmp_path: Path) -> No
             check=True,
             capture_output=True,
             text=True,
+            encoding="locale",
         )
         return done.stdout.strip()
 

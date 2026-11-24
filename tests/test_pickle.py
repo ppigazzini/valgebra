@@ -118,6 +118,7 @@ def test_the_error_crosses_a_real_process_boundary() -> None:
         [sys.executable, "-c", script, payload],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -145,6 +146,7 @@ def test_a_hand_built_error_crosses_the_same_boundary() -> None:
         [sys.executable, "-c", script, payload],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 0, result.stderr

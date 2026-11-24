@@ -84,7 +84,7 @@ uv run --no-sync python scripts/docs_lint.py
 uv run --no-sync maturin develop --uv   # after any Rust change
 uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
 uv run --no-sync ty check
-uv run --no-sync pytest
+uv run --no-sync python -X warn_default_encoding -m pytest
 ```
 
 **Every `uv run` carries `--no-sync`**, and [The gate](CONTRIBUTING.md#the-gate)
@@ -125,7 +125,7 @@ RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --document-p
 uv run --no-sync python scripts/docs_lint.py
 uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
 uv run --no-sync ty check
-uv run --no-sync pytest -n 8 -m "repository and not interpreter"
+uv run --no-sync python -X warn_default_encoding -m pytest -n 8 -m "repository and not interpreter"
 ```
 
 Beside them run the changed code's own tests, and after a change under `decision`

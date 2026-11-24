@@ -50,6 +50,7 @@ def _selected(profile: str) -> dict[str, object]:
         env=env,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     )
     return json.loads(out.stdout)

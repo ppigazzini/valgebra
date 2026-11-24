@@ -405,6 +405,7 @@ def _bash(script: str, cwd: Path, **variables: str) -> str:
         env={"PATH": os.environ.get("PATH", ""), **workflow, **variables},
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert done.returncode == 0, done.stderr
@@ -760,6 +761,7 @@ def _dispatch(tmp_path: Path, listed: str, dispatching: int) -> tuple[int, str]:
         },
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     written = outputs.read_text(encoding="utf-8") if outputs.exists() else ""

@@ -48,6 +48,7 @@ def _git(tree: Path, *args: str) -> str:
         ["git", "-C", str(tree), *args],  # noqa: S607
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
         env={**os.environ, **IDENTITY},
     ).stdout.strip()
@@ -66,6 +67,7 @@ def _base(
         cwd=checkout,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
         env={
             **os.environ,

@@ -309,7 +309,9 @@ def clone(command: list[str], what: str) -> None:
     was read, so the verdict is the rig's, which is exit code 2 and a sentence
     saying why rather than a traceback and 1.
     """
-    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    result = subprocess.run(
+        command, check=False, capture_output=True, text=True, encoding="locale"
+    )
     if result.returncode != 0:
         print(f"gate: {what} did not land, so the gate could not run:")
         print(result.stderr.rstrip())
@@ -647,6 +649,7 @@ def interpreter_env() -> dict[str, str]:
             ],
             capture_output=True,
             text=True,
+            encoding="locale",
             check=True,
         ).stdout.split()
     except (subprocess.CalledProcessError, OSError):

@@ -260,6 +260,7 @@ def test_a_signal_while_an_integer_keys_digits_are_read_is_raised() -> None:
         [sys.executable, "-c", script],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -549,6 +550,7 @@ def test_importing_valgebra_registers_no_module_for_its_error_hooks() -> None:
         ],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     )
     assert listing.stdout.strip() == "False"

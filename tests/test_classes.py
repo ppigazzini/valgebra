@@ -305,6 +305,7 @@ def test_a_class_that_is_no_dataclass_leaves_dataclasses_unimported() -> None:
         [sys.executable, "-I", "-c", program],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=120,
         check=False,
     )
@@ -1368,9 +1369,9 @@ def test_annotations_read_as_written_compile_as_the_evaluated_ones(
     and the first does not; the two must be one validator on every interpreter
     the matrix runs.
     """
-    (tmp_path / "hints_as_written.py").write_text(_HINT_FORMS)
+    (tmp_path / "hints_as_written.py").write_text(_HINT_FORMS, encoding="utf-8")
     (tmp_path / "hints_as_strings.py").write_text(
-        "from __future__ import annotations\n" + _HINT_FORMS
+        "from __future__ import annotations\n" + _HINT_FORMS, encoding="utf-8"
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     written = __import__("hints_as_written")
@@ -1859,6 +1860,7 @@ def test_the_class_alone_of_any_is_the_top_whatever_is_imported() -> None:
         [sys.executable, "-I", "-c", program],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=120,
         check=False,
     )

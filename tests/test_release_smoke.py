@@ -373,6 +373,7 @@ def test_the_artifact_step_refuses_a_wheel_no_container_loads(
         env=environment,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert ended.returncode == ends, ended.stdout + ended.stderr

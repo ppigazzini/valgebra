@@ -121,6 +121,7 @@ def _plant_git(tree: Path, *args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
+        encoding="locale",
         env={
             **os.environ,
             "GIT_AUTHOR_NAME": "plant",
@@ -1166,8 +1167,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            'uv run --no-sync pytest -m "not repository or interpreter"',
-            'uv run --no-sync pytest -m "not repository"',
+            '-m "not repository or interpreter"\n          --cov=valgebra',
+            '-m "not repository"\n          --cov=valgebra',
         ),
         trips=("test_the_floor_leg_reads_the_audit_and_every_leg_the_rest",),
     ),
@@ -2062,9 +2063,10 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "CONTRIBUTING.md",
-            "uv run --no-sync ty check\nuv run --no-sync pytest\n",
+            "uv run --no-sync ty check\n"
+            "uv run --no-sync python -X warn_default_encoding -m pytest\n",
             "uv run --no-sync ty check\nuv run --no-sync mypy\n"
-            "uv run --no-sync pytest\n",
+            "uv run --no-sync python -X warn_default_encoding -m pytest\n",
         ),
         trips=("test_the_agent_gate_is_the_contributor_gate",),
     ),
@@ -5843,6 +5845,7 @@ def _working_files() -> list[str]:
         capture_output=True,
         check=True,
         text=True,
+        encoding="locale",
     )
     return [name for name in listing.stdout.split("\0") if name]
 
@@ -5923,6 +5926,7 @@ def _status_paths(root: Path) -> set[str]:
         check=True,
         capture_output=True,
         text=True,
+        encoding="locale",
     ).stdout
     return {entry[3:] for entry in listing.split("\0") if entry}
 
@@ -6041,6 +6045,7 @@ def test_a_ledger_fails_on_the_defect_it_exists_to_catch(
             cwd=tree,
             capture_output=True,
             text=True,
+            encoding="locale",
             check=False,
             # No bytecode: two plants writing one file to the same length within
             # a second leave a cached module whose mtime and size both match,

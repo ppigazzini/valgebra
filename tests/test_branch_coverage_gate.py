@@ -85,6 +85,7 @@ def _run(args: Sequence[str]) -> subprocess.CompletedProcess[str]:
         [sys.executable, str(GATE), *args],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
 

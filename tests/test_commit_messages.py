@@ -52,6 +52,7 @@ def _git(*args: str) -> str:
         ["git", "-C", str(ROOT), *args],  # noqa: S607
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     ).stdout
 

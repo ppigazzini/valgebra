@@ -810,6 +810,7 @@ def test_a_wheel_takes_the_place_of_the_one_before(tmp_path: Path) -> None:
         ],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     )
     assert read.stdout.split() == ["2", "None"]
@@ -904,7 +905,7 @@ def _run_step(tree: Path, base_sha: str, branch: str) -> str:
     finds it on a runner.
     """
     lay_script("change_base", tree)
-    with tempfile.NamedTemporaryFile("w+", delete=False) as output:
+    with tempfile.NamedTemporaryFile("w+", encoding="utf-8", delete=False) as output:
         recorded = Path(output.name)
     try:
         result = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
@@ -912,6 +913,7 @@ def _run_step(tree: Path, base_sha: str, branch: str) -> str:
             cwd=tree,
             capture_output=True,
             text=True,
+            encoding="locale",
             check=False,
             env={
                 **os.environ,
@@ -938,6 +940,7 @@ def _git(tree: Path, *args: str) -> str:
         ["git", "-C", str(tree), *args],  # noqa: S607
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     ).stdout.strip()
 

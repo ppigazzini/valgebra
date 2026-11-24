@@ -56,6 +56,7 @@ def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each ca
         cwd=work,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
 
@@ -170,6 +171,7 @@ def test_an_empty_output_dir_refuses_to_pass(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     # A broken detector must not read as a clean tree, and must be
@@ -198,6 +200,7 @@ def test_a_missing_output_directory_is_could_not_run(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 2
@@ -217,6 +220,7 @@ def test_a_missing_baseline_is_could_not_run(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 2
@@ -270,6 +274,7 @@ def test_re_recording_keeps_the_reasons_beside_the_set(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 0

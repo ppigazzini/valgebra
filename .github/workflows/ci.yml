@@ -613,7 +613,8 @@ jobs:
         env:
           HYPOTHESIS_PROFILE: ci
         run: >-
-          uv run --no-sync pytest -m "not repository or interpreter"
+          uv run --no-sync python -X warn_default_encoding -m pytest
+          -m "not repository or interpreter"
           --cov=valgebra --cov-report=term-missing --durations=30
       # The audit runs on every core the runner has. Most of it is plants, each
       # a pytest run in a clone, and each worker clones once, so no two plants
@@ -624,7 +625,8 @@ jobs:
         env:
           HYPOTHESIS_PROFILE: ci
         run: >-
-          uv run --no-sync pytest -m "repository and not interpreter"
+          uv run --no-sync python -X warn_default_encoding -m pytest
+          -m "repository and not interpreter"
           -n auto --dist worksteal --durations=30
       # ruff and ty are static and pinned to a target version, so their result
       # does not depend on the runner's Python; run them once on the floor.

@@ -78,7 +78,7 @@ uv run --no-sync python scripts/docs_lint.py
 uv run --no-sync maturin develop --uv   # after any Rust change
 uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
 uv run --no-sync ty check
-uv run --no-sync pytest
+uv run --no-sync python -X warn_default_encoding -m pytest
 ```
 
 Every `uv run` after the sync carries `--no-sync`: a bare one re-syncs the

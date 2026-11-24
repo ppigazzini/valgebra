@@ -452,6 +452,7 @@ def test_a_signal_while_the_forms_are_first_read_is_raised_and_not_kept() -> Non
         [sys.executable, "-c", script],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -497,6 +498,7 @@ def test_a_signal_while_the_summary_renderer_is_built_is_raised() -> None:
         [sys.executable, "-c", script],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -834,6 +836,7 @@ def test_an_allocation_refused_inside_a_call_raises_memory_error(call: str) -> N
         [sys.executable, "-c", _REFUSING, call],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=120,
         check=False,
     )

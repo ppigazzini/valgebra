@@ -144,7 +144,9 @@ def _listed(out: Path, listing: str | None) -> list[str]:
     path = Path(listing)
     if not path.is_file():
         _cannot_run(f"{listing} is absent; list the sweep's mutants first")
-    return [ln.strip() for ln in path.read_text().splitlines() if ln.strip()]
+    return [
+        ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()
+    ]
 
 
 def _measured(out: Path, names: dict[str, str]) -> set[str]:

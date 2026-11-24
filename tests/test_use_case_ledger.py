@@ -437,6 +437,7 @@ def test_the_lane_prints_a_figure_for_each_product() -> None:
         [sys.executable, str(LEDGER)],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
         cwd=ROOT,
     ).stdout

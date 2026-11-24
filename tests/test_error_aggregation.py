@@ -139,6 +139,7 @@ def test_the_report_does_not_move_with_the_hash_seed() -> None:
             [sys.executable, "-c", program],
             capture_output=True,
             text=True,
+            encoding="locale",
             check=True,
             env={**os.environ, "PYTHONHASHSEED": seed},
         ).stdout

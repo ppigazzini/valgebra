@@ -71,6 +71,7 @@ def _tracked_pages() -> list[Path]:
         ["git", "-C", str(ROOT), "ls-files", "-z", "*.md"],  # noqa: S607
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     return [ROOT / name for name in listed.stdout.split("\0") if name]

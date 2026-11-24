@@ -86,6 +86,7 @@ def _manifests() -> set[str]:
         input="\n".join(sorted(found)),
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     return found - {

@@ -47,6 +47,7 @@ def test_importing_valgebra_pulls_in_almost_nothing() -> None:
         ],
         capture_output=True,
         text=True,
+        encoding="locale",
         check=True,
     )
     pulled = int(listing.stdout.strip())
@@ -68,6 +69,7 @@ def test_the_crate_and_the_package_agree_on_the_version() -> None:
             ["cargo", "metadata", "--no-deps", "--format-version", "1"],  # noqa: S607
             capture_output=True,
             text=True,
+            encoding="locale",
             check=True,
         ).stdout,
     )

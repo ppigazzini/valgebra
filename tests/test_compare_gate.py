@@ -155,6 +155,7 @@ def test_the_benchmarks_load_the_gate_where_they_run(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert done.returncode == 0, done.stderr

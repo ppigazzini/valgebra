@@ -773,6 +773,7 @@ def test_a_module_of_the_programs_own_under_a_standard_library_name_is_its_own(
         ],
         capture_output=True,
         text=True,
+        encoding="locale",
         timeout=120,
         check=False,
     )

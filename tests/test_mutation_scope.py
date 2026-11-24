@@ -122,6 +122,7 @@ def _every_mutant() -> list[str]:
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="locale",
         check=False,
     )
     assert listing.returncode == 0, listing.stderr
