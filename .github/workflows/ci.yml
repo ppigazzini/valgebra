@@ -63,7 +63,7 @@ env:
   # the monthly maintenance pass (Dependabot does not pin toolchains). The
   # scheduled libFuzzer soak stays on floating `nightly` so it still warns about
   # future nightly/fuzzer breakage.
-  FUZZ_NIGHTLY: nightly-2026-11-21
+  FUZZ_NIGHTLY: nightly-2026-11-24
   # The oldest release the package supports. The python matrix runs it as a
   # leg, and the steps that answer once for every release -- the linters, the
   # type checkers, the stub, the repository audit -- run on that leg and name
@@ -2805,7 +2805,7 @@ jobs:
         # addition to the static ones.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uvx zizmor==1.32.0 .github/
+        run: uvx zizmor==1.33.1 .github/
 
   actions-lock:
     name: actions lock
