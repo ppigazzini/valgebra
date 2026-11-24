@@ -1143,13 +1143,21 @@ perf gate's band.
 **On PyPy the walk asks PyPy's own probe**, because there the stack a C-API
 call may use is the interpreter's to size: `cpyext` sizes it by the recursion
 limit, and a call past it ends the process, since fetching the error it raised
-is such a call too. So `descend` asks `__pypy__.stack_almost_full` from a frame
-`ROOM_RESERVE` bytes below the walk, once the walk stands `ROOM_STEP` bytes
-deeper than where the probe last answered that there was room
-(`the_interpreter_has_room` in `check/ctx.rs`), and refuses at
-`recursion_limit` where PyPy has none: the reserve is the room a level's own
-Python -- a predicate, an `isinstance` hook, the explaining walk's rendering
--- runs and raises in. Siblings at one depth never ask. On CPython the probe
+is such a call too. So `descend` asks `__pypy__.stack_almost_full`, keeps
+`ROOM_RESERVE` bytes below the walk free for the frames of a level and the
+Python it runs -- a predicate, an `isinstance` hook, the explaining walk's
+rendering -- and for raising what that raises, and refuses at `recursion_limit`
+where PyPy has none (`the_interpreter_has_room` in `check/ctx.rs`). Siblings at
+one depth never ask. **A yes is worth a known number of bytes.** The check says
+yes while less than fifteen sixteenths of the stack is in use, and a recursion
+limit of N reserves N/1000 of 768 KB, so a yes leaves a sixteenth of that below
+the frame it was asked from, 48 KB at the default limit and 1.8 KB at 37. The
+walk spends three quarters of it before it asks again, and where a sixteenth is
+less than the reserve, proves the reserve by questions asked below itself, each
+half a sixteenth past the last answered frame (`asked_at`). It asks first once
+it is `ROOM_STEP` below its entry, and what a question calls is imported when
+the module loads, since an import is a question's deepest call.
+On CPython the probe
 compiles to nothing; before 3.14 and off musl the question asked there is the
 predicate's (above).
 `test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room` in

@@ -129,9 +129,8 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
     On PyPy the stack is also the interpreter's to size: PyPy lets its C-API
   calls use a stack it scales by the recursion limit, `sys.setrecursionlimit`
   included, and a call past it fails in a way PyPy cannot report, ending the
-  process. So on PyPy a level the walk opens a step deeper than before asks
-  PyPy's own check whether 12 KiB below it are still free, and where they are
-  not the walk refuses at `recursion_limit`, as at its bounds. Under the
+  process. So on PyPy the walk asks PyPy's own check, keeps 12 KiB below it
+  free, and where they are not refuses at `recursion_limit`, as at its bounds. Under the
   default limit the bounds come first. Under a limit lowered to a few hundred
   or below the walk can stop short of them, at a depth its own frames decide,
   so `is_valid` and the explaining `validate`, whose frames are larger, can

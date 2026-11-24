@@ -612,18 +612,26 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
     """On PyPy a deep walk under a lowered recursion limit answers.
 
     PyPy sizes the stack its C-API calls may use by the recursion limit, so
-    under a lowered one a walk reaches it before its own bounds, and a call
-    past it ended the process. The walk asks PyPy's stack check once a step
-    deeper (`ROOM_STEP`), from a frame `ROOM_RESERVE` bytes below it, and
-    refuses at `recursion_limit` where there is no room. In a child
-    interpreter under every limit from the limits page's floor of 37 to 64, and
-    under 200, a list nested five deep is still a member, one nested 1,600 deep
-    is not, and validating it raises an exception the caller catches: the
-    walk's `ValidationError`, or the `RecursionError` the explaining walk's
-    rendering raises. Explaining a JSON value twelve lists deep against a JSON
-    fixpoint finishes too. Every limit is asked because what runs out is a
-    stack the limit sizes, not a count it bounds, and a limit that ends the
-    process can sit between two that do not.
+    under a lowered one a walk reaches it before its own bounds, and a call past
+    it ended the process. The walk asks PyPy's stack check, spends the bytes a
+    yes leaves (`LEFT_PER_LIMIT`) and keeps `ROOM_RESERVE` of them below itself,
+    asking first once it is `ROOM_STEP` below its entry and descending to a
+    question below it a `ROOM_GRAIN` at a time; where there is no room it
+    refuses at `recursion_limit`.
+
+    In a child interpreter under every limit from the limits page's floor of 37
+    to 64, and under 200, a list nested five deep and a mapping nested twice are
+    still members, ones nested 1,600 deep are not, and validating those raises
+    an exception the caller catches: the walk's `ValidationError`, or the
+    `RecursionError` the explaining walk's rendering raises. How deep a shallow
+    mapping may go is the architecture's: at 37 x86-64 admits five levels and
+    aarch64 four. Explaining a JSON value twelve lists deep against a JSON
+    fixpoint finishes too.
+
+    The walks are run again from a caller already some calls deep, Python's and
+    C's, since what runs out is a stack the limit sizes and a question is safe
+    or not by where it lands: a walk that asked a reserve below its entry passed
+    from the top of a program and ended the process from eight calls down.
     """
     program = textwrap.dedent(
         """
@@ -631,13 +639,17 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
         from valgebra import ValidationError, Validator, recursive, union
 
         lists = Validator(recursive(lambda t: union(int, [t])))
+        maps = Validator(recursive(lambda t: union(int, {str: t})))
         json = Validator(
             recursive(lambda j: union(None, bool, int, str, float, [j], {str: j}))
         )
         value = 0
+        mapped = 0
         for _ in range(1600):
             value = [value]
+            mapped = {"k": mapped}
         shallow = [[[[[0]]]]]
+        shallow_map = {"k": {"k": 0}}
         nested = None
         for _ in range(12):
             nested = [nested]
@@ -647,11 +659,42 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
             lists.validate(value)
         except (ValidationError, RecursionError):
             print("raised")
+        print(maps.is_valid(shallow_map), maps.is_valid(mapped))
+        try:
+            maps.validate(mapped)
+        except (ValidationError, RecursionError):
+            print("raised")
         try:
             json.validate(nested)
         except (ValidationError, RecursionError):
             pass
         print("explained")
+
+        def walk():
+            for schema, deep in ((lists, value), (maps, mapped)):
+                assert schema.is_valid(deep) is False
+                try:
+                    schema.validate(deep)
+                except (ValidationError, RecursionError):
+                    pass
+            try:
+                json.validate(nested)
+            except (ValidationError, RecursionError):
+                pass
+
+        def from_python(calls):
+            return from_python(calls - 1) if calls else walk()
+
+        def from_c(calls):
+            return list(map(from_c, [calls - 1])) if calls else walk()
+
+        for calls in range(10):
+            for start in (from_python, from_c):
+                try:
+                    start(calls)
+                except RecursionError:
+                    pass
+        print("started")
         """
     )
     for limit in (*range(37, 65), 200):
@@ -665,7 +708,16 @@ def test_a_walk_under_a_lowered_recursion_limit_stops_where_pypy_has_room() -> N
         )
         why = (limit, result.stderr[-400:])
         assert result.returncode == 0, why
-        assert result.stdout.split() == ["True", "False", "raised", "explained"], why
+        assert result.stdout.split() == [
+            "True",
+            "False",
+            "raised",
+            "True",
+            "False",
+            "raised",
+            "explained",
+            "started",
+        ], why
 
 
 # BOUND: MAX_WALK_DEPTH

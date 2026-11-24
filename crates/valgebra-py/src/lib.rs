@@ -321,6 +321,8 @@ fn is_the_main_interpreter(py: Python<'_>) -> PyResult<bool> {
 fn extension_module(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
     the_main_interpreter_once(py)?;
+    #[cfg(PyPy)]
+    check::ctx::import_the_questions(py)?;
     // The distribution version, from the crate the wheel is built from.
     //
     // `importlib.metadata.version()` answers the same question and costs 20 ms
