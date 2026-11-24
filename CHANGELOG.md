@@ -25,6 +25,13 @@ membership moved and no decision of it slower, and the instruction gate's ten de
 count within 0.02% of the commit before. Windows arm64 gets the `cp311` wheel and the free-threaded
 `cp314t` and `cp315t` ones the classifiers name and earlier releases left out.
 
+PyPI's wheels for CPython 3.15 on Linux x86_64, read against 0.0.33's (release step 9, an AMD
+Ryzen 7 PRO 7840U), count the same instructions on every shape and walk two at another speed, by
+where each build places a kind's loop: `list[str]` and ten thousand distinct integers 18% slower
+in both of 0.0.34's environments, where a thousand integers read the same and 0.0.33's second
+environment reads each within 0.3%. Every other shape reads within 5%. CPython 3.11 to 3.14 were
+not read.
+
 ### Fixed
 
 - **An emptiness reads a meet's complements one at a time.** A meet holding the complements of two
