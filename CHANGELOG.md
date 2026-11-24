@@ -65,6 +65,12 @@ and the universe below its complement each declined. The metamorphic gate's corp
 0.0.32's recording does, no membership moved and no decision of it slower, and the instruction
 gate's eight core and decision workloads count within 0.1% of 0.0.32's.
 
+PyPI's wheels for CPython 3.15 on Linux x86_64, read against 0.0.32's (release step 9, an AMD
+Ryzen 7 PRO 7840U, read with 0.0.34's), count within 0.6% of 0.0.32's on every shape and walk four
+lists at another speed, by where each build places a kind's loop. Faster: `list[str]` by 27% and
+`list[float]` by 15%. Slower: `list[None]` by 31% and `list[int | str]` by 8%. Every other shape
+reads within 5%. CPython 3.11 to 3.14 were not read.
+
 ### Fixed
 
 - **An emptiness asks a meet's clauses once all else declines, as a relation does.** A meet
@@ -99,6 +105,13 @@ differential suite passes.
 Against 0.0.31 built here from its tag, the instruction gate's ten decision workloads count within
 1.1% of its instructions.
 
+
+PyPI's wheels for CPython 3.15 on Linux x86_64, read against 0.0.31's (release step 9, an AMD
+Ryzen 7 PRO 7840U, read with 0.0.34's), count within 0.6% of 0.0.31's on every shape and walk five
+lists at another speed, by where each build places a kind's loop. Slower: `list[str]` by 16% and
+`list[float]` by 19%. Faster: `list[None]` by 24%, ten thousand distinct integers by 15%, where a
+thousand read the same, and a list of numbers guarded as a JSON Schema translation writes them by
+5%. Every other shape reads within 5%. CPython 3.11 to 3.14 were not read.
 
 ### Added
 
