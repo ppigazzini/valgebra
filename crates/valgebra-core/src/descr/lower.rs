@@ -19,6 +19,7 @@ use super::classes::Class;
 use super::floats::FloatSet;
 use super::maps::{KEY_KINDS, Label};
 use super::regular::{Alphabet, RegularSet};
+use super::wide::WideInt;
 use super::{BoolSet, Descr, EVERY_PART, Parts, integers::IntSet, part};
 use crate::ir::{
     ClassIx, CollKind, ConstIx, Constraint, Field, MapClause, OperandIx, Polarity, Schema, SeqKind,
@@ -48,13 +49,13 @@ pub enum Operand {
     /// ceiling, one integer where it is whole, and the floats beside it, one
     /// float where it is one. Python compares an `int` and a `float` with each
     /// exactly, so a bound over the integers reads the first two, one over the
-    /// floats the last two, and nothing else reads it. The integers lie within
-    /// [`WIDE`] of zero.
+    /// floats the last two, and nothing else reads it. The integers take at
+    /// most [`WIDE_BITS`] bits.
     Rational {
         /// The greatest integer at or below the value.
-        floor: i128,
+        floor: WideInt,
         /// The least integer at or above the value.
-        ceil: i128,
+        ceil: WideInt,
         /// The greatest float at or below the value.
         below: f64,
         /// The least float at or above the value.
@@ -1776,15 +1777,16 @@ fn straddle(value: i64, lower: bool) -> Straddle {
 /// exactly, so such an operand is read as the integer on the near side of it,
 /// and then as an integer bound is: `n > x` is `n > floor(x)` and `n >= x` is
 /// `n >= ceil(x)`, so `n > 0.5` and `n > 0.0` are both `n >= 1`; the upper
-/// bounds mirror them. An infinite operand admits every integer or none, and
-/// `nan`, which orders nothing, declines, as does a bound past the range an
-/// integer here holds.
+/// bounds mirror them. The integer is held exactly at any width
+/// ([`WideInt`]), so `n <= 1e100` admits every integer up to the one `1e100`
+/// is. An infinite operand admits every integer or none, and `nan`, which
+/// orders nothing, declines, as does a bound past [`WIDE_BITS`].
 fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
     let lower = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
     let strict = matches!(constraint, Constraint::Gt(_) | Constraint::Lt(_));
-    let bound = match *operand {
-        Operand::Integer(value) => i128::from(value),
-        Operand::Boolean(value) => i128::from(value),
+    let bound = match operand {
+        Operand::Integer(value) => WideInt::from(*value),
+        Operand::Boolean(value) => WideInt::from(*value),
         Operand::Float(value) if value.is_infinite() => {
             return Some(if value.is_sign_positive() == lower {
                 IntSet::empty()
@@ -1792,39 +1794,29 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
                 IntSet::all()
             });
         }
-        Operand::Float(value) => {
-            let near = if lower == strict {
-                value.floor()
-            } else {
-                value.ceil()
-            };
-            if !(-WIDE_EDGE..=WIDE_EDGE).contains(&near) {
-                return None;
-            }
-            #[expect(
-                clippy::cast_possible_truncation,
-                reason = "an integral float within 2^120 of zero converts exactly"
-            )]
-            let near = near as i128;
-            near
-        }
+        // `nan` is no integer, and declines here.
+        Operand::Float(value) => WideInt::from_float(if lower == strict {
+            value.floor()
+        } else {
+            value.ceil()
+        })?,
         Operand::Rational { floor, ceil, .. } => {
             if lower == strict {
-                floor
+                floor.clone()
             } else {
-                ceil
+                ceil.clone()
             }
         }
         _ => return None,
     };
-    if !(-WIDE..=WIDE).contains(&bound) {
+    if bound.bits() > WIDE_BITS {
         return None;
     }
     Some(match (lower, strict) {
         (true, false) => IntSet::between(Some(bound), None),
-        (true, true) => IntSet::between(Some(bound.checked_add(1)?), None),
+        (true, true) => IntSet::between(Some(bound.succ()), None),
         (false, false) => IntSet::between(None, Some(bound)),
-        (false, true) => IntSet::between(None, Some(bound.checked_sub(1)?)),
+        (false, true) => IntSet::between(None, Some(bound.pred())),
     })
 }
 
@@ -1832,16 +1824,13 @@ fn integer_bound(constraint: &Constraint, operand: &Operand) -> Option<IntSet> {
 /// least one it holds. `nan` is inside no range, so it declines here too.
 const I64_EDGE: f64 = 9_223_372_036_854_775_808.0;
 
-/// The magnitude an integer bound may reach, `2^120`.
+/// The bits an integer bound's magnitude may take.
 ///
-/// It holds every bound JSON Schema's 64-bit limits write, and a span holds it
-/// with room to spare, since a residue table shifts a bound by a step and a
-/// complement by one. A bound past it declines, as an integer is unbounded and
-/// the carrier is not.
-pub const WIDE: i128 = 1 << 120;
-
-/// [`WIDE`] as a float, which holds it exactly.
-const WIDE_EDGE: f64 = 1_329_227_995_784_915_872_903_807_060_280_344_576.0;
+/// Every finite float's integer takes at most 1024, so a bound written as a
+/// float is never past it. An `int`, a `Fraction` or a `Decimal` past it
+/// declines, so that a bound of a million digits builds no integer of a million
+/// digits.
+pub const WIDE_BITS: u64 = 1024;
 
 /// The floats a comparison bound admits, for a base that is the floats.
 ///

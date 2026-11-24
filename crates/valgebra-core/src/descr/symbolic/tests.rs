@@ -2,6 +2,7 @@ use super::{Edge, Guard, MAX_EDGES, MAX_ROW, MAX_STATES, SymbolicDfa};
 use crate::descr::automaton::refine;
 use crate::descr::integers::IntSet;
 use crate::descr::lattice_tests::Algebra;
+use crate::descr::wide::WideInt;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
 
@@ -88,9 +89,9 @@ fn guards() -> Vec<IntSet> {
     vec![
         IntSet::just(0),
         IntSet::just(1),
-        IntSet::between(Some(0), Some(1)),
-        IntSet::between(Some(2), None),
-        IntSet::between(None, Some(1)),
+        IntSet::between(Some(WideInt::Small(0)), Some(WideInt::Small(1))),
+        IntSet::between(Some(WideInt::Small(2)), None),
+        IntSet::between(None, Some(WideInt::Small(1))),
     ]
 }
 
@@ -339,7 +340,7 @@ fn table() -> impl Strategy<Value = SymbolicDfa<IntSet>> {
                 let letters = [
                     (IntSet::just(0), zero),
                     (IntSet::just(1), one),
-                    (IntSet::between(Some(2), None), two_up),
+                    (IntSet::between(Some(WideInt::Small(2)), None), two_up),
                 ];
                 let mut row: Vec<Edge<IntSet>> = letters
                     .into_iter()
@@ -501,7 +502,7 @@ fn a_union_of_fixed_sequences_joins_their_element_sets() {
 #[test]
 fn two_letters_into_one_block_join_in_the_signature() {
     let edge = |guard: Option<IntSet>, target| Edge { guard, target };
-    let zero_or_one = IntSet::between(Some(0), Some(1));
+    let zero_or_one = IntSet::between(Some(WideInt::Small(0)), Some(WideInt::Small(1)));
     // `list[0 | 1]`, with the first letter split across two equal states.
     let table = SymbolicDfa {
         edges: vec![
@@ -551,7 +552,7 @@ fn a_product_past_the_row_bound_refuses() {
         edges: vec![
             (0..count)
                 .map(|n| Edge {
-                    guard: Some(IntSet::between(Some(i128::from(-n)), None)),
+                    guard: Some(IntSet::between(Some(WideInt::Small(i128::from(-n))), None)),
                     target: 0,
                 })
                 .collect(),
@@ -595,7 +596,7 @@ fn a_product_past_the_edge_bound_refuses() {
                 (0..WIDTH)
                     .map(|n| Edge {
                         guard: Some(IntSet::between(
-                            Some(i128::from(-i64::try_from(n).unwrap_or(0))),
+                            Some(WideInt::Small(i128::from(-i64::try_from(n).unwrap_or(0)))),
                             None,
                         )),
                         target: next,
@@ -675,8 +676,8 @@ fn two_states_reaching_one_block_by_different_letters_stay_apart() {
 /// decided here because the component is closed under complement.
 #[test]
 fn the_declined_sequence_relations_are_decided() {
-    let ints = IntSet::between(Some(0), None);
-    let strs = IntSet::between(None, Some(-1));
+    let ints = IntSet::between(Some(WideInt::Small(0)), None);
+    let strs = IntSet::between(None, Some(WideInt::Small(-1)));
     let bools = IntSet::just(0);
 
     // A meet of two element-disjoint lists is the empty list alone, which
@@ -969,8 +970,8 @@ fn a_chain_with_an_undecided_letter_is_left_to_the_merge() {
 /// takes nothing.
 #[test]
 fn a_row_whose_guards_cover_is_rebuilt_as_it_stands() {
-    let low = shape(&[], Some(&IntSet::between(None, Some(1))));
-    let high = shape(&[], Some(&IntSet::between(Some(2), None)));
+    let low = shape(&[], Some(&IntSet::between(None, Some(WideInt::Small(1)))));
+    let high = shape(&[], Some(&IntSet::between(Some(WideInt::Small(2)), None)));
     let either = low.union(&high).expect("a small union");
     let all = SymbolicDfa::all();
     assert_eq!(either.intersect(&all), either.product(&all, |p, q| p && q));

@@ -36,6 +36,7 @@ use std::sync::Arc;
 use super::polar::{PolarUnion, Summand};
 use super::symbolic::Guard;
 use super::values::Values;
+use super::wide::WideInt;
 use super::{Component, Descr, Whole};
 use crate::kind::Kind;
 use crate::verdict::Verdict;
@@ -366,7 +367,7 @@ impl Members for Arc<Descr> {
         let collide = |a: &[(Kind, Number)], b: &[(Kind, Number)]| {
             a.iter().any(|(kind, number)| {
                 b.iter()
-                    .any(|(other_kind, other)| kind != other_kind && number.equals(*other))
+                    .any(|(other_kind, other)| kind != other_kind && number.equals(other))
             })
         };
         let apart = few.iter().enumerate().all(|(i, mine)| {
@@ -384,10 +385,10 @@ impl Members for Arc<Descr> {
 }
 
 /// A number as `==` reads it across the three kinds that hold one.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Number {
-    /// A `bool` or an `int`.
-    Integral(i128),
+    /// A `bool` or an `int`, at any width.
+    Integral(WideInt),
     /// A `float`, never `nan`.
     Float(f64),
 }
@@ -395,20 +396,12 @@ enum Number {
 impl Number {
     /// Whether the two are equal under `==`, which compares an `int` and a
     /// `float` exactly rather than after rounding one to the other.
-    fn equals(self, other: Number) -> bool {
+    fn equals(&self, other: &Number) -> bool {
         match (self, other) {
             (Number::Integral(a), Number::Integral(b)) => a == b,
-            (Number::Float(a), Number::Float(b)) => a.total_cmp(&b).is_eq(),
+            (Number::Float(a), Number::Float(b)) => a.total_cmp(b).is_eq(),
             (Number::Integral(whole), Number::Float(float))
-            | (Number::Float(float), Number::Integral(whole)) => {
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    reason = "an integral float converts exactly; one past the range saturates \
-                              to a value no bound reaches"
-                )]
-                let round_trip = float as i128;
-                float.trunc().total_cmp(&float).is_eq() && round_trip == whole
-            }
+            | (Number::Float(float), Number::Integral(whole)) => whole.equals_float(*float),
         }
     }
 }
@@ -460,7 +453,7 @@ fn numbers_offered(set: &Descr, serving: usize) -> Offer {
                     [false, true]
                         .into_iter()
                         .filter(|flag| flags.holds(*flag))
-                        .map(|flag| (kind, Number::Integral(i128::from(flag)))),
+                        .map(|flag| (kind, Number::Integral(WideInt::from(flag)))),
                 ),
                 Component::Integers(integers) => match integers.values_up_to(serving) {
                     Some(values) => {

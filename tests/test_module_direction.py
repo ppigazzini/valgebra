@@ -127,6 +127,7 @@ _KERNELS = (
     "polar.rs",
     "symbolic.rs",
     "values.rs",
+    "wide.rs",
 )
 #: What a line of code names when it reads Python's values: the node set, the
 #: partition, the host's questions and the class snapshot.

@@ -10,6 +10,7 @@ use crate::descr::lattice_tests::Algebra;
 use crate::descr::polar::PolarUnion;
 use crate::descr::regular::{Alphabet, RegularSet};
 use crate::descr::values::{Field, Values};
+use crate::descr::wide::WideInt;
 use crate::kind::Kind;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
@@ -577,7 +578,7 @@ fn an_optional_boolean_key_leaves_the_integer_key_alone() {
 /// width of the widest intermediate.
 #[test]
 fn a_meet_with_a_negated_union_answers_as_the_spelled_out_meet() {
-    let two = IntSet::between(Some(1), Some(2));
+    let two = IntSet::between(Some(WideInt::Small(1)), Some(WideInt::Small(2)));
     let closed = |labels: Vec<(Label, IntSet, bool)>| {
         MapLattice::record(labels, []).expect("a two-field record")
     };

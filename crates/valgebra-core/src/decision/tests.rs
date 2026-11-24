@@ -561,8 +561,8 @@ fn a_float_refinement_holds_a_value_the_rules_read_at_its_edges() {
     impl Constants for Wide {
         fn operand(&self, index: OperandIx) -> Option<Operand> {
             (index.get() == 0).then_some(Operand::Rational {
-                floor: 0,
-                ceil: 1,
+                floor: crate::descr::wide::WideInt::Small(0),
+                ceil: crate::descr::wide::WideInt::Small(1),
                 below: 0.3125,
                 above: 0.3125,
             })
@@ -17132,8 +17132,8 @@ impl Constants for Steps {
         match index.get() {
             0 => Some(Operand::Float(0.5)),
             1 => Some(Operand::Rational {
-                floor: 2,
-                ceil: 3,
+                floor: crate::descr::wide::WideInt::Small(2),
+                ceil: crate::descr::wide::WideInt::Small(3),
                 below: 2.5,
                 above: 2.5,
             }),

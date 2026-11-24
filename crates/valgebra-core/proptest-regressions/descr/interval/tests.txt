@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 615500382b83a3af03c8cae876c20b9b742ff63454dc23d0241b03bd2cdf36d4 # shrinks to a = IntervalSet { spans: Narrow([Narrow { lo: Some(0), hi: Some(0) }]) }, b = IntervalSet { spans: Narrow([]) }
+cc 0a11488a02a6928f44bc553e9ea57f063332916921c46765e993512ed2cb8283 # shrinks to a = IntervalSet { spans: Narrow([Narrow { lo: Some(0), hi: Some(0) }]) }, b = IntervalSet { spans: Narrow([]) }, offset = 0, stride = 1
+cc ca5c8757fe6239301aed0120da778fd8b9ef95f7772d054cb263878a0a19a3cf # shrinks to a = IntervalSet { spans: Narrow([Narrow { lo: None, hi: Some(0) }, Narrow { lo: Some(3), hi: None }]) }, offset = 0, stride = 2
+cc 8f1e47c1372fa25230fc938048233f68142dd0353e613854cc2b73ca6a751639 # shrinks to a = IntervalSet { spans: Narrow([Narrow { lo: Some(2), hi: None }]) }, b = IntervalSet { spans: Narrow([Narrow { lo: None, hi: Some(0) }]) }, far = 1606938044258990275541962092341162602522202993782792835301376, stride = 1

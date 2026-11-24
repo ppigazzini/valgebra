@@ -356,7 +356,7 @@ two kinds that hold their values alike share one:
 | Component | Serves | Representation | Module |
 |---|---|---|---|
 | `Booleans` | `bool` | a two-bit subset, which is exact for a kind with two values | `descr/mod.rs` |
-| `Integers` | `int` | eventually periodic sets: an interval set per residue class, which is what holds a bound, a point *and* a step | `descr/integers.rs` |
+| `Integers` | `int` | eventually periodic sets: an interval set per residue class, which is what holds a bound, a point *and* a step; a set's ends are `i128`s where every one fits and exact integers of any width where one does not, one form a set | `descr/integers.rs`, `descr/interval.rs` |
 | `Floats` | `float` | closed intervals of floats, an open end held as its neighboring float, per residue of a whole step where one split the line and beside the floats no step holds, plus a bit for `nan`, which sits outside the order | `descr/floats.rs` |
 | `Words` | `str`, `bytes` | a minimal deterministic automaton, canonically numbered, so two spellings of one language are one table | `descr/regular.rs` |
 | `Sequences` | `list`, `tuple` | an automaton whose transitions are guarded by value sets -- the letters are descriptors, so the component recurses through the automaton's *states* | `descr/symbolic.rs` |

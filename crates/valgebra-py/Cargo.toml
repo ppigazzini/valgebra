@@ -24,7 +24,10 @@ pyo3-build-config = "0.29"
 # Linux but breaks `cargo test`/`cargo build` on macOS and Windows, whose
 # linkers reject undefined symbols. Omitting it lets non-maturin builds link
 # libpython normally.
-pyo3 = { workspace = true }
+# `num-bigint` reads an `int` past `i128` as the integer it is, which a bound
+# that wide lowers to (`oracle.rs`); `jiter` builds the same crate already.
+pyo3 = { workspace = true, features = ["num-bigint"] }
+num-bigint = { workspace = true }
 valgebra-core = { workspace = true }
 # JSON ingestion on the Rust path: jiter parses straight into Python objects,
 # faster than the stdlib json module, and the parsed value runs the same

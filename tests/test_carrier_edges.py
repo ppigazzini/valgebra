@@ -1,8 +1,8 @@
 """What the numeric carriers can spell, and what they decline at the edge.
 
 A relation between two schemas is decided on the *sets* they denote, and the
-integer component spells a set as intervals whose bounds lie within `2**120` of
-zero, with a residue class per step. Python's integers are unbounded and the
+integer component spells a set as intervals whose bounds take at most 1024 bits,
+with a residue class per step. Python's integers are unbounded and the
 carrier is not, so a bound the carrier cannot name is a bound the relation
 declines -- which is deviation 11 of the theory ledger, and it is sound: a
 decline is "not proven", never a wrong proof.
@@ -24,12 +24,13 @@ wrong answer would not see it.
 from __future__ import annotations
 
 import math
+import sys
 from typing import Annotated
 
 import annotated_types as at
 import pytest
 
-from valgebra import Validator, complement, intersection
+from valgebra import Validator, complement, intersection, union
 
 # The ends of the integer carrier, and the values just outside them.
 I64_MIN = -(2**63)
@@ -93,14 +94,15 @@ def test_a_strict_bound_at_the_end_names_a_set_the_carrier_spells() -> None:
     assert Validator(int).relation_to(Annotated[int, at.Lt(I64_MAX)]) == "not_subset"
 
 
+# BOUND: WIDE_BITS
 def test_a_bound_past_the_carrier_declines() -> None:
     """Deviation 11 as the page states it, with the queries it names."""
-    wide = Annotated[int, at.Ge(2**121)]
-    wider = Annotated[int, at.Ge(2**121 + 1)]
+    wide = Annotated[int, at.Ge(2**1025)]
+    wider = Annotated[int, at.Ge(2**1025 + 1)]
     assert Validator(wide).relation_to(wider) == "undecided"
     # The schema still validates exactly: membership reads the Python integer.
-    assert Validator(wide).is_valid(2**121) is True
-    assert Validator(wide).is_valid(2**121 - 1) is False
+    assert Validator(wide).is_valid(2**1025) is True
+    assert Validator(wide).is_valid(2**1025 - 1) is False
 
 
 def test_a_bound_past_64_bits_is_decided_by_a_value_between() -> None:
@@ -119,6 +121,75 @@ def test_a_bound_past_64_bits_is_decided_by_a_value_between() -> None:
     wide = Annotated[int, at.Ge(2**70)]
     assert Validator(wide).relation_to(Annotated[int, at.Ge(2**70 + 1)]) == (
         "not_subset"
+    )
+
+
+# BOUND: WIDE_BITS
+# THEORY: the-carriers-are-i64-and-f64
+def test_a_bound_within_1024_bits_is_decided_by_a_value_between() -> None:
+    """A bound past `i128` is held exactly, as wide as the number it is written with.
+
+    `Ge(2**121)` against `Ge(2**121 + 1)` is refuted on `2**121`, an interval
+    end past what an `i128` holds, and the subject the item's pair names,
+    `[2**120, 2**120 + 1]`, is refuted below `[0, 10]`. A float bound is an
+    integer past `2**53`: every integer up to the one `1e100` is is below
+    `Le(1e100)`, and the next is not. A bound of 1024 bits is the last one held.
+    """
+    wide = Annotated[int, at.Ge(2**121)]
+    assert (
+        Validator(wide).relation_to(Annotated[int, at.Ge(2**121 + 1)]) == "not_subset"
+    )
+    assert (
+        Validator(Annotated[int, at.Ge(2**120), at.Le(2**120 + 1)]).relation_to(
+            Annotated[int, at.Ge(0), at.Le(10)]
+        )
+        == "not_subset"
+    )
+    edge = int(1e100)
+    up_to = Annotated[int, at.Le(1e100)]
+    assert (
+        Validator(Annotated[int, at.Ge(edge), at.Le(edge)]).relation_to(up_to)
+        == "subset"
+    )
+    after = Annotated[int, at.Ge(edge + 1), at.Le(edge + 1)]
+    assert Validator(after).relation_to(up_to) == "not_subset"
+    last = Annotated[int, at.Ge(2**1024 - 2)]
+    assert (
+        Validator(last).relation_to(Annotated[int, at.Ge(2**1024 - 1)]) == "not_subset"
+    )
+
+
+@pytest.mark.parametrize(
+    "maximum",
+    [2**64, 2**121, 1e100, sys.float_info.max],
+    ids=["2**64", "2**121", "1e100", "max"],
+)
+def test_a_number_bounded_past_2_to_the_120_is_its_two_kinds(maximum: float) -> None:
+    """A number spelled as its two kinds is the native one, at any bound a float writes.
+
+    A JSON Schema compiler writes `{"type": "number", "minimum": 0, "maximum": M}`
+    as a meet of the two kinds' bounds beside the kind guard. Its integers end at
+    the integer `M` is, held exactly, so the meet is below the native union of
+    the two bounded kinds and the native union below it; and a float below
+    infinity is below a maximum at the largest float, as one at most the largest
+    float is.
+    """
+    inf = math.inf
+    written = intersection(
+        Annotated[float, at.Ge(0)] | Annotated[int, at.Ge(0)],
+        Annotated[float, at.Le(maximum)] | Annotated[int, at.Le(maximum)],
+        int | Annotated[float, at.Ge(-inf)],
+        complement(bool),
+    )
+    native = union(
+        Annotated[float, at.Ge(0), at.Le(maximum)],
+        intersection(Annotated[int, at.Ge(0), at.Le(maximum)], complement(bool)),
+    )
+    assert Validator(written).relation_to(native) == "subset"
+    assert Validator(native).relation_to(written) == "subset"
+    below = "subset" if maximum == sys.float_info.max else "not_subset"
+    assert (
+        Validator(Annotated[float, at.Ge(0), at.Lt(inf)]).relation_to(written) == below
     )
 
 
@@ -141,11 +212,11 @@ def test_a_bound_past_the_carrier_is_proved_by_the_order() -> None:
     A contradiction is decided the same way, because two bounds that cross
     cross wherever they are written.
     """
-    wide = Annotated[int, at.Ge(2**121)]
-    wider = Annotated[int, at.Ge(2**121 + 1)]
+    wide = Annotated[int, at.Ge(2**1025)]
+    wider = Annotated[int, at.Ge(2**1025 + 1)]
     # The proof runs in the direction the order gives, at any size.
     assert Validator(wider).relation_to(wide) == "subset"
-    assert Validator(wide).relation_to(Annotated[int, at.Ge(2**120)]) == "subset"
+    assert Validator(wide).relation_to(Annotated[int, at.Ge(2**1024)]) == "subset"
     assert (
         Validator(Annotated[int, at.Ge(I64_MAX + 1)]).relation_to(
             Annotated[int, at.Ge(I64_MAX)]
@@ -162,10 +233,12 @@ def test_a_bound_past_the_carrier_is_proved_by_the_order() -> None:
     # where no value the subject's spelling guesses is one of it: `0` refutes
     # `Ge(0)` below the wide bound, and no guess is a member past the carrier.
     assert Validator(Annotated[int, at.Ge(0)]).relation_to(wide) == "not_subset"
-    assert Validator(Annotated[int, at.Ge(2**121 - 5)]).relation_to(wide) == "undecided"
+    assert (
+        Validator(Annotated[int, at.Ge(2**1025 - 5)]).relation_to(wide) == "undecided"
+    )
     assert Validator(wide).relation_to(wider) == "undecided"
     # A pair that cannot hold together holds nothing, however large the bounds.
-    assert Validator(Annotated[int, at.Gt(2**121), at.Lt(2**121 + 1)]).is_empty()
+    assert Validator(Annotated[int, at.Gt(2**1025), at.Lt(2**1025 + 1)]).is_empty()
 
 
 def test_a_step_no_machine_word_holds_the_magnitude_of_is_not_zero_alone() -> None:

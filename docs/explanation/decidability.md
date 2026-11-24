@@ -1332,16 +1332,18 @@ the shape. What is left below is what the descriptor cannot hold.
   integers, or two number kinds with other numbers to choose, as
   `frozenset[int | float]` against the frozensets of each -- are refuted.
 
-- **An integer bound past 120 bits.** The integer component carries its bounds
-  within `2**120` of zero, which holds every 64-bit limit a JSON generator writes,
-  `2**63` as JavaScript prints it and the largest unsigned one included, so
-  `Ge(2**70)` against `Ge(2**70 + 1)` is refuted on `2**70`. Past it a bound
-  declines: the schema validates exactly -- membership reads the Python integer
-  -- and `Ge(2**121)` against `Ge(2**121 + 1)` is `undecided` in the direction a
-  value refutes, and `subset` in the direction the carrier proves. Python's
-  integers are unbounded and the carrier is not, which is a property of the
-  representation rather than of the schema. A constant, a key and a step are
-  still read as an `i64`.
+- **An integer bound past 1024 bits.** The integer component holds a bound exactly
+  at up to 1024 bits, which holds every bound a float writes, `1e100` and the
+  largest float among them, and every 64-bit limit a JSON generator writes, so
+  `Ge(2**121)` against `Ge(2**121 + 1)` is refuted on `2**121`, and an `int`
+  bounded at `1e100` is below a `number` bounded there. Past it a bound declines,
+  so that a bound of a million digits builds no integer of a million digits: the
+  schema validates exactly -- membership reads the Python integer -- and
+  `Ge(2**1025)` against `Ge(2**1025 + 1)` is `undecided` in the direction a value
+  refutes, and `subset` in the direction the carrier proves. Python's integers are
+  unbounded and the carrier is not, which is a property of the representation
+  rather than of the schema. A constant, a key and a step are still read as an
+  `i64`.
 
 - **A length past the one every interpreter builds.** A container holds its
   items in one allocation, which the allocator refuses past `sys.maxsize`

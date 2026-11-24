@@ -17,6 +17,7 @@
 use std::cell::{Cell, RefCell};
 use std::sync::{Arc, Mutex};
 
+use num_bigint::BigInt;
 use pyo3::PyTypeInfo;
 use pyo3::exceptions::PyBaseException;
 use pyo3::intern;
@@ -28,7 +29,8 @@ use pyo3::types::{
 };
 use rustc_hash::FxHashMap;
 use valgebra_core::descr::classes::{Attributes, Class, Hook, Member, Namespace, Reach};
-use valgebra_core::descr::lower::{Constants, Operand, WIDE};
+use valgebra_core::descr::lower::{Constants, Operand, WIDE_BITS};
+use valgebra_core::descr::wide::WideInt;
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 
 use crate::check::{
@@ -1851,9 +1853,9 @@ impl<'py> PoolRelations<'py, '_> {
     /// exact `int` past the range an `i64` holds, as the integers at its floor
     /// and at its ceiling and the floats beside it: Python compares an `int` and
     /// a `float` with each exactly, so a bound reads what its base holds. One
-    /// with no finite value, or past [`WIDE`] of zero, is not read. The range is
-    /// asked by comparison first, so a `Decimal` with a vast exponent is never
-    /// made an `int`.
+    /// with no finite value, or past `2 ** WIDE_BITS` of zero ([`WIDE_BITS`]),
+    /// is not read. The range is asked by comparison first, so a `Decimal` with
+    /// a vast exponent is never made an `int`.
     ///
     /// The float is the nearest one, and comparing it with the value says which
     /// side it landed on. So a value below the smallest float is read beside
@@ -1870,17 +1872,43 @@ impl<'py> PoolRelations<'py, '_> {
             let float = PyFloat::new(self.py, number).into_any();
             self.heard(as_the_walk_orders(&float, value))
         };
-        if !self.heard(value.ge(-WIDE))? {
+        // Within `2 ** WIDE_BITS` of zero, so its integers take at most that
+        // many bits, as the core holds them.
+        let wide = BigInt::from(1) << WIDE_BITS;
+        if !self.heard(value.gt(-wide.clone()))? {
             return None;
         }
-        if !self.heard(value.le(WIDE))? {
+        if !self.heard(value.lt(wide))? {
             return None;
         }
+        // An integer `i128` holds is read as one, and only one past it as a
+        // `BigInt`, the form `WideInt` keeps.
         let at = |method| {
-            self.heard(value.call_method0(method))?
-                .extract::<i128>()
-                .ok()
+            let whole = self.heard(value.call_method0(method))?;
+            match whole.extract::<i128>() {
+                Ok(small) => Some(WideInt::Small(small)),
+                Err(_) => whole.extract::<BigInt>().ok().map(WideInt::from_big),
+            }
         };
+        // Past the largest float, the floats beside a value are the largest
+        // and the infinity, and `float()` of it overflows rather than naming
+        // them: asked by comparison, so an `int` of 1024 bits is read too.
+        if self.heard(value.gt(beside(f64::MAX)?))? {
+            return Some(Operand::Rational {
+                floor: at(intern!(self.py, "__floor__"))?,
+                ceil: at(intern!(self.py, "__ceil__"))?,
+                below: f64::MAX,
+                above: f64::INFINITY,
+            });
+        }
+        if self.heard(value.lt(beside(f64::MIN)?))? {
+            return Some(Operand::Rational {
+                floor: at(intern!(self.py, "__floor__"))?,
+                ceil: at(intern!(self.py, "__ceil__"))?,
+                below: f64::NEG_INFINITY,
+                above: f64::MIN,
+            });
+        }
         let nearest = self
             .heard(value.call_method0(intern!(self.py, "__float__")))?
             .extract::<f64>()

@@ -26,6 +26,7 @@ use rusty_fork::rusty_fork_test;
 
 use super::*;
 use crate::validator::Validator;
+use valgebra_core::descr::wide::WideInt;
 
 /// A validator holding `literals` as its pool, for an oracle to read.
 fn pooled(literals: Vec<Py<PyAny>>) -> Validator {
@@ -323,9 +324,10 @@ fn a_literal_of_no_kind_has_neither_a_scalar_nor_a_container_type() {
 fn an_operand_reports_the_kind_its_value_has() {
     // `operand_kind` reads a bound or a step as `literal_kind` reads a
     // constant, and at any size: an `int` past the machine word is an `int`,
-    // which the pooled operand carries as a bound's integers within `2**120`
-    // and not past it. A number of no builtin kind declines, which is what keeps
-    // two steps apart that `%` reads apart.
+    // which the pooled operand carries as a bound's integers within `2**1024`,
+    // as a machine integer within `i128` and a wide one past it, and not past
+    // `2**1024`. A number of no builtin kind declines, which is what keeps two
+    // steps apart that `%` reads apart.
     Python::attach(|py| {
         let values = vec![
             true.into_pyobject(py)
@@ -338,6 +340,10 @@ fn an_operand_reports_the_kind_its_value_has() {
             built(py, "2**70").unbind(),
             built(py, "__import__('fractions').Fraction(1, 2)").unbind(),
             built(py, "2**121").unbind(),
+            built(py, "2**200").unbind(),
+            built(py, "2**1024").unbind(),
+            built(py, "2**1024 - 1").unbind(),
+            built(py, "-(2**1024 - 1)").unbind(),
         ];
         asking(py, values, |oracle| {
             let kind = |slot| oracle.operand_kind(OperandIx::new(slot));
@@ -349,15 +355,63 @@ fn an_operand_reports_the_kind_its_value_has() {
             assert_eq!(
                 oracle.operand(OperandIx::new(3)),
                 Some(Operand::Rational {
-                    floor: 1 << 70,
-                    ceil: 1 << 70,
+                    floor: WideInt::Small(1 << 70),
+                    ceil: WideInt::Small(1 << 70),
                     below: wide,
                     above: wide,
                 }),
                 "past the word, as a bound reads it"
             );
             assert_eq!(kind(5), Some(Kind::Int));
-            assert_eq!(oracle.operand(OperandIx::new(5)), None, "past 2**120");
+            let at = 2.0_f64.powi(121);
+            assert_eq!(
+                oracle.operand(OperandIx::new(5)),
+                Some(Operand::Rational {
+                    floor: WideInt::Small(1 << 121),
+                    ceil: WideInt::Small(1 << 121),
+                    below: at,
+                    above: at,
+                }),
+                "past 2**120, within i128"
+            );
+            let past: num_bigint::BigInt = num_bigint::BigInt::from(1) << 200;
+            let at = 2.0_f64.powi(200);
+            assert_eq!(
+                oracle.operand(OperandIx::new(6)),
+                Some(Operand::Rational {
+                    floor: WideInt::from_big(past.clone()),
+                    ceil: WideInt::from_big(past),
+                    below: at,
+                    above: at,
+                }),
+                "past i128, as a wide integer"
+            );
+            assert_eq!(oracle.operand(OperandIx::new(7)), None, "past 2**1024");
+            // Past the largest float, whose `float()` overflows, the floats
+            // beside it are the largest and the infinity.
+            let last = num_bigint::BigInt::from(1) << 1024_u32;
+            let last = WideInt::from_big(last - 1);
+            assert_eq!(
+                oracle.operand(OperandIx::new(8)),
+                Some(Operand::Rational {
+                    floor: last.clone(),
+                    ceil: last.clone(),
+                    below: f64::MAX,
+                    above: f64::INFINITY,
+                }),
+                "1024 bits, past the largest float"
+            );
+            let negated = WideInt::from_big(-last.to_big());
+            assert_eq!(
+                oracle.operand(OperandIx::new(9)),
+                Some(Operand::Rational {
+                    floor: negated.clone(),
+                    ceil: negated,
+                    below: f64::NEG_INFINITY,
+                    above: f64::MIN,
+                }),
+                "1024 bits, below the least float"
+            );
             assert_eq!(kind(4), None, "a fraction has no builtin kind");
             assert_eq!(kind(99), None, "an index the pool does not hold");
         });
@@ -434,11 +488,12 @@ fn a_decimal_bound_past_the_rounded_digits_is_not_rounded() {
 fn a_fraction_or_a_decimal_operand_is_read_at_its_floor_and_its_ceiling() {
     // Python compares an `int` and a `float` with either exactly, so the integers
     // and the floats around one are what a bound reads. Only the two classes the
-    // standard library binds, with a finite value within `2**120` of zero: a
+    // standard library binds, with a finite value within `2**1024` of zero: a
     // subclass, an infinity, a NaN and a value past the range are not read. `0.1`
     // lands above its decimal and `Fraction(1, 3)` below its own, `1e-400` rounds
-    // to zero, whose next float is the least there is, and `1e30`, past the
-    // integers an `i64` holds, lands below the float nearest it.
+    // to zero, whose next float is the least there is, `1e30`, past the integers
+    // an `i64` holds, lands below the float nearest it, and `1e40`, past those
+    // an `i128` holds, is read as a wide integer.
     Python::attach(|py| {
         let values = [
             "__import__('fractions').Fraction(-3, 2)",
@@ -452,16 +507,17 @@ fn a_fraction_or_a_decimal_operand_is_read_at_its_floor_and_its_ceiling() {
             "__import__('decimal').Decimal('1e40')",
             "type('Mine', (__import__('fractions').Fraction,), {})(1, 2)",
             "__import__('decimal').Decimal('1e30')",
+            "__import__('decimal').Decimal('1e400')",
         ]
         .into_iter()
         .map(|source| built(py, source).unbind())
         .collect();
         asking(py, values, |oracle| {
             let read = |slot| oracle.operand(OperandIx::new(slot));
-            let rational = |floor, ceil, below, above| {
+            let rational = |floor: i128, ceil: i128, below, above| {
                 Some(Operand::Rational {
-                    floor,
-                    ceil,
+                    floor: WideInt::Small(floor),
+                    ceil: WideInt::Small(ceil),
                     below,
                     above,
                 })
@@ -473,9 +529,19 @@ fn a_fraction_or_a_decimal_operand_is_read_at_its_floor_and_its_ceiling() {
             let third = 1.0_f64 / 3.0;
             assert_eq!(read(4), rational(0, 1, third, third.next_up()));
             assert_eq!(read(5), rational(0, 1, 0.0, 0.0_f64.next_up()));
-            for slot in 6..10 {
+            for slot in [6, 7, 9, 11] {
                 assert_eq!(read(slot), None, "the operand at {slot} is not read");
             }
+            let wide = WideInt::from_big(num_bigint::BigInt::from(10).pow(40));
+            assert_eq!(
+                read(8),
+                Some(Operand::Rational {
+                    floor: wide.clone(),
+                    ceil: wide,
+                    below: 1e40_f64.next_down(),
+                    above: 1e40,
+                })
+            );
             let tens = 10_i128.pow(30);
             assert_eq!(read(10), rational(tens, tens, 1e30_f64.next_down(), 1e30));
         });

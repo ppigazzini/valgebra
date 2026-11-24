@@ -32,6 +32,7 @@ use std::sync::Arc;
 
 use super::budget;
 use super::interval::IntervalSet;
+use super::wide::WideInt;
 
 /// A set of integers, held as an interval set per residue class.
 ///
@@ -147,9 +148,16 @@ impl IntSet {
     }
 
     /// The integers from `lo` to `hi` inclusive, with `None` unbounded.
+    ///
+    /// One class, moved into the table: built by [`build`](Self::build)'s
+    /// closure, ends that are no longer copied would be cloned into it.
     #[must_use]
-    pub(crate) fn between(lo: Option<i128>, hi: Option<i128>) -> IntSet {
-        IntSet::build(1, |_| IntervalSet::between(lo, hi))
+    pub(crate) fn between(lo: Option<WideInt>, hi: Option<WideInt>) -> IntSet {
+        let class: Arc<[IntervalSet]> = Arc::new([IntervalSet::between(lo, hi)]);
+        IntSet {
+            modulus: 1,
+            classes: class,
+        }
     }
 
     /// The multiples of `step`, or `None` for a step past [`MAX_PERIOD`].
@@ -202,16 +210,14 @@ impl IntSet {
 
     /// Every integer this set holds where there are at most `cap`, and `None`
     /// where there are more.
-    pub(crate) fn values_up_to(&self, cap: usize) -> Option<Vec<i128>> {
+    pub(crate) fn values_up_to(&self, cap: usize) -> Option<Vec<WideInt>> {
         let mut values = Vec::new();
-        for (residue, class) in (0_i128..).zip(self.classes.iter()) {
+        for (residue, class) in (0_i64..).zip(self.classes.iter()) {
             for k in class.values_up_to(cap)? {
                 if values.len() == cap {
                     return None;
                 }
-                // A period of at most `MAX_PERIOD` times an `i64` with a step
-                // of headroom stays far inside an `i128`.
-                values.push(residue + i128::from(self.modulus) * k);
+                values.push(WideInt::from_big(k.to_big() * self.modulus + residue));
             }
         }
         Some(values)
@@ -298,11 +304,24 @@ impl IntSet {
     /// put `multiple_of(64) | !multiple_of(64)` and [`all`](Self::all) in two
     /// places in a sorted table, and a third for every other step a caller
     /// joins with its own complement.
+    ///
+    /// A period of one, which nearly every set has, is answered before the
+    /// rest, which is out of line: inline, the comparison of classes held the
+    /// set's every call to registers it saves, seven instructions a call.
     fn without_a_step(self) -> IntSet {
+        if self.modulus == 1 {
+            return self;
+        }
+        self.without_a_repeated_class()
+    }
+
+    /// [`without_a_step`](Self::without_a_step) past a period of one.
+    #[inline(never)]
+    fn without_a_repeated_class(self) -> IntSet {
         let Some(first) = self.classes.first() else {
             return self;
         };
-        if self.modulus == 1 || !self.classes.iter().all(|class| class == first) {
+        if !self.classes.iter().all(|class| class == first) {
             return self;
         }
         // Every residue holds the same `k`, so the set is the union of
@@ -311,7 +330,7 @@ impl IntSet {
         // cannot move: nothing, or everything.
         if first.is_empty() {
             IntSet::empty()
-        } else if *first == IntervalSet::all() {
+        } else if first.is_all() {
             IntSet::all()
         } else {
             self

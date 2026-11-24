@@ -1699,8 +1699,8 @@ proptest! {
         .nth(which)
         .expect("one of four");
         let rational = Operand::Rational {
-            floor: i128::from(p.div_euclid(q)),
-            ceil: i128::from(-(-p).div_euclid(q)),
+            floor: crate::descr::wide::WideInt::Small(i128::from(p.div_euclid(q))),
+            ceil: crate::descr::wide::WideInt::Small(i128::from(-(-p).div_euclid(q))),
             below: f64::NAN,
             above: f64::NAN,
         };
@@ -2055,8 +2055,8 @@ fn a_length_bound_costs_two_units_an_element() {
 fn a_rational_bound_over_the_floats_cuts_at_the_float_on_its_side() {
     let of = |below: f64, above: f64| {
         Pool(vec![Operand::Rational {
-            floor: 0,
-            ceil: 1,
+            floor: crate::descr::wide::WideInt::Small(0),
+            ceil: crate::descr::wide::WideInt::Small(1),
             below,
             above,
         }])
@@ -4061,4 +4061,35 @@ proptest! {
             prop_assert_eq!(meets, held == Verdict::Inhabited, "{:?}", constraints);
         }
     }
+}
+
+/// A bound is held up to `WIDE_BITS` bits and declines past them: `2**1023`,
+/// 1024 bits, lowers to the integers above it, and `2**1024`, one bit past, is
+/// no bound the integer component holds.
+#[test]
+fn a_bound_of_wide_bits_lowers_and_one_past_declines() {
+    use crate::descr::lower::WIDE_BITS;
+    use crate::descr::wide::WideInt;
+    use num_bigint::BigInt;
+    let at = |value: BigInt| Operand::Rational {
+        floor: WideInt::from_big(value.clone()),
+        ceil: WideInt::from_big(value),
+        below: f64::NAN,
+        above: f64::NAN,
+    };
+    let last: BigInt = BigInt::from(1_i64) << (WIDE_BITS - 1);
+    let past: BigInt = BigInt::from(1_i64) << WIDE_BITS;
+    let refined = |pool: Pool| {
+        lower(
+            &Schema::Refine {
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+            },
+            &pool,
+        )
+    };
+    let held = refined(Pool(vec![at(last)])).expect("a bound of 1024 bits lowers");
+    assert_eq!(held.emptiness(), Verdict::Inhabited);
+    assert!(!held.admits(Value::integer(i64::MAX)));
+    assert!(refined(Pool(vec![at(past)])).is_none());
 }

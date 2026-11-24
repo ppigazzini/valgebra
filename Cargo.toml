@@ -37,6 +37,13 @@ regex-automata = { version = "0.4", default-features = false, features = [
   "unicode",
 ] }
 valgebra-core = { path = "crates/valgebra-core" }
+# Integers past `i128`: an integer bound is as wide as the `int`, `Fraction` or
+# `float` it is written with, and the integer sets hold their ends exactly
+# (`descr/wide.rs`). Already in the tree -- `jiter` and PyO3's `num-bigint`
+# feature build it for the binding -- so the core shares a version rather than
+# adding one, and `num-traits` is its own dependency.
+num-bigint = { version = "0.4", default-features = false, features = ["std"] }
+num-traits = { version = "0.2", default-features = false, features = ["std"] }
 
 # Lints configured once for the whole workspace; each crate opts in with
 # `[lints] workspace = true`. CI runs `cargo clippy -- -D warnings`, so every

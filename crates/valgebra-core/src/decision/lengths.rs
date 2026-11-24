@@ -24,6 +24,7 @@
 use crate::descr::budget;
 use crate::descr::interval::IntervalSet;
 use crate::descr::lower::WORK;
+use crate::descr::wide::WideInt;
 use crate::ir::{Constraint, LONGEST, REACHED, Schema};
 use crate::joined_in_rounds;
 use crate::verdict::Relation;
@@ -95,7 +96,7 @@ impl ByLength<'_> {
             .lengths
             .intersect(&lengths_held())
             .intersect(&lengths_up_to(REACHED))
-            .intersect(&IntervalSet::between(Some(i128::from(length)), None))
+            .intersect(&IntervalSet::between(Some(WideInt::from(length)), None))
             .is_empty()
     }
 
@@ -159,7 +160,10 @@ fn lengths_held() -> IntervalSet {
 
 /// The lengths from zero to `most`.
 fn lengths_up_to(most: usize) -> IntervalSet {
-    IntervalSet::between(Some(0), i128::try_from(most).ok())
+    IntervalSet::between(
+        Some(WideInt::from(0_i64)),
+        i128::try_from(most).ok().map(WideInt::from),
+    )
 }
 
 /// The term `schema` read as its lengths, with `depth` levels left; `None`
@@ -188,7 +192,7 @@ fn lengths_of(schema: &Schema, depth: u32) -> Option<ByLength<'_>> {
                 .ok()?;
             Some(ByLength {
                 base: Some(base),
-                lengths: IntervalSet::between(Some(i128::from(least)), most.map(i128::from)),
+                lengths: IntervalSet::between(Some(WideInt::from(least)), most.map(WideInt::from)),
                 beyond: false,
             })
         }

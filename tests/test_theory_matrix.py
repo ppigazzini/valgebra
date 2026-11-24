@@ -308,47 +308,47 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
     ),
     # -- the carriers decline where they cannot spell the bound --------------
     # `docs/explanation/decidability.md` names four edges of the integer carrier.
-    # A bound is held within `2**120` of zero and Python's integers are unbounded, so a
+    # A bound is held at up to 1024 bits and Python's integers are unbounded, so a
     # bound past that is held as the widest set the carrier spells: the direction
     # the widening proves comes back `subset`, and the one a value refutes
     # declines rather than reporting a value the procedure never found, unless a
     # value the subject's spelling guesses is that value.
     (
         "a bound past the carrier proves in the direction the widening gives",
-        Annotated[int, at.Ge(2**121 + 1)],
-        Annotated[int, at.Ge(2**121)],
+        Annotated[int, at.Ge(2**1025 + 1)],
+        Annotated[int, at.Ge(2**1025)],
         "subset",
-        [0, 2**121, 2**121 + 1, 2**63, I64_MIN],
+        [0, 2**1025, 2**1025 + 1, 2**63, I64_MIN],
     ),
     (
         "and declines in the direction a value would refute",
-        Annotated[int, at.Ge(2**121)],
-        Annotated[int, at.Ge(2**121 + 1)],
+        Annotated[int, at.Ge(2**1025)],
+        Annotated[int, at.Ge(2**1025 + 1)],
         "undecided",
-        [0, 2**121, 2**121 + 1, 2**63],
+        [0, 2**1025, 2**1025 + 1, 2**63],
     ),
     (
         "a strict bound past the carrier's end is below the kind",
-        Annotated[int, at.Gt(2**121 - 1)],
+        Annotated[int, at.Gt(2**1025 - 1)],
         int,
         "subset",
-        [0, 2**121 - 1, 2**121, I64_MIN],
+        [0, 2**1025 - 1, 2**1025, I64_MIN],
     ),
     (
         "and the kind is not below it",
         int,
-        Annotated[int, at.Gt(2**121 - 1)],
+        Annotated[int, at.Gt(2**1025 - 1)],
         "not_subset",
-        [0, 2**121 - 1, 2**121],
+        [0, 2**1025 - 1, 2**1025],
     ),
     # The kind is refuted on `0`, a value its spelling guesses; a subject past
     # the carrier's end holds no value a guess builds, and declines below it.
     (
         "and a subject past the carrier's end declines below it",
-        Annotated[int, at.Ge(2**121 - 5)],
-        Annotated[int, at.Gt(2**121 - 1)],
+        Annotated[int, at.Ge(2**1025 - 5)],
+        Annotated[int, at.Gt(2**1025 - 1)],
         "undecided",
-        [2**121 - 5, 2**121 - 1, 2**121],
+        [2**1025 - 5, 2**1025 - 1, 2**1025],
     ),
     # A modulus is materialized per residue up to a recorded period, so two
     # moduli the representation builds decide and two above it decline. The
@@ -507,8 +507,8 @@ IDS = [row[0] for row in ROWS]
 def test_every_edge_of_the_integer_carrier_has_a_row() -> None:
     """The edges `docs/explanation/decidability.md` names are rows, not sentences.
 
-    Deviation 11 is a property of the *representation*: a bound is held within
-    `2**120` of zero and Python's integers are unbounded, so a bound it cannot
+    Deviation 11 is a property of the *representation*: a bound is held at up
+    to 1024 bits and Python's integers are unbounded, so a bound it cannot
     spell is held as the widest set it can, and the relation declines in the
     direction a value would refute. The page gives examples of that, and a page
     giving an example no corpus drives is one a reader has to take on trust.

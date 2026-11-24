@@ -1,6 +1,7 @@
 use super::{IntSet, MAX_PERIOD, gcd, lcm};
 use crate::descr::interval::IntervalSet;
 use crate::descr::lattice_tests::Algebra;
+use crate::descr::wide::WideInt;
 use proptest::prelude::*;
 
 /// Union and meet inside the test corpus, where the bound is out of reach.
@@ -60,9 +61,12 @@ fn int_set() -> impl Strategy<Value = IntSet> {
         Just(IntSet::empty()),
         Just(IntSet::all()),
         (-9i64..=9).prop_map(IntSet::just),
-        (-9i128..=9).prop_map(|lo| IntSet::between(Some(lo), None)),
-        (-9i128..=9).prop_map(|hi| IntSet::between(None, Some(hi))),
-        (-9i128..=9, -9i128..=9).prop_map(|(a, b)| IntSet::between(Some(a.min(b)), Some(a.max(b)))),
+        (-9i128..=9).prop_map(|lo| IntSet::between(Some(WideInt::Small(lo)), None)),
+        (-9i128..=9).prop_map(|hi| IntSet::between(None, Some(WideInt::Small(hi)))),
+        (-9i128..=9, -9i128..=9).prop_map(|(a, b)| IntSet::between(
+            Some(WideInt::Small(a.min(b))),
+            Some(WideInt::Small(a.max(b)))
+        )),
         (1i64..=5).prop_map(|step| IntSet::multiple_of(step).expect("a small step")),
     ];
     leaf.prop_recursive(4, 24, 2, |inner| {
@@ -178,7 +182,7 @@ proptest! {
 fn a_set_whose_members_start_past_a_period_is_seen() {
     let sixties = and(
         &and(&and(&step(3), &step(4)), &step(5)),
-        &IntSet::between(Some(1), None),
+        &IntSet::between(Some(WideInt::Small(1)), None),
     );
 
     assert!(
@@ -226,28 +230,31 @@ fn a_step_holds_its_multiples_and_nothing_between() {
 /// the set: no integer is both at least five and below one.
 #[test]
 fn a_bound_conjunction_that_cannot_hold_is_empty() {
-    let low = IntSet::between(Some(5), None);
-    let high = IntSet::between(None, Some(1));
+    let low = IntSet::between(Some(WideInt::Small(5)), None);
+    let high = IntSet::between(None, Some(WideInt::Small(1)));
     assert!(and(&low, &high).is_empty());
     // Adjacent bounds leave exactly the integers between them, and none is
     // the empty set rather than a negative-width range.
     assert!(
         and(
-            &IntSet::between(Some(2), None),
-            &IntSet::between(None, Some(1))
+            &IntSet::between(Some(WideInt::Small(2)), None),
+            &IntSet::between(None, Some(WideInt::Small(1)))
         )
         .is_empty()
     );
     assert_eq!(
         and(
-            &IntSet::between(Some(1), None),
-            &IntSet::between(None, Some(1))
+            &IntSet::between(Some(WideInt::Small(1)), None),
+            &IntSet::between(None, Some(WideInt::Small(1)))
         ),
         IntSet::just(1)
     );
     // An even integer strictly between two consecutive even numbers: the
     // step and the bounds together empty a set neither empties alone.
-    let between = and(&step(2), &IntSet::between(Some(3), Some(3)));
+    let between = and(
+        &step(2),
+        &IntSet::between(Some(WideInt::Small(3)), Some(WideInt::Small(3))),
+    );
     assert!(between.is_empty());
 }
 
@@ -465,7 +472,7 @@ fn no_three_sets_are_ordered_in_a_cycle() {
         IntSet::all(),
         IntSet::empty(),
         IntSet::just(-2),
-        IntSet::between(Some(0), None),
+        IntSet::between(Some(WideInt::Small(0)), None),
         step(2),
         step(3),
         step(4),
@@ -511,8 +518,11 @@ fn a_table_is_a_set_only_at_one_class_per_residue_of_a_held_period() {
 fn a_table_holds_its_residues_and_their_spans() {
     let four = IntSet::multiple_of(4).expect("a period inside the bound");
     assert_eq!(four.entries(), 4 + 1);
-    let apart = IntSet::between(Some(0), Some(9))
-        .union(&IntSet::between(Some(20), Some(29)))
+    let apart = IntSet::between(Some(WideInt::Small(0)), Some(WideInt::Small(9)))
+        .union(&IntSet::between(
+            Some(WideInt::Small(20)),
+            Some(WideInt::Small(29)),
+        ))
         .expect("a small set");
     let cut = four.intersect(&apart).expect("a small set");
     assert_eq!(cut.entries(), 4 + 2);
@@ -540,4 +550,27 @@ fn an_operation_over_a_table_charges_what_the_table_holds() {
         })
         .is_none()
     );
+}
+
+/// A set listed where it is finite names each integer it holds, read back from
+/// its class and its index: the odd integers from one to seven sit in the class
+/// of one modulo two, at the indices zero to three, and past a cap the listing
+/// stops. Past `i128` the integers are named exactly too.
+#[test]
+fn a_finite_set_lists_its_integers_from_their_classes() {
+    let odd = IntSet::multiple_of(2).expect("a step of two").complement();
+    let span = IntSet::between(Some(WideInt::Small(1)), Some(WideInt::Small(7)));
+    let odd_in_span = odd.intersect(&span).expect("one period");
+    let listed: Vec<WideInt> = [1, 3, 5, 7].into_iter().map(WideInt::Small).collect();
+    assert_eq!(odd_in_span.values_up_to(4), Some(listed));
+    assert_eq!(odd_in_span.values_up_to(3), None);
+    let far = WideInt::from_big(num_bigint::BigInt::from(1_i64) << 200_u32);
+    let past = IntSet::between(Some(far.clone()), Some(far.succ()));
+    let thirds = IntSet::multiple_of(3).expect("a step of three");
+    let either = past.intersect(&thirds.complement()).expect("one period");
+    let expected: Vec<WideInt> = [far.clone(), far.succ()]
+        .into_iter()
+        .filter(|value| (value.to_big() % 3_i64) != num_bigint::BigInt::from(0_i64))
+        .collect();
+    assert_eq!(either.values_up_to(4), Some(expected));
 }

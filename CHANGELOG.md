@@ -17,6 +17,14 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- **An integer bound past `2**120` is held exactly, up to 1024 bits.** A bound on an `int`
+  written past `2**120` of zero, as an `int`, a `Fraction`, a `Decimal` or a float such as `1e100`,
+  declined: `Ge(2**121)` against `Ge(2**121 + 1)` was `undecided`, and a number a JSON Schema
+  compiler writes as its two kinds bounded at `1e100`, or at the largest float, was `undecided`
+  below the native union of the two bounded kinds. An integer set's ends are held at any width up
+  to 1024 bits, which holds every bound a float writes, so the first pair is `not_subset` and the
+  second `subset`. A bound past 1024 bits declines as before, so a bound of a million digits builds
+  no integer of a million digits.
 - **A value refused at the walk's bound is told the depth it reached.** A value nested past the
   walk's 384 levels of descent failed with `recursion_limit` expecting "a value at most 384 levels
   deep", while the levels are the walk's: the smallest recursive body spends three a level of the
@@ -33,6 +41,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a recursion failure states the depth of the value it reached
 - feat: validate stops after a given number of failures
+- fix: an integer bound is held at the width it is written at
 
 -->
 

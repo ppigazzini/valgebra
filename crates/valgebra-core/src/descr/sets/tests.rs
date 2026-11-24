@@ -4,6 +4,7 @@ use crate::descr::budget;
 use crate::descr::integers::IntSet;
 use crate::descr::lattice_tests::Algebra;
 use crate::descr::values::Values;
+use crate::descr::wide::WideInt;
 use crate::kind::Kind;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
@@ -59,7 +60,7 @@ fn lattice() -> impl Strategy<Value = SetLattice<IntSet>> {
         Just(SetLattice::all()),
         Just(SetLattice::of(IntSet::empty())),
         (-2i64..=2).prop_map(|n| SetLattice::of(IntSet::just(n))),
-        (-2i128..=2).prop_map(|lo| SetLattice::of(IntSet::between(Some(lo), None))),
+        (-2i128..=2).prop_map(|lo| SetLattice::of(IntSet::between(Some(WideInt::Small(lo)), None))),
         (1i64..=3)
             .prop_map(|step| { SetLattice::of(IntSet::multiple_of(step).expect("a small step")) }),
     ];
@@ -144,7 +145,7 @@ proptest! {
     #[test]
     fn a_meet_of_powersets_is_the_powerset_of_the_meet(a in -2i64..=2, b in -2i64..=2) {
         let _allowance = budget::law();
-        let (x, y) = (IntSet::between(Some(i128::from(a)), None), IntSet::between(None, Some(i128::from(b))));
+        let (x, y) = (IntSet::between(Some(WideInt::Small(i128::from(a))), None), IntSet::between(None, Some(WideInt::Small(i128::from(b)))));
         let met = SetLattice::of(x.clone())
             .intersect(&SetLattice::of(y.clone()))
             .expect("two small powersets");
@@ -191,7 +192,10 @@ fn the_powerset_of_nothing_holds_the_empty_set() {
 #[test]
 fn a_line_is_empty_when_a_subtraction_covers_it() {
     let small = SetLattice::of(IntSet::just(1));
-    let wide = SetLattice::of(IntSet::between(Some(0), Some(9)));
+    let wide = SetLattice::of(IntSet::between(
+        Some(WideInt::Small(0)),
+        Some(WideInt::Small(9)),
+    ));
 
     // `P({1}) ∧ ¬P(0..=9)` is empty, because every subset of `{1}` is a
     // subset of `0..=9`.

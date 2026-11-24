@@ -41,6 +41,7 @@ pub(crate) mod regular;
 pub(crate) mod sets;
 pub(crate) mod symbolic;
 pub(crate) mod values;
+pub mod wide;
 
 use std::sync::{Arc, OnceLock};
 

@@ -24,6 +24,9 @@ regex-automata = { workspace = true }
 # the parsed pattern's nodes. `regex-automata` depends on it already, so the
 # lockfile gains no crate.
 regex-syntax = { version = "0.8", default-features = false, features = ["std"] }
+# See the workspace entry: an integer set's ends are held at any width.
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.8.2"

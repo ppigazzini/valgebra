@@ -1610,9 +1610,11 @@ IMPLEMENTED-BY: valgebra-py/src/check/walk.rs::member, valgebra-py/src/check/wal
 HELD-BY: test_a_complement_refuses_a_value_its_inner_walk_stopped_on, test_a_complement_refuses_a_document_its_inner_walk_stopped_on, a_complement_refuses_a_value_its_inner_walk_stopped_on
 
 **The integer and float carriers are `i64` and `f64`, and an integer bound
-reaches `2**120`.** Membership is exact -- the walk reads the Python object --
+reaches 1024 bits.** Membership is exact -- the walk reads the Python object --
 and a relation *declines* where deciding it takes a value the carrier cannot
-spell: a constant, a key or a step past `i64`, a bound past `2**120`. A rounded
+spell: a constant, a key or a step past `i64`, a bound past 1024 bits. A bound
+is held exactly up to there, as wide as the number it is written with
+(`descr/wide.rs::WideInt`), so every bound a float writes is held. A rounded
 carrier would be wrong in one direction, so it refuses.
 
 What that bounds is narrower than the whole question, and the narrowing is the
@@ -1633,7 +1635,7 @@ interval's ends moved in to the floats of the class, since past `2^53` a class
 holds only what the spacing leaves it.
 **[DEVIATION: the-carriers-are-i64-and-f64]**
 
-HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer_carrier_has_a_row, test_the_relation_is_the_one_recorded, test_a_multiple_is_a_remainder_of_zero, test_a_bound_past_the_carrier_is_proved_by_the_order, steps_entail_only_where_the_remainder_reads_them_alike
+HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer_carrier_has_a_row, test_the_relation_is_the_one_recorded, test_a_multiple_is_a_remainder_of_zero, test_a_bound_past_the_carrier_is_proved_by_the_order, steps_entail_only_where_the_remainder_reads_them_alike, test_a_bound_within_1024_bits_is_decided_by_a_value_between, the_operations_hold_past_any_width
 
 **A class is described by what the frontend can read of it.** A class laying
 down a layout the frontend cannot read is its `isinstance` test and its kind and

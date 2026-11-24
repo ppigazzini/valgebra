@@ -1090,6 +1090,8 @@ version = "0.0.34"
 dependencies = [
  "criterion",
  "insta",
+ "num-bigint",
+ "num-traits",
  "proptest",
  "regex",
  "regex-automata",
@@ -1103,6 +1105,7 @@ version = "0.0.34"
 dependencies = [
  "ahash",
  "jiter",
+ "num-bigint",
  "pyo3",
  "pyo3-build-config",
  "regex",
