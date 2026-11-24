@@ -6,6 +6,28 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+<!-- changelog-roll
+
+Every feat/fix commit this section accounts for, oldest first; held to
+`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
+a caller cannot see: a step of the set representation that changed no
+answer of its own, or a repair to a change not yet released.
+
+-->
+
+## [0.0.35] - 2026-11-24
+
+A release of one feature and three fixes, with no node. `validate`, `validate_json` and `load` take
+`limit=n` and stop after the full report's first `n` failures, so a refusal that shows three
+failures of thousands pays for three. An integer bound is held exactly up to 1024 bits, which holds
+every bound a float writes, where a bound past `2**120` declined; a value refused at the walk's
+bound is told the depth of the value it reached; and a deep walk on PyPy under a lowered recursion
+limit ends the process from far fewer callers. The metamorphic gate's corpus, read against 0.0.34's
+recording, moves no membership and loses no decision. Read against 0.0.34 by the instruction gate
+on CPython 3.15.2, the 32 workloads whose code moved count within 0.13% of it, every checksum
+unchanged, and eleven read less: the tuple subclass walk 5.42% less, the deep nesting walk 2.36%
+and the list of records 0.96%. The wide unions asked of the sets read the most, 0.13% more.
+
 ### Added
 
 - **`validate` stops after a given number of failures.** `validate`, `validate_json` and `load`
@@ -16,6 +38,15 @@ All notable changes to valgebra are recorded here. The format follows
   count, raise `ValueError`.
 
 ### Fixed
+
+- **A deep walk on PyPy under a lowered recursion limit ends the process from far fewer callers.**
+  PyPy sizes the stack its C-API calls may use by the recursion limit, and a call past it is a
+  fault no exception reports. The walk asked PyPy's check from 12 KiB below itself, where nothing
+  had been answered, and ended PyPy 3.11 from 24 of 348 starting points on aarch64 at limits from
+  37 to 64 and at 200. A yes now counts for the bytes PyPy says it leaves, the walk spends those
+  before it asks again, and no question is asked past them. A caller a dozen C calls deep at a
+  limit near 37 may still end it. A list nested 60 deep is checked in 8.2 µs where it took 10.1,
+  and a value a few levels deep costs about 0.1 µs more.
 
 - **An integer bound past `2**120` is held exactly, up to 1024 bits.** A bound on an `int`
   written past `2**120` of zero, as an `int`, a `Fraction`, a `Decimal` or a float such as `1e100`,
@@ -31,19 +62,6 @@ All notable changes to valgebra are recorded here. The format follows
   value, so 128 lists around an `int` were refused by a label they meet. The label now reads "a
   value the walk checks within 384 levels of descent, which run out 128 levels into the value",
   the second number the depth of the value where the walk stopped, as its path gives it.
-
-<!-- changelog-roll
-
-Every feat/fix commit this section accounts for, oldest first; held to
-`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
-a caller cannot see: a step of the set representation that changed no
-answer of its own, or a repair to a change not yet released.
-
-- fix: a recursion failure states the depth of the value it reached
-- feat: validate stops after a given number of failures
-- fix: an integer bound is held at the width it is written at
-
--->
 
 ## [0.0.34] - 2026-11-23
 
@@ -5486,7 +5504,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.34...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.35...HEAD
+[0.0.35]: https://github.com/ppigazzini/valgebra/compare/v0.0.34...v0.0.35
 [0.0.34]: https://github.com/ppigazzini/valgebra/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/ppigazzini/valgebra/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/ppigazzini/valgebra/compare/v0.0.31...v0.0.32
