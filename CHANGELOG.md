@@ -6,6 +6,15 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`validate` stops after a given number of failures.** `validate`, `validate_json` and `load`
+  take `limit=n` and report the full report's first `n` failures, in its order, without walking
+  past them: a refusal that shows a caller three failures of thousands pays for three. A set's
+  elements are reported in the order their reports sort, so every failing element of a set is
+  still walked. `fail_fast=True` is `limit=1`; `limit=0`, and `fail_fast=True` beside another
+  count, raise `ValueError`.
+
 ### Fixed
 
 - **A value refused at the walk's bound is told the depth it reached.** A value nested past the
@@ -23,6 +32,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a recursion failure states the depth of the value it reached
+- feat: validate stops after a given number of failures
 
 -->
 

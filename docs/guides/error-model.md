@@ -136,21 +136,43 @@ except ValidationError as err:
 assert raised
 ```
 
-**There is no cap on how many failures come back.** A list of twenty thousand
-values of the wrong type reports twenty thousand entries, and `str()` of that
-exception is about a megabyte. That is deliberate: a cap would make `errors` a
-sample, and a caller counting entries or looking for a particular path would be
-reading a truncated list with nothing saying it was truncated. A failure costs
-about 230 bytes held by the exception and about 790 once `errors` is read, so a
-document of a million wrong elements reaches three quarters of a gigabyte.
-Bounding the cost is the caller's, and there are two ways to do it — pass
-`fail_fast=True`, or validate the value in pieces. Each individual `value` *is*
+**There is no cap on how many failures come back unless the caller asks for
+one.** A list of twenty thousand values of the wrong type reports twenty thousand
+entries, and `str()` of that exception is about a megabyte. That is deliberate: a
+cap the library chose would make `errors` a sample, and a caller counting entries
+or looking for a particular path would be reading a truncated list with nothing
+saying it was truncated. A failure costs about 230 bytes held by the exception and
+about 790 once `errors` is read, so a document of a million wrong elements reaches
+three quarters of a gigabyte. Bounding the cost is the caller's, and there are
+three ways to do it — pass `limit=n`, pass `fail_fast=True`, or validate the value
+in pieces. Each individual `value` *is*
 bounded, at eighty characters of its repr followed by `...` (`SUMMARY_CHARS`
 in `crates/valgebra-py/src/errors.rs`). A subclass of `list`, `tuple`, `dict`,
 `set` or `frozenset` is printed by `reprlib`, which elides the middle, so it reads
 as its head and its tail in those eighty characters, with no `...` after them.
 
-Pass `fail_fast=True` to stop at the first failure instead:
+Pass `limit=n` to stop once `n` failures are found. The report is the full
+report's first `n`, in its order, so a caller reading three failures reads the
+three the full report leads with, and the walk past them is not paid for:
+
+```python
+from valgebra import ValidationError, Validator
+
+raised = False
+try:
+    Validator(list[int]).validate(["a", 1, "b", "c", "d"], limit=2)
+except ValidationError as err:
+    raised = True
+    assert [e["path"] for e in err.errors] == [(0,), (2,)]
+assert raised
+```
+
+`limit` is a count of at least one, and `limit=0` raises `ValueError`. A set's
+elements are reported in the order their reports sort, so every failing element
+of a set is still walked to find the first `n`.
+
+Pass `fail_fast=True` to stop at the first failure instead, the same as
+`limit=1`, which it may be given beside but no other count:
 
 ```python
 from valgebra import ValidationError, Validator

@@ -94,13 +94,27 @@ validator's own index spaces and shares no type with them
 
 ## Aggregation is the caller's choice
 
-`validate` takes `fail_fast`. False aggregates a violation for each independent
-failure — every record field, sequence element and mapping entry — and true stops
-at the first. The walk carries that as a mode rather than a flag
-([the walk page](walk.md)): the caller's choice between every failure and the
-first holds for the whole call, and a sub-walk that reports nothing -- a union's
-branch, a complement's inner walk -- runs in the fast or settling mode beneath
-it.
+`validate` takes `fail_fast` and `limit`. By default it aggregates a violation
+for each independent failure — every record field, sequence element and mapping
+entry — `fail_fast` stops at the first, and `limit=n` at the `n`th. The walk
+carries the choice as a mode rather than a flag ([the walk page](walk.md)),
+`ExplainLimited` for a count past one, and the count as `WalkState::limit`
+(`crates/valgebra-py/src/check/ctx.rs`): it holds for the whole call, and a sub-walk that reports nothing -- a
+union's branch, a complement's inner walk -- runs in the fast or settling mode
+beneath it. The count sits in the state's slot for what a walk rarely holds, set
+by a limited walk alone, so a call of any other mode writes no word for it.
+
+A limited report is the full report's first `n`, which is what makes it a count
+rather than a sample. Every composite that stops at its first failure under
+`fail_fast` stops once its report holds `n` (`stop` and `reported_enough` in
+`check/walk.rs`); each report is a prefix of the full one, since a union chooses
+by its branches' first failures and a set sorts its elements' reports, a report
+cut at `n` sorting as the whole one does in its first `n`; and the entry point
+cuts the report to `n`, since one child can add several. The memo answers a
+limited walk only where nothing is reported yet, as it answers a fail-fast one:
+a report kept after some failures stopped at fewer than one begun before them
+needs. `test_a_limit_reports_the_first_failures_the_full_report_lists` in
+`tests/test_error_contract.py` holds the prefix over drawn schemas.
 
 Independent means what it says: two bad fields of one record are two violations,
 and a bad field of a bad element is one, because the walk stops descending where
@@ -173,8 +187,8 @@ vector converts the one large allocation and leaves every small one aborting
 where the limit falls on it, and a process near its limit still ends. pydantic
 2.14's `validate_python` ends the same way on the same value under the same
 limit: a Rust allocation fails and the process aborts. A caller that bounds the
-report asks for `fail_fast=True`, which
-collects one failure (`test_fail_fast_stops_at_the_first_failure` in
+report asks for `limit=n`, which collects `n` failures, or `fail_fast=True`,
+which collects one (`test_fail_fast_stops_at_the_first_failure` in
 `tests/test_error_aggregation.py`), and the limits page says a Rust allocation
 that fails ends the process.
 

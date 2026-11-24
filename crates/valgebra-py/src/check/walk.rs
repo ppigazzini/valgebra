@@ -382,8 +382,63 @@ fn unread(err: PyErr, py: Python<'_>, ctx: Ctx<'_>) -> bool {
     false
 }
 
-fn stop(ctx: Ctx<'_>) -> bool {
-    ctx.mode.stops_at_first()
+/// Whether a composite stops after a failing child: at the first in a mode
+/// that stops there, and once its report holds the walk's count of failures
+/// ([`WalkState::limit`](crate::check::ctx::WalkState::limit)) in one that
+/// reports that many. A mode that stops at the first tests one comparison, and
+/// the full report reads no count.
+///
+/// It takes the mode, which the loop's test reads, and the frame, which the
+/// loop already holds and the count is read through out of line ([`counted`]):
+/// given the state and the report apart, a loop over children holds them live
+/// across its scan for a branch it takes only on a failure.
+#[inline]
+fn stop(mode: WalkMode, frame: &Frame<'_, '_>) -> bool {
+    mode.stops_at_first() || (mode == WalkMode::ExplainLimited && counted(frame))
+}
+
+/// Fold a child's answer into its composite's `ok`, and say whether the
+/// composite stops after it ([`stop`]), asking only after a child that failed.
+///
+/// A test of the child's answer and a branch, so a loop over children holds
+/// that test alone. Folded into `ok` first and then tested beside the stop,
+/// the fold compiled to a conditional move and the mode was read in memory on
+/// every child: the list scan of a nested list paid two instructions a level.
+#[inline]
+fn child_stops(held: bool, ok: &mut bool, frame: &Frame<'_, '_>) -> bool {
+    if held {
+        return false;
+    }
+    *ok = false;
+    stop(frame.ctx.mode, frame)
+}
+
+/// Whether `out` already holds every failure the walk reports: one in a mode
+/// that stops at the first, and the walk's count
+/// ([`WalkState::limit`](crate::check::ctx::WalkState::limit)) in one that
+/// reports that many. A fast walk reports none, so it has never reported enough.
+/// A limited count is at least two, so a report holding it is not empty, and
+/// the emptiness the fail-fast test reads answers both of the modes that stop.
+///
+/// A loop that asks after every child reads [`WalkMode::may_stop`] once, before
+/// it, and asks this only where it is true: the compiler reads the report's
+/// length before the mode, so asked of the full report on every child, this
+/// loads the length through the frame each time, where a full report needs
+/// none.
+#[inline]
+fn reported_enough(frame: &Frame<'_, '_>) -> bool {
+    let mode = frame.ctx.mode;
+    mode.may_stop() && !frame.out.is_empty() && (mode.stops_at_first() || counted(frame))
+}
+
+/// Whether a limited report holds its count. Out of line and cold, so a loop
+/// that asks [`stop`] carries a test of the mode and no read of the count: read
+/// inline, the read cost the full report of a refused list of ten thousand
+/// integers an instruction an element, its loop laid out around it.
+#[cold]
+#[inline(never)]
+fn counted(frame: &Frame<'_, '_>) -> bool {
+    frame.out.len() >= frame.ctx.state.limit()
 }
 
 pub(crate) use crate::errors::is_fatal;
@@ -1516,7 +1571,8 @@ fn check_intersection(
         } else {
             member_again(members.as_ptr() as usize, member_schema, value, frame)
         };
-        if !ok && (stop(ctx) || rejected_the_value(frame.out, before, frame.path.len())) {
+        if !ok && (stop(ctx.mode, frame) || rejected_the_value(frame.out, before, frame.path.len()))
+        {
             return false;
         }
     }
@@ -1653,14 +1709,17 @@ fn is_exactly_a(obj: &Bound<'_, PyAny>, class: &Bound<'_, PyAny>) -> bool {
 /// or a kept walk above reads it as it read that walk. The stop cell is
 /// cleared for a walk to keep and keeps an earlier stop after it, as a
 /// complement reads it. A fail-fast report reads whether anything is reported
-/// yet (`record.rs`), so its walk is answered from the memo only where nothing
-/// is, which is where every kept walk began.
+/// yet (`record.rs`), and a report of at most a count of failures
+/// ([`WalkState::limit`](crate::check::ctx::WalkState::limit)) how many are,
+/// so their walks are answered from the memo only where nothing is, which is
+/// where every kept walk began: a report kept after some failures stopped at
+/// fewer than one begun before them needs.
 #[cold]
 #[inline(never)]
 fn remembered_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     let memo = &ctx.state.memo;
-    if ctx.mode.stops_at_first() && !frame.out.is_empty() {
+    if ctx.mode.may_stop() && !frame.out.is_empty() {
         note_reach(ctx, BOUNDS);
         return check_ref(id, value, frame);
     }

@@ -31,8 +31,9 @@ use super::scalar::{
 };
 use super::tree::tree_list_read;
 use super::{
-    Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
-    mutated, reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
+    Base, Frame, Scan, child_stops, class_at, held_iter, homogeneous_scalar, is_exactly_a,
+    is_fatal, member, mutated, reads_its_elements, record_fatal, record_if_fatal, scalar_admits,
+    scalar_of, stop,
 };
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH};
 use crate::check::index::{Exact, LeafPlan, Regex};
@@ -95,8 +96,8 @@ pub(super) fn check_seq(
             }
             let mut ok = true;
             let scan = scan_list(list, |i, item| {
-                ok &= seq_element(prefix, tail, i, &Value::Py(item), frame);
-                if !ok && stop(ctx) {
+                let held = seq_element(prefix, tail, i, &Value::Py(item), frame);
+                if child_stops(held, &mut ok, frame) {
                     ControlFlow::Break(())
                 } else {
                     ControlFlow::Continue(())
@@ -189,7 +190,6 @@ fn json_array_matches(
     items: &[JsonValue<'_>],
     frame: &mut Frame<'_, '_>,
 ) -> bool {
-    let ctx = frame.ctx;
     if prefix.is_empty()
         && let Some(
             element @ (Schema::Anything(_)
@@ -211,8 +211,8 @@ fn json_array_matches(
     }
     let mut ok = true;
     for (i, item) in items.iter().enumerate() {
-        ok &= seq_element(prefix, tail, i, &Value::Json(py, item), frame);
-        if !ok && stop(ctx) {
+        let held = seq_element(prefix, tail, i, &Value::Json(py, item), frame);
+        if child_stops(held, &mut ok, frame) {
             return false;
         }
     }
@@ -364,9 +364,9 @@ pub(super) fn record_array_matches(
     let reading = RecordReading::of(fields, defaults, &frame.ctx);
     let mut ok = true;
     for item in items {
-        ok &= !ctx.state.signals.fatal_seen.get()
+        let held = !ctx.state.signals.fatal_seen.get()
             && check_keyed_map(&reading, &Value::Json(py, item), frame);
-        if !ok && stop(ctx) {
+        if child_stops(held, &mut ok, frame) {
             return Some(false);
         }
     }
@@ -543,7 +543,6 @@ fn list_explained<'py>(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
-    let ctx = frame.ctx;
     let from = match explained_through_snapshot(list, &admits, value, frame) {
         ControlFlow::Break(answer) => return answer,
         ControlFlow::Continue(from) => from,
@@ -553,12 +552,7 @@ fn list_explained<'py>(
         if admits(&Value::Py(item)) {
             return ControlFlow::Continue(());
         }
-        ok &= element_explained(schema, at, &Value::Py(item), frame);
-        if !ok && stop(ctx) {
-            ControlFlow::Break(())
-        } else {
-            ControlFlow::Continue(())
-        }
+        element_refused(schema, at, item, &mut ok, frame)
     };
     let scan = match from {
         Some((start, items)) => scan_list_from(list, start, items, visit),
@@ -685,19 +679,40 @@ fn tuple_explained(
     admits: impl Fn(usize, &Value<'_, '_>) -> bool,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
-    let ctx = frame.ctx;
     let mut ok = true;
     for (at, item) in tuple.iter_borrowed().enumerate() {
         let item = Value::Py(&item);
         if admits(at, &item) {
             continue;
         }
-        ok &= seq_element(prefix, tail, at, &item, frame);
-        if !ok && stop(ctx) {
+        let held = seq_element(prefix, tail, at, &item, frame);
+        if child_stops(held, &mut ok, frame) {
             return false;
         }
     }
     ok
+}
+
+/// Walk an element [`list_explained`]'s test refused, fold its answer into
+/// `ok`, and say whether the scan stops after it. Out of line and cold, so the
+/// scan's loop holds the test and a call: the stop's reading of the walk's
+/// mode, inline, laid the loop out around it, an instruction an element on a
+/// list that fails at its last.
+#[cold]
+#[inline(never)]
+fn element_refused(
+    schema: &Schema,
+    at: usize,
+    item: &Bound<'_, PyAny>,
+    ok: &mut bool,
+    frame: &mut Frame<'_, '_>,
+) -> ControlFlow<()> {
+    *ok &= element_explained(schema, at, &Value::Py(item), frame);
+    if !*ok && stop(frame.ctx.mode, frame) {
+        ControlFlow::Break(())
+    } else {
+        ControlFlow::Continue(())
+    }
 }
 
 /// Walk an element at its own location in an explaining walk: what
@@ -991,11 +1006,11 @@ fn text_meet_list(
     }
     let mut ok = true;
     let scan = scan_list(list, |_, item| {
-        ok &= match exact_text_length(item) {
+        let held = match exact_text_length(item) {
             Some(length) => least <= length && length <= most,
             None => member(element, &Value::Py(item), frame),
         };
-        if !ok && stop(ctx) {
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1107,7 +1122,7 @@ fn leaves_listed(
     // here laid out every walk of a nested list three instructions a level
     // dearer on the profiled wheel.
     let scan = scan_list(list, |at, item| {
-        ok &= match exact_of(item).and_then(|exact| admits(plan, item, exact)) {
+        let held = match exact_of(item).and_then(|exact| admits(plan, item, exact)) {
             Some(true) => true,
             Some(false) if !explains => false,
             _ if explains => {
@@ -1118,7 +1133,7 @@ fn leaves_listed(
             }
             _ => member(element, &Value::Py(item), frame),
         };
-        if !ok && stop(ctx) {
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1154,8 +1169,8 @@ pub(super) fn instance_list_matches(
     let mut ok = true;
     let scan = scan_list(list, |_, item| {
         let item = Value::Py(item);
-        ok &= exact(&item) || member(element, &item, frame);
-        if !ok && stop(ctx) {
+        let held = exact(&item) || member(element, &item, frame);
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1209,11 +1224,11 @@ fn refined_list_matches(
         if explains {
             frame.path.push(PathSegment::Index(at));
         }
-        ok &= check_refine(base, constraints, &Value::Py(item), frame);
+        let held = check_refine(base, constraints, &Value::Py(item), frame);
         if explains {
             frame.path.pop();
         }
-        if !ok && stop(ctx) {
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1522,12 +1537,12 @@ fn record_list_matches(
         if explains {
             frame.path.push(PathSegment::Index(at));
         }
-        ok &= !ctx.state.signals.fatal_seen.get()
+        let held = !ctx.state.signals.fatal_seen.get()
             && check_keyed_map(&reading, &Value::Py(item), frame);
         if explains {
             frame.path.pop();
         }
-        if !ok && stop(ctx) {
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1585,8 +1600,8 @@ pub(super) fn tuple_list_matches(
     let mut ok = true;
     let scan = scan_list(list, |_, item| {
         let item = Value::Py(item);
-        ok &= fits(&item) || member(element, &item, frame);
-        if !ok && stop(ctx) {
+        let held = fits(&item) || member(element, &item, frame);
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1659,7 +1674,7 @@ pub(super) fn class_record_list_matches(
         }
         let held = !ctx.state.signals.fatal_seen.get() && is_exactly_a(item, class);
         let item = Value::Py(item);
-        ok &= if held
+        let held = if held
             && let Some(_meet) = ctx.descend()
             && let Some(_record) = ctx.descend()
         {
@@ -1670,7 +1685,7 @@ pub(super) fn class_record_list_matches(
         if ctx.mode.explains() {
             frame.path.pop();
         }
-        if !ok && stop(ctx) {
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1746,8 +1761,8 @@ pub(super) fn named_tuple_list_matches(
     let mut ok = true;
     let scan = scan_list(list, |_, item| {
         let item = Value::Py(item);
-        ok &= fits(&item) || member(element, &item, frame);
-        if !ok && stop(ctx) {
+        let held = fits(&item) || member(element, &item, frame);
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1798,11 +1813,11 @@ pub(super) fn literal_list_matches(
     let mut ok = true;
     let scan = scan_list(list, |_, item| {
         let item = Value::Py(item);
-        ok &= match plan.decide(&item) {
+        let held = match plan.decide(&item) {
             Some(answer) => answer,
             None => member(union, &item, frame),
         };
-        if !ok && stop(ctx) {
+        if child_stops(held, &mut ok, frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1984,8 +1999,8 @@ fn tuple_matches(
     }
     let mut ok = true;
     for (i, item) in tuple.iter_borrowed().enumerate() {
-        ok &= seq_element(prefix, tail, i, &Value::Py(&item), frame);
-        if !ok && stop(ctx) {
+        let held = seq_element(prefix, tail, i, &Value::Py(&item), frame);
+        if child_stops(held, &mut ok, frame) {
             return false;
         }
     }

@@ -23,10 +23,12 @@ from typing import TYPE_CHECKING, Annotated, Literal
 
 import annotated_types as at
 import pytest
+from hypothesis import assume, given
+from hypothesis import strategies as st
 
 from _reason import is_a_reason
 from _tree import ROOT
-from valgebra import Regex, ValidationError, Validator, complement, union
+from valgebra import Regex, ValidationError, Validator, complement, recursive, union
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -92,6 +94,235 @@ def test_load_stops_at_the_first_failure_too() -> None:
     with pytest.raises(ValidationError) as caught:
         Validator({"a": int, "b": int}).load('{"a": "x", "b": "y"}')
     assert len(caught.value.errors) == 2
+
+
+def _report(validator: Validator, value: object, **how: object) -> list[dict] | None:
+    """Return the failures `validate` reports under `how`, or `None` for a member."""
+    try:
+        validator.validate(value, **how)  # ty: ignore[invalid-argument-type]
+    except ValidationError as caught:
+        return list(caught.errors)
+    return None
+
+
+#: A schema drawn as a tree, so a value shaped like it can be drawn beside it: a
+#: leaf names its type and a composite its children. Each composite is a site
+#: that reports more than one failure, or, for the union, one that chooses.
+_TREES = st.recursive(
+    st.sampled_from([int, str, None]).map(lambda kind: ("leaf", kind)),
+    lambda children: st.one_of(
+        children.map(lambda child: ("list", child)),
+        st.sampled_from([int, str]).map(lambda kind: ("set", kind)),
+        children.map(lambda child: ("map", child)),
+        st.tuples(st.just("record"), children, children),
+        st.tuples(st.just("pair"), children, children),
+        st.tuples(st.just("union"), children, children),
+    ),
+    max_leaves=8,
+)
+
+_SCALARS = st.one_of(
+    st.integers(-3, 3), st.text("ab", max_size=2), st.none(), st.floats(-2, 2)
+)
+
+_ELEMENTS = st.one_of(st.integers(-3, 3), st.text("ab", max_size=2))
+
+#: The schema each kind of tree spells, from its children's.
+_SPELLED: dict[str, Callable[..., object]] = {
+    "leaf": lambda kind: kind,
+    "list": lambda child: list[child],
+    "set": lambda kind: set[kind],
+    "map": lambda child: dict[str, child],
+    "record": lambda left, right: {"a": left, "b": right},
+    "pair": lambda left, right: tuple[left, right],
+    "union": union,
+}
+
+
+def _schema(tree: tuple) -> object:
+    """Spell the schema a drawn tree stands for."""
+    kind, *parts = tree
+    if kind in {"leaf", "set"}:
+        return _SPELLED[kind](*parts)
+    return _SPELLED[kind](*map(_schema, parts))
+
+
+@st.composite
+def _shaped(draw: st.DrawFn, tree: tuple) -> object:
+    """Draw a value shaped like `tree`, a scalar standing for any part at times."""
+    kind, *parts = tree
+    if kind == "leaf" or draw(st.integers(0, 7)) == 0:
+        value: object = draw(_SCALARS)
+    elif kind == "list":
+        value = draw(st.lists(_shaped(parts[0]), max_size=4))
+    elif kind == "set":
+        value = draw(st.sets(_ELEMENTS, max_size=4))
+    elif kind == "map":
+        value = draw(
+            st.dictionaries(st.sampled_from("abc"), _shaped(parts[0]), max_size=3)
+        )
+    elif kind == "record":
+        record = {"a": draw(_shaped(parts[0])), "b": draw(_shaped(parts[1]))}
+        for key in draw(st.lists(st.sampled_from("abc"), max_size=2)):
+            if record.pop(key, None) is None and key not in "ab":
+                record[key] = draw(_SCALARS)
+        value = record
+    elif kind == "pair":
+        value = (draw(_shaped(parts[0])), draw(_shaped(parts[1])))
+    else:
+        value = draw(_shaped(draw(st.sampled_from(parts))))
+    return value
+
+
+# PROMISE: Aggregation and fail-fast
+@given(st.data())
+def test_a_limit_reports_the_first_failures_the_full_report_lists(
+    data: st.DataObject,
+) -> None:
+    """`limit=n` reports the full report's first `n` failures, in its order.
+
+    Over drawn schemas whose every composite reports several failures -- a
+    record's fields, a list's elements, a mapping's entries, a set's elements
+    in the order their reports sort, a pair's items -- and a union choosing a
+    branch, at every count from one to one past the report's length; and
+    `fail_fast=True` is `limit=1`.
+    """
+    tree = data.draw(_TREES)
+    validator = Validator(_schema(tree))
+    value = data.draw(_shaped(tree))
+    full = _report(validator, value)
+    assume(full is not None)
+    assert full
+    for count in range(1, len(full) + 2):
+        assert _report(validator, value, limit=count) == full[:count], count
+    assert _report(validator, value, fail_fast=True) == full[:1]
+
+
+#: A recursive definition with a failure under each of its references.
+_TREE = recursive(lambda tree: union(int, {"left": tree, "right": tree}))
+
+
+@pytest.mark.parametrize("depth", [2, 3, 4])
+def test_a_limit_reads_through_a_recursive_definition(depth: int) -> None:
+    """A definition unfolded at every level reports in the full report's order."""
+
+    def grown(levels: int) -> object:
+        if levels == 0:
+            return "x"
+        return {"left": grown(levels - 1), "right": grown(levels - 1)}
+
+    validator = Validator(_TREE)
+    value = grown(depth)
+    full = _report(validator, value)
+    assert full is not None
+    assert len(full) == 2**depth
+    for count in range(1, len(full) + 2):
+        assert _report(validator, value, limit=count) == full[:count], count
+
+
+def test_a_limit_reads_a_definition_the_memo_kept() -> None:
+    """The memo answers a limited walk only where nothing is reported yet.
+
+    Four branches share a definition at one value, and the memo is armed from
+    the branch after the first that entered it. The second armed branch walks
+    the definition after its first element failed, so under `limit=2` that walk
+    stops at one failure of the two it holds. Kept and answered to the last
+    branch, which reaches the definition with nothing reported, it would report
+    one failure where the full report leads with two.
+    """
+    pair = recursive(lambda pair: {"p": int, "q": int, "next": union(None, pair)})
+    shared = {"p": "s", "q": "s", "next": None}
+    validator = Validator(
+        union(
+            tuple[int, pair],  # ty: ignore[invalid-type-form]
+            tuple[bytes, pair],  # ty: ignore[invalid-type-form]
+            tuple[float, pair],  # ty: ignore[invalid-type-form]
+            tuple[str, pair],  # ty: ignore[invalid-type-form]
+        )
+    )
+    full = _report(validator, ("y", shared))
+    assert full is not None
+    assert [error["path"] for error in full] == [(1, "p"), (1, "q")]
+    for count in range(1, len(full) + 2):
+        assert _report(validator, ("y", shared), limit=count) == full[:count], count
+
+
+def test_a_limit_stops_the_walk_at_its_count() -> None:
+    """The walk past the `n`th failure is not paid for, which the report cannot show.
+
+    The entry point cuts the report to `n`, so a walk that ran on past its count
+    reports what one that stopped does; a predicate's calls show where it
+    stopped. A list stops at its second failing element and a record at its
+    second failing field, while a set walks every element, since its report is
+    sorted before it is cut.
+    """
+    asked: list[int] = []
+
+    def odd(number: int) -> bool:
+        asked.append(number)
+        return number % 2 == 1
+
+    checked = Annotated[int, at.Predicate(odd)]
+    rows: list[tuple[object, object, int]] = [
+        (list[checked], [2, 4, 6, 8, 10], 6),
+        ({"a": checked, "b": checked, "c": checked}, {"a": 2, "b": 4, "c": 6}, 6),
+    ]
+    for schema, value, past in rows:
+        asked.clear()
+        report = _report(Validator(schema), value, limit=2)
+        assert report is not None
+        assert len(report) == 2
+        assert 4 in asked
+        assert past not in asked, (schema, asked)
+    asked.clear()
+    report = _report(Validator(set[checked]), {2, 4, 6, 8, 10}, limit=2)
+    assert report is not None
+    assert len(report) == 2
+    assert sorted(asked) == [2, 4, 6, 8, 10]
+
+
+def test_a_limit_is_kept_by_the_json_entry_points() -> None:
+    """`validate_json` and `load` take `limit` and mean the same by it."""
+    validator = Validator(list[int])
+    document = '["a", 1, "b", "c"]'
+    with pytest.raises(ValidationError) as every:
+        validator.validate_json(document)
+    with pytest.raises(ValidationError) as two:
+        validator.validate_json(document, limit=2)
+    assert list(two.value.errors) == list(every.value.errors)[:2]
+    with pytest.raises(ValidationError) as loaded:
+        validator.load(document, limit=2)
+    assert list(loaded.value.errors) == list(every.value.errors)[:2]
+
+
+@pytest.mark.parametrize(
+    ("how", "words"),
+    [
+        ({"limit": 0}, "limit is a count of failures to report, at least 1"),
+        (
+            {"fail_fast": True, "limit": 3},
+            "fail_fast reports one failure, and limit asks for 3",
+        ),
+    ],
+)
+def test_a_limit_no_report_can_meet_is_refused(how: dict, words: str) -> None:
+    """A count of none, and `fail_fast` beside another count, are refused.
+
+    Before any walk: a member is refused the count as a non-member is, and a
+    document before it is parsed.
+    """
+    validator = Validator(int)
+    with pytest.raises(ValueError, match=re.escape(words)):
+        validator.validate("x", **how)
+    with pytest.raises(ValueError, match=re.escape(words)):
+        validator.validate(1, **how)
+    with pytest.raises(ValueError, match=re.escape(words)):
+        validator.validate_json('"x"', **how)
+    with pytest.raises(ValueError, match=re.escape(words)):
+        validator.load("1", **how)
+    assert _report(validator, "x", fail_fast=True, limit=1) == _report(
+        validator, "x", limit=1
+    )
 
 
 # Each row: a name, a record schema, a dict carrying a key it does not declare,

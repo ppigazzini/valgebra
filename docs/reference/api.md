@@ -251,7 +251,7 @@ instance, so they are written here rather than generated.
 
 | Attribute | Type | Meaning |
 | --- | --- | --- |
-| `errors` | `tuple[dict[str, object], ...]` | One item per independent failure, each a JSON-serializable dict with the keys `code`, `path`, `message`, `expected` and `value`. `json.dumps(err.errors)` is the JSON form of the whole report. One call reports every failure unless `fail_fast=True` stops the walk at the first. |
+| `errors` | `tuple[dict[str, object], ...]` | One item per independent failure, each a JSON-serializable dict with the keys `code`, `path`, `message`, `expected` and `value`. `json.dumps(err.errors)` is the JSON form of the whole report. One call reports every failure unless `limit=n` stops the walk at the `n`th, the full report's first `n`, or `fail_fast=True` at the first. |
 | `code` | `str` | The first item's stable failure code, such as `int_type`, `missing_key` or `literal_error`. |
 | `path` | `tuple[str \| int, ...]` | The first item's location from the root, string keys and integer indices, empty at the root. |
 | `message` | `str` | The first item's rendered one-line message. `str(err)` summarizes every failure rather than only this one. |

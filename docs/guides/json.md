@@ -19,8 +19,9 @@ assert not users.is_valid_json('{"name": 5}')  # name is not a str
 assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")
 ```
 
-`validate_json(data, /, *, fail_fast=False)` mirrors `validate`: it raises
-`ValidationError` on failure and aggregates every independent failure by default.
+`validate_json(data, /, *, fail_fast=False, limit=None)` mirrors `validate`: it
+raises `ValidationError` on failure and aggregates every independent failure by
+default.
 `is_valid_json(data)` mirrors `is_valid`: it returns a bool, and raises only
 where a comparison raises a fatal interpreter signal.
 Both accept a JSON `str` or `bytes`.
@@ -36,9 +37,9 @@ record = users.load('{"name": "Ada", "age": 36}')
 assert record == {"name": "Ada", "age": 36}
 ```
 
-`load(data, /, *, fail_fast=False)` raises `ValidationError` on malformed JSON or a
-non-member, exactly as `validate_json` does, and otherwise returns the parsed
-object.
+`load(data, /, *, fail_fast=False, limit=None)` raises `ValidationError` on
+malformed JSON or a non-member, exactly as `validate_json` does, and otherwise
+returns the parsed object.
 
 ## Same decisions as the object path
 

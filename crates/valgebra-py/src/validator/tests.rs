@@ -3,7 +3,7 @@ use crate::oracle::PoolRelations;
 use pyo3::types::{PyBytes, PyDict};
 use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind};
-use valgebra_core::{DefIx, Field, MapClause};
+use valgebra_core::{DefIx, Field, MapClause, SeqShape};
 
 /// A validator whose root is a bare back edge, so every schema it declares
 /// sits in the definitions table. This is the shape a rewrite reaching only
@@ -196,5 +196,52 @@ fn map_schemas_measures_what_the_rewrite_produced() {
             doubled.is_err(),
             "a rewrite that doubles the node count is past the bound"
         );
+    });
+}
+
+/// A refusal reports the count asked for: one under `fail_fast`, `limit` where
+/// it is given, and every one otherwise. A count of none, and `fail_fast` beside
+/// a count other than one, are refused before any walk.
+#[test]
+fn a_report_holds_the_count_its_caller_asks_for() {
+    assert_eq!(failures_reported(false, None).ok(), Some(usize::MAX));
+    assert_eq!(failures_reported(true, None).ok(), Some(1));
+    assert_eq!(failures_reported(true, Some(1)).ok(), Some(1));
+    assert_eq!(failures_reported(false, Some(1)).ok(), Some(1));
+    assert_eq!(failures_reported(false, Some(2)).ok(), Some(2));
+    assert!(failures_reported(false, Some(0)).is_err());
+    assert!(failures_reported(true, Some(0)).is_err());
+    assert!(failures_reported(true, Some(2)).is_err());
+    Python::attach(|py| {
+        let words = Validator::new(
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Vec::new(),
+            Vec::new(),
+        );
+        let value = pyo3::types::PyList::new(py, ["a", "b", "c", "d"]).expect("a list builds");
+        // The summary names how many failures it holds, as its first line.
+        let reported = |limit: Option<usize>| {
+            let refused = words
+                .validate(value.as_any(), false, limit)
+                .expect_err("four words are no list of integers");
+            refused
+                .value(py)
+                .to_string()
+                .lines()
+                .next()
+                .map(str::to_owned)
+        };
+        assert_eq!(reported(None).as_deref(), Some("4 validation errors:"));
+        assert_eq!(reported(Some(2)).as_deref(), Some("2 validation errors:"));
+        assert_eq!(reported(Some(9)).as_deref(), Some("4 validation errors:"));
+        // A set reports every failing element, its reports sorted, and the
+        // report is cut to the count after it.
+        let set = Validator::new(Schema::set(Schema::Int), Vec::new(), Vec::new());
+        let words = pyo3::types::PySet::new(py, ["a", "b", "c", "d"]).expect("a set builds");
+        let refused = set
+            .validate(words.as_any(), false, Some(2))
+            .expect_err("four words are no set of integers");
+        let summary = refused.value(py).to_string();
+        assert_eq!(summary.lines().next(), Some("2 validation errors:"));
     });
 }

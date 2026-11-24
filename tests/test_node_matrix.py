@@ -177,6 +177,7 @@ def _object_path(compiled: Validator, value: object) -> dict[str, bool]:
                     "validate_fail_fast",
                     lambda: compiled.validate(value, fail_fast=True),
                 ),
+                ("validate_limit", lambda: compiled.validate(value, limit=2)),
                 ("ensure", lambda: compiled.ensure(value)),
             )
         )
@@ -235,6 +236,10 @@ def _json_path(compiled: Validator, text: str) -> dict[str, bool]:
                     "validate_json_fail_fast",
                     lambda: compiled.validate_json(text, fail_fast=True),
                 ),
+                (
+                    "validate_json_limit",
+                    lambda: compiled.validate_json(text, limit=2),
+                ),
                 ("load", lambda: compiled.load(text)),
                 ("load_bytes", lambda: compiled.load(text.encode())),
             )
@@ -260,7 +265,8 @@ def test_every_entry_point_gives_one_answer(label: str) -> None:
 
 
 #: The entry points the two loops above ask, named as the stub names them.
-#: `in` is `__contains__`, and a mode or a bytes spelling is the same entry.
+#: `in` is `__contains__`, and a mode, a limit or a bytes spelling is the same
+#: entry.
 _ASKED_ENTRY_POINTS = {
     "is_valid",
     "__contains__",
@@ -287,7 +293,7 @@ def _entry_points_in_the_stub() -> set[str]:
     """Give every method of the stub's validator that takes a value or text."""
     body = _validator_class_body()
     found = set()
-    for match in re.finditer(r"def (\w+)\(self, (\w+): ", body):
+    for match in re.finditer(r"def (\w+)\(\s*self(?:: [\w\[\]]+)?,\s*(\w+): ", body):
         name, parameter = match.groups()
         if parameter in {"obj", "data"}:
             found.add(name)
@@ -304,11 +310,11 @@ def test_the_entry_point_loops_ask_every_entry_point_the_stub_declares() -> None
     declared = _entry_points_in_the_stub()
     assert len(declared) >= 7, sorted(declared)
     asked = {
-        name.removesuffix("_fail_fast")
-        .removesuffix("_bytes")
-        .replace("in", "__contains__")
+        "__contains__"
         if name == "in"
-        else name.removesuffix("_fail_fast").removesuffix("_bytes")
+        else name.removesuffix("_fail_fast")
+        .removesuffix("_limit")
+        .removesuffix("_bytes")
         for name in [*_object_path(Validator(int), 1), *_json_path(Validator(int), "1")]
     }
     assert asked == _ASKED_ENTRY_POINTS

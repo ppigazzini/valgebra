@@ -28,7 +28,7 @@ use valgebra_core::{
 
 use super::record::distinct_keys;
 use super::{
-    Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
+    Base, Frame, child_stops, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
     reads_its_length, record_fatal, record_if_fatal, record_stop, stop, stopped,
 };
 use crate::check::ctx::{Ctx, MAX_RECURSION_DEPTH, WalkState};
@@ -581,7 +581,7 @@ pub(super) fn constraints_hold(
     for constraint in constraints {
         if !check_constraint(constraint, obj, frame) {
             ok = false;
-            if stop(frame.ctx) {
+            if stop(frame.ctx.mode, frame) {
                 return false;
             }
         }
@@ -856,8 +856,8 @@ fn lengths_before_elements(
     };
     let mut ok = true;
     for constraint in constraints {
-        ok &= length_holds(constraint, len, value, frame);
-        if !ok && stop(ctx) {
+        let held = length_holds(constraint, len, value, frame);
+        if child_stops(held, &mut ok, frame) {
             return false;
         }
     }

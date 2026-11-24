@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
@@ -2653,6 +2654,70 @@ fn an_explaining_walk_aggregates_every_independent_failure() {
         assert_eq!(run(WalkMode::Explain), (false, 3));
         assert_eq!(run(WalkMode::ExplainFailFast), (false, 1));
         assert_eq!(run(WalkMode::Fast), (false, 0));
+    });
+}
+
+/// A walk that reports a count stops once its report holds it, where the full
+/// report walks on: two of a record's three failing fields, and two of a list's
+/// five failing elements, read by the scalar list's own loop and by the general
+/// scan of a list of lists. A count past every failure reports each, as the
+/// full report does.
+#[test]
+fn a_limited_walk_stops_once_its_report_holds_the_count() {
+    Python::attach(|py| {
+        let run = |schema: &Schema, value: &Bound<'_, PyAny>, limit: usize| {
+            let index = build_index(py, schema, &[], &[]);
+            let mut state = WalkState::new();
+            state.limit_to(NonZeroUsize::new(limit).expect("a limited walk counts at least two"));
+            let ctx = Ctx {
+                pool: &[],
+                defs: &[],
+                index: &index,
+                state: &state,
+                mode: WalkMode::explaining(limit),
+            };
+            let mut out = Vec::new();
+            let ok = member(
+                schema,
+                &Value::Py(value),
+                &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+            );
+            (ok, out.len())
+        };
+        let record = Schema::record(
+            vec![
+                field("a", Schema::Int, true),
+                field("b", Schema::Int, true),
+                field("c", Schema::Int, true),
+            ],
+            Openness::Closed,
+        );
+        let fields = PyDict::new(py);
+        for key in ["a", "b", "c"] {
+            fields.set_item(key, PyString::new(py, "s")).expect("set");
+        }
+        let list_of = |element: Schema| Schema::list(SeqShape::homogeneous(element));
+        let words = PyList::new(py, ["a", "b", "c", "d", "e"]).expect("a list of words builds");
+        let lists = PyList::empty(py);
+        for _ in 0..5 {
+            lists
+                .append(PyList::new(py, ["a"]).expect("a list of one word builds"))
+                .expect("append");
+        }
+        let cases = [
+            (record, fields.into_any(), 3),
+            (list_of(Schema::Int), words.into_any(), 5),
+            (list_of(list_of(Schema::Int)), lists.into_any(), 5),
+        ];
+        for (schema, value, every) in &cases {
+            assert_eq!(run(schema, value, 2), (false, 2), "{schema:?}");
+            assert_eq!(run(schema, value, every + 1), (false, *every), "{schema:?}");
+            assert_eq!(
+                run(schema, value, usize::MAX),
+                (false, *every),
+                "{schema:?}"
+            );
+        }
     });
 }
 
@@ -11810,7 +11875,7 @@ fn a_level_refused_at_the_bound_names_the_bound() {
             defs: &[],
             index: &index,
             state: &state,
-            mode: WalkMode::explaining(false),
+            mode: WalkMode::explaining(usize::MAX),
         };
         state.depth.set(MAX_WALK_DEPTH);
         let value = PyInt::new(py, 1).into_any();

@@ -7,6 +7,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::mem::ManuallyDrop;
+use std::num::NonZeroUsize;
 
 use pyo3::prelude::*;
 #[cfg(PyPy)]
@@ -216,7 +217,7 @@ impl RareSlot {
 
 /// What a walk rarely holds, behind one pointer in [`WalkState`].
 ///
-/// Both are on the paths a walk seldom takes, and each is a resource the state
+/// Each is on a path a walk seldom takes, and each is a resource the state
 /// must release. Held inline, the memo's tables are eleven words to write and
 /// three drops to run on every call, which the instruction gate's
 /// call-boundary shape, about a hundred instructions a call, reads as 43%
@@ -240,6 +241,13 @@ struct Rare {
     /// because a move is as rare as a fatal signal and a walk that meets none
     /// should not write it.
     moves: u32,
+    /// How many failures a limited walk reports ([`WalkState::limit`]), and
+    /// `None` in every other walk. Here rather than in the state, because a
+    /// word the state holds is a word every call writes: held there, the count
+    /// cost the walk of a list of 64 integers an instruction a call, and read
+    /// through the walk's context it held that context live across a list's
+    /// scan, a spilled register and a larger frame, three more.
+    limit: Option<NonZeroUsize>,
 }
 
 impl WalkState {
@@ -344,6 +352,25 @@ impl WalkState {
     /// How many containers have moved under the walk so far.
     pub(crate) fn moves(&self) -> u32 {
         self.rare.0.borrow().as_ref().map_or(0, |rare| rare.moves)
+    }
+
+    /// Report at most `count` failures: the count a limited walk
+    /// ([`WalkMode::ExplainLimited`]) stops at. Only such a walk sets it, once,
+    /// before it starts, so the slot it allocates is one a call to it pays.
+    pub(crate) fn limit_to(&mut self, count: NonZeroUsize) {
+        self.rare.0.get_mut().get_or_insert_with(Box::default).limit = Some(count);
+    }
+
+    /// How many failures the walk reports, `usize::MAX` for every one. A
+    /// composite stops once its report holds this many, each report a prefix
+    /// of the full one, and the entry point keeps that many.
+    pub(crate) fn limit(&self) -> usize {
+        self.rare
+            .0
+            .borrow()
+            .as_ref()
+            .and_then(|rare| rare.limit)
+            .map_or(usize::MAX, NonZeroUsize::get)
     }
 }
 
@@ -633,11 +660,12 @@ const fn the_interpreter_has_room(_state: &WalkState) -> bool {
 /// first three replace admitted a combination — fail-fast without explaining —
 /// that no caller produced and the walk read as plain [`Fast`](WalkMode::Fast).
 /// A state with no meaning is better unnameable than merely unused.
-/// The discriminants are ordered so both predicates below are one comparison
+/// The discriminants are ordered so the predicates below are one comparison
 /// rather than a two-way test: explaining is "at most `ExplainFailFast`",
-/// stopping at the first failure is "at least `ExplainFailFast`". The order is
-/// load-bearing for that reason and not alphabetical or by importance; both
-/// predicates are asserted over every variant in the tests.
+/// stopping at the first failure is "at least `ExplainFailFast`", and stopping
+/// before the last failure at all is "past `Explain`". The order is load-bearing
+/// for that reason and not alphabetical or by importance; the predicates are
+/// asserted over every variant in the tests.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[repr(u8)]
 pub(crate) enum WalkMode {
@@ -645,11 +673,15 @@ pub(crate) enum WalkMode {
     /// independent failure: every record field, sequence element, and mapping
     /// entry that fails is reported.
     Explain = 0,
+    /// [`Explain`](WalkMode::Explain) up to [`WalkState::limit`] violations:
+    /// a composite stops once its report holds that many. A mode of its own,
+    /// so the full report asks the count nowhere.
+    ExplainLimited = 1,
     /// Membership plus the first violation only.
-    ExplainFailFast = 1,
+    ExplainFailFast = 2,
     /// Membership only. No violation is built, `out` is never touched, no path is
     /// built, and every composite short-circuits as soon as the answer is fixed.
-    Fast = 2,
+    Fast = 3,
     /// [`Fast`](WalkMode::Fast) for a complement's inner walk, which reads its
     /// answer in Kleene's strong logic: a stop is the third value, so a
     /// conjunction a later part refuses is refused and a union a later branch
@@ -661,7 +693,7 @@ pub(crate) enum WalkMode {
     /// apart -- a union, a complement, the memo -- ask the cell. Last, so both
     /// predicates read it as the fast mode: it explains nothing and stops at a
     /// refusal.
-    Settle = 3,
+    Settle = 4,
 }
 
 impl WalkMode {
@@ -681,12 +713,20 @@ impl WalkMode {
         self >= WalkMode::ExplainFailFast
     }
 
-    /// The mode a caller asking to explain wants, given its fail-fast request.
-    pub(crate) fn explaining(fail_fast: bool) -> Self {
-        if fail_fast {
-            WalkMode::ExplainFailFast
-        } else {
-            WalkMode::Explain
+    /// Whether a composite may stop before its last failing child: in every
+    /// mode but the full report, which walks each child whatever it found.
+    #[inline]
+    pub(crate) fn may_stop(self) -> bool {
+        self > WalkMode::Explain
+    }
+
+    /// The mode a caller asking to explain wants, given how many failures it
+    /// asks for: one, every one (`usize::MAX`), or a count between.
+    pub(crate) fn explaining(reported: usize) -> Self {
+        match reported {
+            1 => WalkMode::ExplainFailFast,
+            usize::MAX => WalkMode::Explain,
+            _ => WalkMode::ExplainLimited,
         }
     }
 }

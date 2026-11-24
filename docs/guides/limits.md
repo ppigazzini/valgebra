@@ -272,7 +272,8 @@ raise `MemoryError`:
   ends rather than raises.
 - **A report grows with the value, and each failure in it is bounded.**
   `validate` collects every failure, so a refused value of a million elements
-  builds a million violations; `fail_fast=True` collects one. A failure's
+  builds a million violations; `limit=n` collects `n`, and `fail_fast=True`
+  one. A failure's
   message writes at most eighty characters of the value and of each key on its
   path, and the failures under one key share its string in `errors`, so a
   document of one long key over many failures reports in its failures' count

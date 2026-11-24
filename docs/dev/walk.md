@@ -58,16 +58,21 @@ values of a document that turns out malformed, or on a key the document repeats
 |---|---|
 | `Fast` | membership only: no violation or path built, every composite short-circuits; storage a reading needs for itself is allocated where the reading says why |
 | `Explain` | a violation for each independent failure — every field, element and entry |
+| `ExplainLimited` | the same, up to `WalkState::limit()` violations: a composite stops once its report holds that many, each report a prefix of the full one |
 | `ExplainFailFast` | the first violation only |
 | `Settle` | membership only, for a complement's inner walk: a stop answers `true` with its code in the stop cell, read in Kleene's strong logic |
 
-Four modes, and the type says four: the three a caller asks for, and `Settle`,
+Five modes, and the type says five: the four a caller asks for, and `Settle`,
 which only a complement's inner walk runs in. The pair of independent booleans
-the first three replace would admit a combination -- fail-fast without
-explaining -- that means nothing, and the type leaves it unnameable. The
-discriminants are ordered so both predicates the walk asks per node are a single
-comparison, and a test pins both over every variant — that order is load-bearing
-and measured, not cosmetic ([the type design page](type-design.md)).
+the explaining modes and `Fast` replace would admit a combination -- fail-fast
+without explaining -- that means nothing, and the type leaves it unnameable. The
+limited report is a mode of its own rather than the full one with a count read
+beside it, so the full report reads no count: read at every failing child, the
+count cost a refused list of ten thousand integers an instruction an element,
+its loop laid out around the read. The discriminants are ordered so the
+predicates the walk asks per node are each a single comparison, and a test pins
+them over every variant — that order is load-bearing and measured, not cosmetic
+([the type design page](type-design.md)).
 
 ## The comparison-raises policy
 

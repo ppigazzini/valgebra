@@ -29,7 +29,7 @@ use super::tree::tree_dict_read;
 use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
     Frame, Scan, Unwritten, again, fast, fold, is_fatal, member, mutated, record_fatal,
-    record_if_fatal, record_move, stop,
+    record_if_fatal, record_move, reported_enough, stop,
 };
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkState};
 use crate::check::index::{RecordPlan, decided_by_its_value};
@@ -1631,6 +1631,9 @@ pub(super) fn keyed_map_explain(
     // takes its count with it: the count is what lets a record holding exactly
     // its own keys skip the scan below, and a walk that lost it falls into one.
     let (from, mut present) = decided.resume_at(entries);
+    // Read once: the full report, which stops at no field, then tests a bit a
+    // field and reads no report's length ([`reported_enough`]).
+    let may_stop = ctx.mode.may_stop();
     for (position, field) in fields.iter().enumerate().skip(from) {
         let key = interned.and_then(|plan| plan.keys.get(position));
         let found = match key {
@@ -1674,7 +1677,7 @@ pub(super) fn keyed_map_explain(
                 }
             }
         }
-        if ctx.mode.stops_at_first() && !frame.out.is_empty() {
+        if may_stop && reported_enough(frame) {
             return;
         }
     }
@@ -1765,7 +1768,7 @@ fn undeclared_explained(
             let reported = frame.out.len();
             member(&clause.key, &Value::Py(key), frame);
             entered_the_key(frame.out, reported, at);
-            if !ctx.mode.stops_at_first() || frame.out.is_empty() {
+            if !reported_enough(frame) {
                 member(&clause.value, &Value::Py(val), frame);
             }
             frame.path.pop();
@@ -1800,7 +1803,7 @@ fn undeclared_explained(
                 summarize_value(&Value::Py(key), ctx),
             ));
         }
-        if ctx.mode.stops_at_first() && !frame.out.is_empty() {
+        if reported_enough(frame) {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1881,7 +1884,7 @@ pub(super) fn check_attr_record(
                 ok = false;
             }
         }
-        if !ok && stop(ctx) {
+        if !ok && stop(frame.ctx.mode, frame) {
             return false;
         }
     }

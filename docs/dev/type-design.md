@@ -175,9 +175,10 @@ four answers are derived, so both deciders read one function.
 
 ### The modes
 
-`WalkMode` is `Explain`, `ExplainFailFast`, `Fast` and `Settle`, the fast mode a
-complement's inner walk reads in Kleene's strong logic; the pair of booleans the
-first three replace admitted a combination no caller means. `Guarded` and `Openness` name what a positional `bool`
+`WalkMode` is `Explain`, `ExplainLimited`, `ExplainFailFast`, `Fast` and `Settle`,
+the fast mode a complement's inner walk reads in Kleene's strong logic; the pair
+of booleans the explaining modes and `Fast` replace admitted a combination no
+caller means. `Guarded` and `Openness` name what a positional `bool`
 would carry at the guardedness check and the record constructor. `SeqArity` is
 `Exactly(n)` or `AtLeast(n)`, so the schema's arity is one argument rather than a
 length and a flag beside the value's own length.
@@ -199,7 +200,12 @@ sealed mode measures 2.6% *worse* than two booleans in its place, because neithe
 predicate the walk asks per node compiles to a single comparison. Ordered so that
 explaining is "at most `ExplainFailFast`" and stopping at the first failure is
 "at least" it, the variants measure 1.4% *better*, and `Settle`, placed last,
-reads as `Fast` to both predicates. The type is not
+reads as `Fast` to both predicates. `ExplainLimited` sits between `Explain` and
+`ExplainFailFast`, so it explains and does not stop at the first, and a stop
+that reads a count asks `== ExplainLimited` only past the one comparison a
+stopping mode answers. A record's field loop reads whether its mode may stop at
+all once, before the loop, so the full report tests no report's length a field.
+The type is not
 the variable; the discriminant assignment is. A test pins both
 predicates over every variant so a reordering fails rather than silently costing.
 

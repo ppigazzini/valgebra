@@ -7,6 +7,7 @@
 //! caller spells a new path and the Python surface is unchanged.
 
 use std::cell::RefCell;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, OnceLock};
 
 use jiter::JsonValue;
@@ -100,6 +101,25 @@ fn reraise_fatal(state: &WalkState, ok: bool) -> PyResult<bool> {
     match state.take_fatal() {
         Some(err) => Err(err),
         None => Ok(ok),
+    }
+}
+
+/// How many failures a refusal reports: one under `fail_fast`, `limit` where it
+/// is given, and every one otherwise, `usize::MAX`.
+///
+/// A count of none reports nothing a refusal could hold, and `fail_fast` beside
+/// any count but one asks for two answers, so both are refused rather than one
+/// read over the other.
+fn failures_reported(fail_fast: bool, limit: Option<usize>) -> PyResult<usize> {
+    match (fail_fast, limit) {
+        (_, Some(0)) => Err(PyValueError::new_err(
+            "limit is a count of failures to report, at least 1",
+        )),
+        (true, Some(count)) if count != 1 => Err(PyValueError::new_err(format!(
+            "fail_fast reports one failure, and limit asks for {count}"
+        ))),
+        (true, _) => Ok(1),
+        (false, count) => Ok(count.unwrap_or(usize::MAX)),
     }
 }
 
@@ -547,7 +567,10 @@ impl Validator {
     /// Args:
     ///     obj: The object to check.
     ///     fail_fast: Stop at the first failure instead of aggregating every
-    ///         independent failure into the error.
+    ///         independent failure into the error. The same as `limit=1`.
+    ///     limit: Stop once this many failures are found, and report them: the
+    ///         first `limit` of the failures the full report lists, in its
+    ///         order. `None` reports every one.
     ///
     /// Returns:
     ///     `None` if `obj` is a member of the schema's set.
@@ -555,15 +578,29 @@ impl Validator {
     /// Raises:
     ///     ValidationError: If `obj` is not a member; its `errors` lists each
     ///         failure with a code and a path.
+    ///     ValueError: If `limit` is 0, or `fail_fast` is set beside a `limit`
+    ///         other than 1.
     ///     BaseException: If a comparison the walk performs, or a `repr` its
     ///         message names, raises a fatal interpreter signal; it propagates
     ///         rather than being read as a non-member.
-    #[pyo3(signature = (obj, /, *, fail_fast = false))]
-    fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
+    #[pyo3(signature = (obj, /, *, fail_fast = false, limit = None))]
+    fn validate(
+        &self,
+        obj: &Bound<'_, PyAny>,
+        fail_fast: bool,
+        limit: Option<usize>,
+    ) -> PyResult<()> {
+        let reported = failures_reported(fail_fast, limit)?;
         if root_scalar(&self.schema, obj) == Some(true) {
             return Ok(());
         }
-        let state = WalkState::new();
+        let mode = WalkMode::explaining(reported);
+        let mut state = WalkState::new();
+        if mode == WalkMode::ExplainLimited
+            && let Some(count) = NonZeroUsize::new(reported)
+        {
+            state.limit_to(count);
+        }
         let mut path = Vec::new();
         let mut violations = Vec::new();
         let ok = member(
@@ -572,7 +609,7 @@ impl Validator {
             &mut Frame::new(
                 &mut path,
                 &mut violations,
-                self.context(obj.py(), &state, WalkMode::explaining(fail_fast)),
+                self.context(obj.py(), &state, mode),
             ),
         );
         if let Some(err) = state.take_fatal() {
@@ -581,6 +618,9 @@ impl Validator {
         if ok {
             Ok(())
         } else {
+            // A composite stops once its report holds `reported` failures, and
+            // one child can add several, so the report is cut to the count.
+            violations.truncate(reported);
             // The report is where a refusal builds Python objects, so a member
             // pays for no catch.
             refused_memory_is_memory_error(|| Err(into_pyerr(obj.py(), violations)))
@@ -638,7 +678,7 @@ impl Validator {
     ///         rather than being read as a non-member.
     #[pyo3(signature = (obj, /))]
     fn ensure<'py>(&self, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        self.validate(obj, false)?;
+        self.validate(obj, false, None)?;
         Ok(obj.clone())
     }
 
@@ -647,11 +687,12 @@ impl Validator {
     /// Parsing runs in Rust, faster than the standard library, and the parsed
     /// value runs the same validation walk as a native object, so this reaches
     /// the same decision and the same errors as `validate` on the parsed object.
-    /// `fail_fast` behaves as it does for `validate`.
+    /// `fail_fast` and `limit` behave as they do for `validate`.
     ///
     /// Args:
     ///     data: The JSON document, as `str` or `bytes`.
     ///     fail_fast: Stop at the first failure instead of aggregating.
+    ///     limit: Report at most this many failures, as `validate` does.
     ///
     /// Returns:
     ///     `None` if the document parses and is a member of the schema's set.
@@ -660,14 +701,22 @@ impl Validator {
     ///     ValidationError: If the document is malformed or undecodable JSON
     ///         (code `json_invalid`) or is not a member of the schema's set.
     ///     TypeError: If `data` is not `str` or `bytes`.
+    ///     ValueError: If `limit` is 0, or `fail_fast` is set beside a `limit`
+    ///         other than 1.
     ///     BaseException: If a comparison the walk performs, or a `repr` its
     ///         message names, raises a fatal interpreter signal; it propagates
     ///         rather than being read as a non-member.
-    #[pyo3(signature = (data, /, *, fail_fast = false))]
-    fn validate_json(&self, data: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
+    #[pyo3(signature = (data, /, *, fail_fast = false, limit = None))]
+    fn validate_json(
+        &self,
+        data: &Bound<'_, PyAny>,
+        fail_fast: bool,
+        limit: Option<usize>,
+    ) -> PyResult<()> {
+        failures_reported(fail_fast, limit)?;
         refused_memory_is_memory_error(|| {
             let parsed = parse_json(data)?;
-            self.validate(&parsed, fail_fast)
+            self.validate(&parsed, fail_fast, limit)
         })
     }
 
@@ -681,6 +730,7 @@ impl Validator {
     /// Args:
     ///     data: The JSON document, as `str` or `bytes`.
     ///     fail_fast: Stop at the first failure instead of aggregating.
+    ///     limit: Report at most this many failures, as `validate` does.
     ///
     /// Returns:
     ///     The parsed Python object, once it is confirmed a member of the set.
@@ -689,14 +739,22 @@ impl Validator {
     ///     ValidationError: If the document is malformed or undecodable JSON
     ///         (code `json_invalid`) or is not a member of the schema's set.
     ///     TypeError: If `data` is not `str` or `bytes`.
+    ///     ValueError: If `limit` is 0, or `fail_fast` is set beside a `limit`
+    ///         other than 1.
     ///     BaseException: If a comparison the walk performs, or a `repr` its
     ///         message names, raises a fatal interpreter signal; it propagates
     ///         rather than being read as a non-member.
-    #[pyo3(signature = (data, /, *, fail_fast = false))]
-    fn load<'py>(&self, data: &Bound<'py, PyAny>, fail_fast: bool) -> PyResult<Bound<'py, PyAny>> {
+    #[pyo3(signature = (data, /, *, fail_fast = false, limit = None))]
+    fn load<'py>(
+        &self,
+        data: &Bound<'py, PyAny>,
+        fail_fast: bool,
+        limit: Option<usize>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        failures_reported(fail_fast, limit)?;
         refused_memory_is_memory_error(|| {
             let parsed = parse_json(data)?;
-            self.validate(&parsed, fail_fast)?;
+            self.validate(&parsed, fail_fast, limit)?;
             Ok(parsed)
         })
     }
