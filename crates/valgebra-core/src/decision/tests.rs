@@ -13611,7 +13611,11 @@ fn a_meet_that_may_hold_no_kind_is_placed_below_any_set() {
 /// the complement of "anything but a `str`, or a `str` of at most one
 /// character" hold `str`s alone, and the union among the integers leaves every
 /// other emptiness reading open. The integers met with the complement of `str`
-/// keep their kind, and are not read empty.
+/// keep their kind, and are not read empty. The reading is the walk's, so it
+/// reads the meet wherever it sits: a list of one item, the meet, is read empty
+/// and below `nothing` too, where the item is read by the walk alone and the
+/// reading of a meet's complements one at a time, which empties the meet at the
+/// root as well, is not asked.
 #[test]
 fn a_meet_that_may_hold_no_kind_is_read_empty() {
     let integer = Schema::union([
@@ -13631,6 +13635,12 @@ fn a_meet_that_may_hold_no_kind_is_read_empty() {
         Relation::Holds
     );
     assert!(meet.is_empty_with(&NoLeafRelations, &[]));
+    let item = Schema::list(SeqShape::fixed([meet]));
+    assert!(item.is_empty_with(&NoLeafRelations, &[]));
+    assert_eq!(
+        item.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
     let open = Schema::meet([Schema::Int, Schema::Str.complement()]);
     assert!(!open.is_empty_with(&NoLeafRelations, &[]));
 }
@@ -16963,20 +16973,59 @@ mod readings_another_route_shadows {
         assert_ne!(both.decided_as_respelled(&word(0), &cx), Relation::Holds);
     }
 
-    /// A meet with the table's complement the rules read empty proves the
-    /// subject below the table where the subject holds a complement of its own,
-    /// which leaves two in the meet and no one set to read the subject below:
-    /// `a | b | c` less `c` against `a | b`.
+    /// The two readings a subject's meet with a table's complement is asked,
+    /// as `is_empty` asks them, each under the allowance the table's reading
+    /// gives it: the walk's emptiness, and the relation of a meet holding a
+    /// complement, the rest below the complement's inner set.
+    fn the_meet_with_the_tables_complement(
+        subject: &Schema,
+        table: &Schema,
+        cx: &Cx<'_>,
+    ) -> (bool, Relation) {
+        let difference =
+            Schema::meet_within([subject.clone(), table.clone().complement()], cx.defs);
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
+        let walked = difference.empty_under(&mut cx.within_this_query(&allowance));
+        let allowance = Budget::new(cx.budget.left().min(respelling()));
+        let related = difference.below_the_set_it_complements(&cx.within_this_query(&allowance));
+        (walked, related)
+    }
+
+    // THEORY: semantic-subtyping
+    /// A subject is below a table where the walk reads its meet with the
+    /// table's complement empty and the relation declines that meet: `"a" ∧ 3`,
+    /// two constants of two kinds, meets `¬"b"` in nothing, and the relation
+    /// does not place `"a" ∧ 3` below `"b"`. Each reading decides a meet the
+    /// other declines, so each is held by a pair it alone decides, and the
+    /// test asserts that the other declines: a reading that later decides the
+    /// pair too fails it here, where a mutant of the two readings' join would
+    /// survive every test.
     #[test]
-    fn a_meet_with_the_tables_complement_proves_beside_a_complement_of_its_own() {
+    fn a_meet_with_the_tables_complement_the_walk_alone_reads_empty_proves() {
         let budget = Budget::new(DECISION_BUDGET);
         let cx = Cx::new(&a_plain_value::Table, &[], &budget);
-        let less = Schema::meet([
-            Schema::union([word(0), word(1), word(2)]),
-            word(2).complement(),
-        ]);
-        let table = Schema::union([word(0), word(1)]);
-        assert_eq!(less.decided_as_respelled(&table, &cx), Relation::Holds);
+        let subject = Schema::meet([word(0), word(3)]);
+        let (walked, related) = the_meet_with_the_tables_complement(&subject, &word(1), &cx);
+        assert!(walked);
+        assert_eq!(related, Relation::Unknown);
+        assert_eq!(subject.decided_as_respelled(&word(1), &cx), Relation::Holds);
+    }
+
+    // THEORY: semantic-subtyping
+    /// And where the relation places the meet and the walk declines it:
+    /// `str ∧ "a"` is below `"a" | c` as a meet is below a member, and the walk
+    /// does not read `str ∧ "a" ∧ ¬("a" | c)` empty, `c` a constant of no
+    /// builtin kind.
+    #[test]
+    fn a_meet_with_the_tables_complement_the_relation_alone_places_proves() {
+        let budget = Budget::new(DECISION_BUDGET);
+        let cx = Cx::new(&a_plain_value::Table, &[], &budget);
+        let subject = Schema::meet([Schema::Str, word(0)]);
+        let table = Schema::union([word(0), word(2)]);
+        let (walked, related) = the_meet_with_the_tables_complement(&subject, &table, &cx);
+        assert!(!walked);
+        assert_eq!(related, Relation::Holds);
+        assert_eq!(subject.decided_as_respelled(&table, &cx), Relation::Holds);
     }
 
     /// A collection holds the empty one whatever its element, and no bound on

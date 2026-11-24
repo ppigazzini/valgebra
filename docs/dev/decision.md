@@ -720,6 +720,20 @@ test about a rule's *scope* has to ask the rule. `decision.rs`'s own test module
 and asks `Schema::subtype_relation` and `verdict_under` directly where a test
 needs the rules' three-valued answer rather than their proof.
 
+A reading another reading also decides is invisible to its own test in the same
+way, and only the mutation sweep says so. Each such reading is held by a pair it
+alone decides, and its test asserts that the other reading declines the pair
+(`readings_another_route_shadows` in `decision/tests.rs`). A subject below a
+table of constants is asked as its meet with the table's complement, read by the
+walk and by the relation of a meet holding a complement, as `is_empty` reads a
+meet, and each of the two decides a pair the other declines. A reading that comes
+to decide the pair too fails the test on the push that makes it, not in the
+nightly sweep after it. A reading the walk asks wherever a meet sits is held
+where the root's readings are not asked: a meet that may hold no kind is read
+empty as a list's one item, where the reading of its complements one at a time,
+which empties it at the root, is never asked
+(`a_meet_that_may_hold_no_kind_is_read_empty`).
+
 ## Sound, not complete, and the direction matters
 
 Every relation is **sound**: a `true` is a proof, a `false` means "not proven".
