@@ -106,7 +106,11 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   under a union around one container such as `recursive(lambda t: union(int,
   [t]))`, opens three levels an unfolding, so it is walked to the unfolding
   bound: 127 lists nested around an `int` are a member, the `int` being the
-  128th unfolding, and 128 lists are refused.
+  128th unfolding, and 128 lists are refused. The refusal states the walk's
+  bound as the walk's and the depth of the value it reached, `expected` reading
+  `a value the walk checks within 384 levels of descent, which run out 128
+  levels into the value`, since a deeper body runs out of levels sooner: three
+  records around the reference run out 230 levels into the value.
 
     The walk fits a **1 MiB** thread stack, the least any thread CPython
   creates has. The CPython wheels for glibc Linux, macOS and Windows x64 are

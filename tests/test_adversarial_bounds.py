@@ -670,9 +670,11 @@ def test_a_value_past_the_walk_bound_names_the_bound() -> None:
 
     The body of three records meets the walk's bound before the unfolding
     bound, so the refusal is the walk's: `recursion_limit`, expecting a value
-    at most 384 levels deep. A level refused for the interpreter's stack, as
-    PyPy's check refuses one under a lowered limit, names the stack instead,
-    since the value need not be that deep.
+    the walk checks within its 384 levels of descent, which the body spends
+    faster than the value deepens, so they run out 230 levels into the value.
+    A level refused for the interpreter's stack, as PyPy's check refuses one
+    under a lowered limit, names the stack instead, since the value need not
+    be that deep.
     """
     records = Validator(recursive(lambda t: union(int, {"a": {"b": {"c": t}}})))
     value: object = 0
@@ -681,7 +683,13 @@ def test_a_value_past_the_walk_bound_names_the_bound() -> None:
     with pytest.raises(ValidationError) as info:
         records.validate(value)
     assert [(e["code"], e["expected"]) for e in info.value.errors] == [
-        ("recursion_limit", "a value at most 384 levels deep")
+        (
+            "recursion_limit",
+            (
+                "a value the walk checks within 384 levels of descent, which run "
+                "out 230 levels into the value"
+            ),
+        )
     ]
 
 
@@ -897,6 +905,14 @@ def test_the_unfolding_bound_admits_127_lists_and_refuses_128() -> None:
     with pytest.raises(ValidationError) as info:
         schema.validate(nested(128))
     assert info.value.code == "recursion_limit"
+    # The refusal names the walk's bound as the walk's, and the depth of the
+    # value it reached: the `int` 128 lists down, three levels of descent each.
+    (error,) = info.value.errors
+    assert len(info.value.path) == 128
+    assert error["expected"] == (
+        "a value the walk checks within 384 levels of descent, which run out "
+        "128 levels into the value"
+    )
 
 
 def test_deeply_nested_json_is_rejected_cleanly() -> None:

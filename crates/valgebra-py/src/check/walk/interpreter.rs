@@ -11797,8 +11797,9 @@ fn an_operand_is_held_as_a_decimal_only_where_it_is_one() {
     });
 }
 
-/// A level refused at the walk's own bound says how deep the bound is, in the
-/// report an explaining walk writes.
+/// A level refused at the walk's own bound says how deep the bound is, and how
+/// deep into the value it ran out, in the report an explaining walk writes: two
+/// levels of the value under a key entered, which is no level.
 #[test]
 fn a_level_refused_at_the_bound_names_the_bound() {
     Python::attach(|py| {
@@ -11813,7 +11814,11 @@ fn a_level_refused_at_the_bound_names_the_bound() {
         };
         state.depth.set(MAX_WALK_DEPTH);
         let value = PyInt::new(py, 1).into_any();
-        let mut path = Vec::new();
+        let mut path = vec![
+            PathSegment::Index(0),
+            PathSegment::Entered,
+            PathSegment::Index(1),
+        ];
         let mut out = Vec::new();
         let admitted = member(
             &Schema::Int,
@@ -11824,7 +11829,11 @@ fn a_level_refused_at_the_bound_names_the_bound() {
         let labels: Vec<_> = out.iter().map(|v| (v.code, v.expected.as_str())).collect();
         assert_eq!(
             labels,
-            [("recursion_limit", "a value at most 384 levels deep")]
+            [(
+                "recursion_limit",
+                "a value the walk checks within 384 levels of descent, which run out 2 \
+                 levels into the value"
+            )]
         );
     });
 }

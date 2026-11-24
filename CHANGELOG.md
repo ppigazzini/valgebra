@@ -6,12 +6,23 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A value refused at the walk's bound is told the depth it reached.** A value nested past the
+  walk's 384 levels of descent failed with `recursion_limit` expecting "a value at most 384 levels
+  deep", while the levels are the walk's: the smallest recursive body spends three a level of the
+  value, so 128 lists around an `int` were refused by a label they meet. The label now reads "a
+  value the walk checks within 384 levels of descent, which run out 128 levels into the value",
+  the second number the depth of the value where the walk stopped, as its path gives it.
+
 <!-- changelog-roll
 
 Every feat/fix commit this section accounts for, oldest first; held to
 `git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
+
+- fix: a recursion failure states the depth of the value it reached
 
 -->
 

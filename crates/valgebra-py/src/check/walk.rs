@@ -554,8 +554,16 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
                 path: frame.path.clone(),
                 // The walk refuses a level past its bound, or, on PyPy, one the
                 // interpreter's stack has no room for, which it can meet first.
+                // The bound counts the walk's levels, which a recursive body
+                // spends several of per level of the value, so the label names
+                // the value's own depth beside it: 128 lists around an `int`
+                // spend the 384 levels.
                 expected: if ctx.state.depth.get() >= MAX_WALK_DEPTH {
-                    format!("a value at most {MAX_WALK_DEPTH} levels deep")
+                    format!(
+                        "a value the walk checks within {MAX_WALK_DEPTH} levels of descent, \
+                         which run out {} levels into the value",
+                        PathSegment::steps(frame.path)
+                    )
                 } else {
                     "a value the thread's stack has room to walk".to_owned()
                 },
