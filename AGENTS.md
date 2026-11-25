@@ -148,9 +148,9 @@ that failed, as `ci.yml` spells it, and reading the rest off the run.
 
 **A cut follows [The releasing page](docs/dev/releasing.md), from
 [Before the bump](docs/dev/releasing.md#before-the-bump) on**, every step in its
-order. Performance is read for the code the window changed and for no other. A
-push, a dispatch, a tag and an advisory each wait for the maintainer's word, given
-for that one.
+order. Performance is read for the code the window changed and for no other, a
+time on a quiet box. A push, a dispatch, a tag and an advisory each wait for the
+maintainer's word, given for that one.
 
 
 ## Layout

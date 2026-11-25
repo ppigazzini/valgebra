@@ -127,6 +127,18 @@ where the code behind it changed, by the reading its section names;
 `scripts/page_figures.py`, which takes every figure of two pages, is no part of
 a cut.
 
+**A time is read on a quiet box; a count needs none.** `count` is cachegrind's,
+which load does not move. `cycles`, and a time a page or a section states, is
+read with no build, suite, sweep or second reading beside it, on a machine no one
+else uses, where `uptime` reads a one-minute load under 0.5 before the first
+round. `cycles` keeps each process on one CPU, `--cpu`, and takes the
+environments in turn, and it does not read the load. A second environment of the
+last release is the control: a difference inside the spread of the two is none.
+A driver written for a reading runs in a shell that bounds it, `ulimit -u` the
+processes and `ulimit -v` the memory of each, and its file takes no standard
+library module's name: `python bisect.py` puts its folder first on the path,
+where `random` imports it as `bisect`.
+
 **Documentation.** Each page that owns a zone the diff touches states the tree as
 it stands, by the table in [the agent instructions](../../AGENTS.md): the
 developer page, the guides, the README, `SECURITY.md`, the docstrings and the
@@ -235,7 +247,8 @@ CI or tests alone is a `ci`, `test` or `build`, and has none.
    shapes step 1 read; where step 1 read none, neither does this one. A profiled
    build places its code anew each time it is built, so the wheel PyPI serves is a build
    no earlier step read, and step 1's count sees no placement at all. Four environments
-   from PyPI, named at one length, two holding each release:
+   from PyPI, named at one length, two holding each release, read on
+   [a quiet box](#before-the-bump):
 
    ```bash
    py="$(uv python find --managed-python 3.15)"
