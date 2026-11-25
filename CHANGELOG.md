@@ -28,6 +28,16 @@ on CPython 3.15.2, the 32 workloads whose code moved count within 0.13% of it, e
 unchanged, and eleven read less: the tuple subclass walk 5.42% less, the deep nesting walk 2.36%
 and the list of records 0.96%. The wide unions asked of the sets read the most, 0.13% more.
 
+PyPI's wheels for CPython 3.15 on Linux x86_64, read against 0.0.34's (release step 9, an AMD
+Ryzen 7 PRO 7840U), walk a value nested twenty-five lists deep 5% to 7% slower in cycles in both of
+0.0.35's environments, and again on a second reading, on 1.89% more instructions, where the
+instruction gate's plain builds count 2.36% fewer: the gate reads no profile, and the wheels are
+built with one. Six shapes read faster in both: `list[str]` and ten thousand distinct integers 14%
+to 16%, which 0.0.34's wheels read 18% slower, a list of JSON Schema's `integer` or `number` 9%, on
+16% and 9% fewer instructions, a list of a union 7% and a pattern 5%. 0.0.34's second environment
+reads each of the seven within 1.5%. Every other shape reads within 5% in both or does not repeat.
+CPython 3.11 to 3.14 were not read.
+
 ### Added
 
 - **`validate` stops after a given number of failures.** `validate`, `validate_json` and `load`

@@ -85,7 +85,7 @@
   "~int&~str": true,
   "~~int": true
  },
- "commit": "aada39c002f0903e91c0c91f9c3ab605c0c3d141",
+ "commit": "07ce8ec84765133f3d60b307055667c7f388d9ce",
  "decisions": {
   "(int|str)&(str|none) <= (int|str)&(str|none)": "s",
   "(int|str)&(str|none) <= (int|str)&~str": "n",
@@ -6435,5 +6435,5 @@
   "~~int @ tuple-1-2": "n",
   "~~int @ tuple-1-a": "n"
  },
- "version": "0.0.34"
+ "version": "0.0.35"
 }
