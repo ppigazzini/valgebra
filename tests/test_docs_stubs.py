@@ -105,7 +105,9 @@ def test_the_extension_loads_where_mkdocs_loads_it(tmp_path: Path) -> None:
     file is loaded the same way, in a child interpreter whose path holds a
     stand-in griffe and not `scripts/`.
     """
-    (tmp_path / "griffe.py").write_text("class Extension:\n    pass\n")
+    (tmp_path / "griffe.py").write_text(
+        "class Extension:\n    pass\n", encoding="utf-8"
+    )
     done = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
         [
             sys.executable,

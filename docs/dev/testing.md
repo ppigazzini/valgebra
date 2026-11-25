@@ -261,7 +261,8 @@ pytest run of its own, so the floor leg runs the audit with
 and repairs its own copy between plants, so no two plants running at once
 share a copy. Work stealing rather than fixed shares, because one plant runs
 ten times as long as another. The same flags run it locally:
-`pytest -m repository -n auto --dist worksteal`.
+`PYTHONWARNDEFAULTENCODING=1 pytest -m repository -n auto --dist worksteal`,
+the variable being what turns the encoding warning on in a worker.
 
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is

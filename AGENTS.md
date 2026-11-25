@@ -125,7 +125,7 @@ RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --document-p
 uv run --no-sync python scripts/docs_lint.py
 uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
 uv run --no-sync ty check
-uv run --no-sync python -X warn_default_encoding -m pytest -n 8 -m "repository and not interpreter"
+PYTHONWARNDEFAULTENCODING=1 uv run --no-sync python -m pytest -n 8 -m "repository and not interpreter"
 ```
 
 Beside them run the changed code's own tests, and after a change under `decision`

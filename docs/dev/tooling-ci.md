@@ -1078,15 +1078,16 @@ is the one `main` carries. A red push lane is repaired on `github_ci`. A push
 to `main` runs the workflow too.
 
 **Text names its encoding, on every platform.** The suite's two steps in the
-`python` job, the product suite on every interpreter and the repository audit,
-run as `python -X warn_default_encoding -m pytest`, and `pyproject.toml` makes
-`EncodingWarning` an error. A file opened as text with no encoding is the
-locale's, cp1252 on Windows below 3.15 and UTF-8 everywhere else, so such a test
-passes on Linux and fails on Windows on the first character past ASCII; the push
-leg on Windows runs 3.15, which starts in UTF-8 mode and does not see it. The
-flag makes the open fail where it is written, on Linux. A pipe to a child
-process names `encoding="locale"`, the encoding both of its ends use, and a file
-names `encoding="utf-8"`.
+`python` job turn `EncodingWarning` on, and `pyproject.toml` makes it an error:
+the product suite runs as `python -X warn_default_encoding -m pytest`, and the
+repository audit sets `PYTHONWARNDEFAULTENCODING`, since its run is split over
+workers and a worker inherits the environment and no `-X` option. A file opened
+as text with no encoding is the locale's, cp1252 on Windows below 3.15 and UTF-8
+everywhere else, so such a test passes on Linux and fails on Windows on the
+first character past ASCII; the push leg on Windows runs 3.15, which starts in
+UTF-8 mode and does not see it. The warning makes the open fail where it is
+written, on Linux. A pipe to a child process names `encoding="locale"`, the
+encoding both of its ends use, and a file names `encoding="utf-8"`.
 
 **The nightly runs where development is.** A schedule fires on the default
 branch alone, and a nightly that read `main` alone would read a release

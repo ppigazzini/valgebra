@@ -37,11 +37,16 @@ def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each ca
     out = work / "mutants.out"
     out.mkdir(parents=True, exist_ok=True)
     (out / "caught.txt").write_text(
-        "".join(line + "\n" for line in caught or ["some/file.rs:1:1: caught mutant"])
+        "".join(line + "\n" for line in caught or ["some/file.rs:1:1: caught mutant"]),
+        encoding="utf-8",
     )
-    (out / "missed.txt").write_text("".join(line + "\n" for line in missed))
+    (out / "missed.txt").write_text(
+        "".join(line + "\n" for line in missed), encoding="utf-8"
+    )
     if timed_out is not None:
-        (out / "timeout.txt").write_text("".join(line + "\n" for line in timed_out))
+        (out / "timeout.txt").write_text(
+            "".join(line + "\n" for line in timed_out), encoding="utf-8"
+        )
     lay_script("mutation_gate", work)
     # Every accepted survivor carries its argument unless a row says otherwise:
     # the gate refuses one with none, which is not what most rows are about.
@@ -49,7 +54,7 @@ def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each ca
         accepted = dict.fromkeys(baseline, "equivalent: it cannot change an answer")
     recorded: dict[str, object] = {"survivors": baseline, "_accepted": accepted}
     (work / "scripts" / "mutation_baseline.json").write_text(
-        json.dumps(recorded) + "\n"
+        json.dumps(recorded) + "\n", encoding="utf-8"
     )
     return subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(work / "scripts" / "mutation_gate.py"), *(extra or [])],
@@ -121,7 +126,9 @@ def test_a_partial_sweep_cannot_re_record_the_baseline(tmp_path: Path) -> None:
         tmp_path, missed=[], baseline=[survivor], extra=["--update", "--new-only"]
     )
     assert result.returncode == 2
-    recorded = json.loads((tmp_path / "scripts" / "mutation_baseline.json").read_text())
+    recorded = json.loads(
+        (tmp_path / "scripts" / "mutation_baseline.json").read_text(encoding="utf-8")
+    )
     assert recorded["survivors"] == [survivor], "the baseline is left as it was"
 
 
@@ -165,7 +172,9 @@ def test_a_killed_baseline_survivor_fails_until_the_baseline_shrinks(
 def test_an_empty_output_dir_refuses_to_pass(tmp_path: Path) -> None:
     (tmp_path / "mutants.out").mkdir()
     lay_script("mutation_gate", tmp_path)
-    (tmp_path / "scripts" / "mutation_baseline.json").write_text('{"survivors": []}\n')
+    (tmp_path / "scripts" / "mutation_baseline.json").write_text(
+        '{"survivors": []}\n', encoding="utf-8"
+    )
     result = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(tmp_path / "scripts" / "mutation_gate.py")],
         cwd=tmp_path,
@@ -194,7 +203,9 @@ def test_a_baseline_matching_the_sweep_exactly_passes(tmp_path: Path) -> None:
 
 def test_a_missing_output_directory_is_could_not_run(tmp_path: Path) -> None:
     lay_script("mutation_gate", tmp_path)
-    (tmp_path / "scripts" / "mutation_baseline.json").write_text('{"survivors": []}\n')
+    (tmp_path / "scripts" / "mutation_baseline.json").write_text(
+        '{"survivors": []}\n', encoding="utf-8"
+    )
     result = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(tmp_path / "scripts" / "mutation_gate.py")],
         cwd=tmp_path,
@@ -212,8 +223,10 @@ def test_a_missing_baseline_is_could_not_run(tmp_path: Path) -> None:
     # ratchet has nothing to compare against and says so with its own code.
     out = tmp_path / "mutants.out"
     out.mkdir()
-    (out / "caught.txt").write_text("some/file.rs:1:1: caught mutant\n")
-    (out / "missed.txt").write_text("")
+    (out / "caught.txt").write_text(
+        "some/file.rs:1:1: caught mutant\n", encoding="utf-8"
+    )
+    (out / "missed.txt").write_text("", encoding="utf-8")
     lay_script("mutation_gate", tmp_path)
     result = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(tmp_path / "scripts" / "mutation_gate.py")],
@@ -262,12 +275,15 @@ def test_re_recording_keeps_the_reasons_beside_the_set(tmp_path: Path) -> None:
     # prevent.
     out = tmp_path / "mutants.out"
     out.mkdir()
-    (out / "caught.txt").write_text("x.rs:1:1: caught\n")
-    (out / "missed.txt").write_text("a.rs:1:1: replace f -> bool with true\n")
+    (out / "caught.txt").write_text("x.rs:1:1: caught\n", encoding="utf-8")
+    (out / "missed.txt").write_text(
+        "a.rs:1:1: replace f -> bool with true\n", encoding="utf-8"
+    )
     lay_script("mutation_gate", tmp_path)
     baseline = tmp_path / "scripts" / "mutation_baseline.json"
     baseline.write_text(
         json.dumps({"_why": "the argument", "survivors": []}) + "\n",
+        encoding="utf-8",
     )
     result = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(tmp_path / "scripts" / "mutation_gate.py"), "--update"],
@@ -278,7 +294,7 @@ def test_re_recording_keeps_the_reasons_beside_the_set(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0
-    recorded = json.loads(baseline.read_text())
+    recorded = json.loads(baseline.read_text(encoding="utf-8"))
     assert recorded["_why"] == "the argument"
     assert recorded["survivors"] == ["a.rs: replace f -> bool with true"]
 
@@ -296,7 +312,7 @@ def _tracked_tree(work: Path, files: list[str]) -> None:
     for name in files:
         path = work / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("// a file the baseline names\n")
+        path.write_text("// a file the baseline names\n", encoding="utf-8")
     subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         ["git", "-C", str(work), "add", *files],  # noqa: S607
         check=True,
@@ -365,7 +381,9 @@ def test_a_timeout_is_not_recorded_as_an_accepted_survivor(tmp_path: Path) -> No
         timed_out=["some/file.rs:2:2: a slow mutant"],
     )
     assert result.returncode == 2, result.stdout + result.stderr
-    recorded = json.loads((tmp_path / "scripts" / "mutation_baseline.json").read_text())
+    recorded = json.loads(
+        (tmp_path / "scripts" / "mutation_baseline.json").read_text(encoding="utf-8")
+    )
     assert recorded["survivors"] == [], recorded
 
 
@@ -415,7 +433,7 @@ def test_a_shard_places_its_survivors_by_the_whole_listing(tmp_path: Path) -> No
     different pair of a larger set.
     """
     listing = tmp_path / "listed.txt"
-    listing.write_text(f"{_FIRST}\n{_SECOND}\n")
+    listing.write_text(f"{_FIRST}\n{_SECOND}\n", encoding="utf-8")
     baseline = ["a.rs: replace == with != in f #2"]
     whole = _run(
         tmp_path, [_SECOND], baseline, extra=["--new-only", "--all", str(listing)]
@@ -428,7 +446,7 @@ def test_a_shard_places_its_survivors_by_the_whole_listing(tmp_path: Path) -> No
 def test_a_survivor_the_listing_lacks_is_could_not_run(tmp_path: Path) -> None:
     """A listing of another tree would place the survivor among other mutants."""
     listing = tmp_path / "listed.txt"
-    listing.write_text(f"{_FIRST}\n")
+    listing.write_text(f"{_FIRST}\n", encoding="utf-8")
     r = _run(tmp_path, [_SECOND], [], extra=["--new-only", "--all", str(listing)])
     assert r.returncode == 2, r.stdout + r.stderr
     assert "NOT IN THE LISTING" in r.stderr

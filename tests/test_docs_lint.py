@@ -43,12 +43,12 @@ lint = _load()
 
 def test_a_dead_internal_link_fails(tmp_path: Path) -> None:
     page = tmp_path / "page.md"
-    page.write_text("see [it](gone.md)\n")
-    assert lint.check_links(page, page.read_text())
+    page.write_text("see [it](gone.md)\n", encoding="utf-8")
+    assert lint.check_links(page, page.read_text(encoding="utf-8"))
 
-    (tmp_path / "there.md").write_text("here\n")
-    page.write_text("see [it](there.md)\n")
-    assert not lint.check_links(page, page.read_text())
+    (tmp_path / "there.md").write_text("here\n", encoding="utf-8")
+    page.write_text("see [it](there.md)\n", encoding="utf-8")
+    assert not lint.check_links(page, page.read_text(encoding="utf-8"))
 
 
 def test_the_page_an_index_serves_links_by_url(
@@ -57,9 +57,11 @@ def test_the_page_an_index_serves_links_by_url(
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     (tmp_path / "docs" / "dev").mkdir(parents=True)
     (tmp_path / "docs" / "guides").mkdir()
-    (tmp_path / "docs" / "guides" / "json.md").write_text("# JSON\n\n## It holds\n")
-    (tmp_path / "docs" / "dev" / "ci.md").write_text("# CI\n")
-    (tmp_path / "SECURITY.md").write_text("here\n")
+    (tmp_path / "docs" / "guides" / "json.md").write_text(
+        "# JSON\n\n## It holds\n", encoding="utf-8"
+    )
+    (tmp_path / "docs" / "dev" / "ci.md").write_text("# CI\n", encoding="utf-8")
+    (tmp_path / "SECURITY.md").write_text("here\n", encoding="utf-8")
     site, tree = lint.SITE_URL, lint.TREE_URL
 
     for relative in (
@@ -102,21 +104,23 @@ def test_a_url_is_not_a_link_to_resolve(tmp_path: Path) -> None:
         "## Heading\n\n"
         "[a](https://example.com) [b](mailto:x@example.com) [c](#heading)\n"
     )
-    page.write_text(text)
+    page.write_text(text, encoding="utf-8")
     assert not lint.check_links(page, text)
 
 
 def test_an_anchor_resolves_to_a_heading_of_the_page_it_names(tmp_path: Path) -> None:
-    (tmp_path / "there.md").write_text("# A heading\n\n## Twice\n\n## Twice\n")
+    (tmp_path / "there.md").write_text(
+        "# A heading\n\n## Twice\n\n## Twice\n", encoding="utf-8"
+    )
     page = tmp_path / "page.md"
-    page.write_text("[c](there.md#a-heading) [d](there.md#twice-1)\n")
-    assert not lint.check_links(page, page.read_text())
+    page.write_text("[c](there.md#a-heading) [d](there.md#twice-1)\n", encoding="utf-8")
+    assert not lint.check_links(page, page.read_text(encoding="utf-8"))
     # A heading renamed and the link left behind: the page exists and the
     # anchor names nothing on it.
-    page.write_text("[c](there.md#no-such-heading)\n")
-    assert lint.check_links(page, page.read_text())
-    page.write_text("[c](#no-such-heading)\n")
-    assert lint.check_links(page, page.read_text())
+    page.write_text("[c](there.md#no-such-heading)\n", encoding="utf-8")
+    assert lint.check_links(page, page.read_text(encoding="utf-8"))
+    page.write_text("[c](#no-such-heading)\n", encoding="utf-8")
+    assert lint.check_links(page, page.read_text(encoding="utf-8"))
 
 
 def test_a_published_page_does_not_link_into_the_developer_set(
@@ -126,21 +130,23 @@ def test_a_published_page_does_not_link_into_the_developer_set(
     # site renders no `docs/dev/`: twelve such links answered 404 there.
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     (tmp_path / "docs" / "dev").mkdir(parents=True)
-    (tmp_path / "docs" / "dev" / "walk.md").write_text("# The walk\n")
+    (tmp_path / "docs" / "dev" / "walk.md").write_text("# The walk\n", encoding="utf-8")
     page = tmp_path / "docs" / "guide.md"
-    page.write_text("see [the walk](dev/walk.md)\n")
-    assert lint.check_links(page, page.read_text())
+    page.write_text("see [the walk](dev/walk.md)\n", encoding="utf-8")
+    assert lint.check_links(page, page.read_text(encoding="utf-8"))
     # A developer page linking to another is in the repository either way.
     inner = tmp_path / "docs" / "dev" / "other.md"
-    inner.write_text("see [the walk](walk.md)\n")
-    assert not lint.check_links(inner, inner.read_text())
+    inner.write_text("see [the walk](walk.md)\n", encoding="utf-8")
+    assert not lint.check_links(inner, inner.read_text(encoding="utf-8"))
 
 
 def test_a_heading_inside_a_fence_is_no_anchor(tmp_path: Path) -> None:
-    (tmp_path / "there.md").write_text("```bash\n# not a heading\n```\n")
+    (tmp_path / "there.md").write_text(
+        "```bash\n# not a heading\n```\n", encoding="utf-8"
+    )
     page = tmp_path / "page.md"
-    page.write_text("[c](there.md#not-a-heading)\n")
-    assert lint.check_links(page, page.read_text())
+    page.write_text("[c](there.md#not-a-heading)\n", encoding="utf-8")
+    assert lint.check_links(page, page.read_text(encoding="utf-8"))
 
 
 def test_a_snippet_carries_its_headings_into_the_page(
@@ -149,11 +155,13 @@ def test_a_snippet_carries_its_headings_into_the_page(
     # The changelog page is a snippet of CHANGELOG.md, whose headings are the
     # page's anchors on the site.
     monkeypatch.setattr(lint, "ROOT", tmp_path)
-    (tmp_path / "CHANGELOG.md").write_text("## [0.1.0] - 2026-01-01\n")
-    (tmp_path / "log.md").write_text('--8<-- "CHANGELOG.md"\n')
+    (tmp_path / "CHANGELOG.md").write_text(
+        "## [0.1.0] - 2026-01-01\n", encoding="utf-8"
+    )
+    (tmp_path / "log.md").write_text('--8<-- "CHANGELOG.md"\n', encoding="utf-8")
     page = tmp_path / "page.md"
-    page.write_text("[c](log.md#010---2026-01-01)\n")
-    assert not lint.check_links(page, page.read_text())
+    page.write_text("[c](log.md#010---2026-01-01)\n", encoding="utf-8")
+    assert not lint.check_links(page, page.read_text(encoding="utf-8"))
 
 
 def test_a_site_link_resolves_under_both_renderers(
@@ -164,13 +172,15 @@ def test_a_site_link_resolves_under_both_renderers(
     # other. A link that follows one of them fails half its readers.
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "there.md").write_text("## What `==` compares\n\n## Plain\n")
+    (tmp_path / "docs" / "there.md").write_text(
+        "## What `==` compares\n\n## Plain\n", encoding="utf-8"
+    )
     page = tmp_path / "docs" / "page.md"
     for anchor in ("what-compares", "what--compares"):
-        page.write_text(f"[c](there.md#{anchor})\n")
-        assert lint.check_links(page, page.read_text()), anchor
-    page.write_text("[c](there.md#plain)\n")
-    assert not lint.check_links(page, page.read_text())
+        page.write_text(f"[c](there.md#{anchor})\n", encoding="utf-8")
+        assert lint.check_links(page, page.read_text(encoding="utf-8")), anchor
+    page.write_text("[c](there.md#plain)\n", encoding="utf-8")
+    assert not lint.check_links(page, page.read_text(encoding="utf-8"))
 
 
 def test_a_named_path_that_does_not_exist_fails() -> None:
@@ -548,11 +558,13 @@ def _synthetic_ledgers(root: Path, how_many: int) -> None:
     # itself a ledger and the rule under test would demand a row for it.
     marker = "LEDGER" + ":"
     for name in names:
-        (tests / name).write_text(f'"""A ledger.\n\n{marker} {name}\n"""\n')
+        (tests / name).write_text(
+            f'"""A ledger.\n\n{marker} {name}\n"""\n', encoding="utf-8"
+        )
     page = root / "docs" / "dev" / "testing.md"
     page.parent.mkdir(parents=True, exist_ok=True)
     rows = "\n".join(f"| `tests/{name}` | holds something |" for name in names)
-    page.write_text(f"# Testing\n\nThe ledgers:\n\n{rows}\n")
+    page.write_text(f"# Testing\n\nThe ledgers:\n\n{rows}\n", encoding="utf-8")
 
 
 def test_a_ledger_named_in_prose_alone_has_no_row(
@@ -573,11 +585,12 @@ def test_a_ledger_named_in_prose_alone_has_no_row(
     page = tmp_path / "docs" / "dev" / "testing.md"
     marker = "LEDGER" + ":"
     (tmp_path / "tests" / "test_ledger_prose.py").write_text(
-        f'"""A ledger.\n\n{marker} something\n"""\n'
+        f'"""A ledger.\n\n{marker} something\n"""\n', encoding="utf-8"
     )
     page.write_text(
-        page.read_text()
-        + "\nThe fifth is `tests/test_ledger_prose.py`, discussed here only.\n"
+        page.read_text(encoding="utf-8")
+        + "\nThe fifth is `tests/test_ledger_prose.py`, discussed here only.\n",
+        encoding="utf-8",
     )
 
     problems = lint.check_ledger_table()
@@ -598,7 +611,9 @@ def _synthetic_products(root: Path, marked: list[str], listed: list[str]) -> Non
     # file would declare itself a product and the rule would want a row for it.
     marker = "PRODUCT" + ":"
     for name in marked:
-        (tests / name).write_text(f'"""A product.\n\n{marker} something\n"""\n')
+        (tests / name).write_text(
+            f'"""A product.\n\n{marker} something\n"""\n', encoding="utf-8"
+        )
     for name in listed:
         (tests / name).touch()
     page = root / "docs" / "dev" / "testing.md"
@@ -609,7 +624,8 @@ def _synthetic_products(root: Path, marked: list[str], listed: list[str]) -> Non
     )
     page.write_text(
         "# Testing\n\n| Product | Derived from | Covered means | Held by |\n"
-        f"|---|---|---|---|\n{rows}\n\nAnd prose after it.\n"
+        f"|---|---|---|---|\n{rows}\n\nAnd prose after it.\n",
+        encoding="utf-8",
     )
 
 
@@ -655,7 +671,7 @@ def test_a_products_table_the_page_does_not_have_is_reported(
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     _synthetic_products(tmp_path, ["test_one.py"], ["test_one.py"])
     page = tmp_path / "docs" / "dev" / "testing.md"
-    page.write_text("# Testing\n\nNo table at all.\n")
+    page.write_text("# Testing\n\nNo table at all.\n", encoding="utf-8")
     problems = lint.check_product_table()
     assert problems, "a page with no products table passed"
 
@@ -664,7 +680,7 @@ def _synthetic_manifest(root: Path, summary: str) -> None:
     """Write a site of one page, named in the nav and in the llms.txt manifest."""
     (root / "docs").mkdir()
     (root / "docs" / "README.md").write_text(
-        "---\ndescription: What the page is.\n---\n\n# Home\n"
+        "---\ndescription: What the page is.\n---\n\n# Home\n", encoding="utf-8"
     )
     (root / "mkdocs.yml").write_text(
         "nav:\n"
@@ -673,7 +689,8 @@ def _synthetic_manifest(root: Path, summary: str) -> None:
         "  - llmstxt:\n"
         "      sections:\n"
         "        Start:\n"
-        f"          - README.md: {summary}\n"
+        f"          - README.md: {summary}\n",
+        encoding="utf-8",
     )
 
 
@@ -694,16 +711,18 @@ def test_an_llms_manifest_out_of_the_nav_order_fails(
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     (tmp_path / "docs" / "guides").mkdir(parents=True)
     for page in ("README.md", "guides/json.md"):
-        (tmp_path / "docs" / page).write_text("---\ndescription: A page.\n---\n")
+        (tmp_path / "docs" / page).write_text(
+            "---\ndescription: A page.\n---\n", encoding="utf-8"
+        )
     nav = "nav:\n  - Home: README.md\n  - JSON: guides/json.md\n"
     manifest = "plugins:\n  - llmstxt:\n      sections:\n        Start:\n"
     swapped = "          - guides/json.md: A page.\n          - README.md: A page.\n"
-    (tmp_path / "mkdocs.yml").write_text(nav + manifest + swapped)
+    (tmp_path / "mkdocs.yml").write_text(nav + manifest + swapped, encoding="utf-8")
     assert lint.check_llms_manifest() == [
         "mkdocs.yml: the llms.txt manifest lists the pages in another order"
     ]
     kept = "          - README.md: A page.\n          - guides/json.md: A page.\n"
-    (tmp_path / "mkdocs.yml").write_text(nav + manifest + kept)
+    (tmp_path / "mkdocs.yml").write_text(nav + manifest + kept, encoding="utf-8")
     assert lint.check_llms_manifest() == []
 
 
@@ -719,11 +738,12 @@ def _synthetic_examples(root: Path, imports: str, installs: str) -> None:
     """Write a page whose example imports `imports`, and an install page."""
     (root / "docs" / "get-started").mkdir(parents=True)
     (root / "docs" / "guide.md").write_text(
-        f"# Guide\n\n```python\n{imports}\nimport json\n```\n"
+        f"# Guide\n\n```python\n{imports}\nimport json\n```\n", encoding="utf-8"
     )
     (root / "docs" / "get-started" / "installation.md").write_text(
         "# Installation\n\n```bash\npip install valgebra\n"
-        f"pip install {installs}\n```\n"
+        f"pip install {installs}\n```\n",
+        encoding="utf-8",
     )
 
 
@@ -859,9 +879,11 @@ def test_a_test_module_declared_with_a_visibility_is_test_only(
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     source = tmp_path / "crates" / "core" / "src" / "oracle.rs"
     (source.parent / "oracle").mkdir(parents=True)
-    source.write_text("pub fn ask() {}\n\n#[cfg(test)]\npub(crate) mod tests;\n")
+    source.write_text(
+        "pub fn ask() {}\n\n#[cfg(test)]\npub(crate) mod tests;\n", encoding="utf-8"
+    )
     tests = source.parent / "oracle" / "tests.rs"
-    tests.write_text("const FIXTURE: usize = 1;\n")
+    tests.write_text("const FIXTURE: usize = 1;\n", encoding="utf-8")
     assert lint.test_module_files([source, tests]) == {
         "crates/core/src/oracle/tests.rs"
     }

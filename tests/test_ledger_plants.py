@@ -4699,6 +4699,18 @@ PLANTS = (
         trips=("test_a_step_that_tees_a_command_ends_as_the_command_does",),
     ),
     Plant(
+        # The audit names the option, which no worker inherits.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '          PYTHONWARNDEFAULTENCODING: "1"\n',
+            "",
+        ),
+        trips=("test_a_run_split_over_workers_turns_the_encoding_warning_on_in_each",),
+    ),
+    Plant(
         # A target the workspace declares and the soak leaves out.
         "tests/test_fuzz_lane.py",
         (".github/workflows/ci.yml",),

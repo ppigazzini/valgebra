@@ -348,7 +348,9 @@ def test_a_workload_runs_without_the_callers_environment() -> None:
 
 def test_the_budget_file_names_the_toolchain_its_counts_were_taken_with() -> None:
     """A recorded count is a reading of one valgrind and one C library."""
-    budget = json.loads((ROOT / "scripts" / "perf_budget.json").read_text())
+    budget = json.loads(
+        (ROOT / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
+    )
     assert set(budget["measured_with"]) == {"valgrind", "libc"}
 
 
@@ -586,12 +588,14 @@ def test_a_shape_the_base_does_not_name_is_absent_there(tmp_path: Path) -> None:
     (base / "crates" / "valgebra-py" / "examples").mkdir(parents=True)
     (base / "crates" / "valgebra-py" / "src").mkdir(parents=True)
     assert gate.absent_at(base, mode), "no example, so no shape"
-    (base / "crates" / "valgebra-py" / "examples" / f"{example}.rs").write_text("")
+    (base / "crates" / "valgebra-py" / "examples" / f"{example}.rs").write_text(
+        "", encoding="utf-8"
+    )
     assert gate.absent_at(base, mode), (
         "the example without the arm that names the shape"
     )
     (base / "crates" / "valgebra-py" / "src" / "lib.rs").write_text(
-        f'"{gate.BINDING_SHAPES[mode]}" => BindingShape::Walk,'
+        f'"{gate.BINDING_SHAPES[mode]}" => BindingShape::Walk,', encoding="utf-8"
     )
     assert not gate.absent_at(base, mode)
     for other in gate.BINDING_SHAPES:
@@ -618,9 +622,11 @@ def test_a_reading_the_base_example_does_not_name_is_absent_there(
     examples = base / "crates" / "valgebra-core" / "examples"
     examples.mkdir(parents=True)
     assert gate.absent_at(base, mode), "no example, so no shape"
-    (examples / f"{example}.rs").write_text('Some("other") => (),')
+    (examples / f"{example}.rs").write_text('Some("other") => (),', encoding="utf-8")
     assert gate.absent_at(base, mode), "the example without the reading's arm"
-    (examples / f"{example}.rs").write_text(f'Some("{reading}") => (),')
+    (examples / f"{example}.rs").write_text(
+        f'Some("{reading}") => (),', encoding="utf-8"
+    )
     assert not gate.absent_at(base, mode)
     for known in gate.CORE_READINGS:
         assert not gate.absent_at(ROOT, known), f"the tree does not name {known}"

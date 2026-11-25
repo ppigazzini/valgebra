@@ -380,7 +380,9 @@ def test_a_base_git_cannot_read_is_not_an_empty_sweep(tmp_path: Path) -> None:
 def test_a_listing_it_cannot_read_is_not_an_empty_sweep(tmp_path: Path) -> None:
     """A listing that is not one exits 2, rather than examining no mutant."""
     base = _laid_down(tmp_path, {"code.rs": FUNCTIONS})
-    (tmp_path / "code.rs").write_text(FUNCTIONS.replace("    2", "    20"))
+    (tmp_path / "code.rs").write_text(
+        FUNCTIONS.replace("    2", "    20"), encoding="utf-8"
+    )
     _git(tmp_path, "commit", "--quiet", "-am", "change")
     named = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
         [

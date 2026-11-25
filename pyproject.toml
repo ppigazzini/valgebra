@@ -167,9 +167,10 @@ markers = [
 # Text read or written with no encoding named is the locale's, which is cp1252
 # on Windows below 3.15 and UTF-8 everywhere else: a test that passes on Linux
 # fails there on the first character past ASCII. Run under
-# `-X warn_default_encoding`, as the gate and CI's suite steps run it, such an
-# open warns, and this makes the warning a failure on every platform. A pipe
-# to a child names `encoding="locale"`, which both ends of it use.
+# `-X warn_default_encoding`, or `PYTHONWARNDEFAULTENCODING` where the run is
+# split over workers, such an open warns, and this makes the warning a failure
+# on every platform. A pipe to a child names `encoding="locale"`, which both
+# ends of it use.
 filterwarnings = ["error::EncodingWarning"]
 
 [tool.ruff]

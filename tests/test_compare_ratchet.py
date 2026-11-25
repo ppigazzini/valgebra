@@ -163,7 +163,9 @@ def test_every_shape_is_ratcheted_or_argued_out_of_it() -> None:
     such a shape is named with the measurement that put it there, the same way
     `.cargo/mutants.toml` names an equivalent mutant with its argument.
     """
-    document = json.loads((ROOT / "scripts" / "perf_compare.json").read_text())
+    document = json.loads(
+        (ROOT / "scripts" / "perf_compare.json").read_text(encoding="utf-8")
+    )
     ceilings = set(document["ceilings"])
     recorded = document["recorded"]
     judged = set(recorded["tolerance"])
@@ -179,7 +181,9 @@ def test_every_shape_is_ratcheted_or_argued_out_of_it() -> None:
 
 
 def _recorded() -> dict:
-    return json.loads((ROOT / "scripts" / "perf_compare.json").read_text())["recorded"]
+    return json.loads(
+        (ROOT / "scripts" / "perf_compare.json").read_text(encoding="utf-8")
+    )["recorded"]
 
 
 def test_a_window_records_its_median_and_half_again_its_widest_reading() -> None:
@@ -235,6 +239,8 @@ def test_a_reading_past_its_tolerance_drifts_against_the_record() -> None:
 def test_a_tolerance_is_a_spread_rather_than_a_wish() -> None:
     # A tolerance wider than the shape's ceiling judges nothing; one at zero
     # fires on the first run. Both are ways of having a ratchet that is not one.
-    document = json.loads((ROOT / "scripts" / "perf_compare.json").read_text())
+    document = json.loads(
+        (ROOT / "scripts" / "perf_compare.json").read_text(encoding="utf-8")
+    )
     for shape, tolerance in document["recorded"]["tolerance"].items():
         assert 0.0 < tolerance < document["ceilings"][shape], shape

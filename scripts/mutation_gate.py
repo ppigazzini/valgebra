@@ -112,7 +112,9 @@ def _read(out: Path, name: str) -> list[str]:
     f = out / name
     if not f.exists():
         return []
-    return [ln.strip() for ln in f.read_text().splitlines() if ln.strip()]
+    return [
+        ln.strip() for ln in f.read_text(encoding="utf-8").splitlines() if ln.strip()
+    ]
 
 
 def _named(lines: list[str], names: dict[str, str]) -> list[str]:
@@ -337,7 +339,7 @@ def main(argv: Sequence[str] = ()) -> int:
         # dropped it would leave the accepted set with no reason behind it.
         notes = {}
         if baseline_file.exists():
-            existing = json.loads(baseline_file.read_text())
+            existing = json.loads(baseline_file.read_text(encoding="utf-8"))
             notes = {
                 key: value
                 for key, value in existing.items()
@@ -364,7 +366,8 @@ def main(argv: Sequence[str] = ()) -> int:
                 },
                 indent=2,
             )
-            + "\n"
+            + "\n",
+            encoding="utf-8",
         )
         print(f"mutation_gate: baseline updated to {len(measured)} survivor(s)")
         unargued = sorted(set(measured) - set(notes.get("_accepted", {})))
@@ -377,7 +380,7 @@ def main(argv: Sequence[str] = ()) -> int:
 
     if not baseline_file.exists():
         _cannot_run(f"no {which} baseline; create one with --update")
-    recorded = json.loads(baseline_file.read_text())
+    recorded = json.loads(baseline_file.read_text(encoding="utf-8"))
     baseline = set(recorded["survivors"])
 
     if _stale_entries(recorded, baseline):

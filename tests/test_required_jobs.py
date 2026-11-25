@@ -1009,3 +1009,33 @@ def test_a_step_that_tees_a_command_ends_as_the_command_does() -> None:
                     step.get("shell") == "bash"
                 ), f"{label} pipes into tee"
     assert len(teed) >= 2, teed
+
+
+#: A pytest run split over workers.
+_SPLIT = re.compile(r"\bpytest\b[^;&|]*\s-n[ =]?(?:auto|logical|\d)", re.DOTALL)
+
+
+def test_a_run_split_over_workers_turns_the_encoding_warning_on_in_each() -> None:
+    """Every step splitting a pytest run sets the variable and passes no `-X`.
+
+    A worker is an interpreter of its own, which inherits the environment and
+    none of the options the parent was started with. A step that names the
+    option beside `-n` reads no open a worker makes, and passes.
+    """
+    split = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for name, job in (read_workflow(path).get("jobs") or {}).items():
+            for step in job.get("steps") or []:
+                run = str(step.get("run", ""))
+                if not _SPLIT.search(run):
+                    continue
+                label = f"{path.name}: {name}: {step.get('name', run[:40])!r}"
+                split.append(label)
+                environment = step.get("env") or {}
+                assert environment.get("PYTHONWARNDEFAULTENCODING") == "1", (
+                    f"{label} splits its run and sets no variable"
+                )
+                assert "warn_default_encoding" not in run, (
+                    f"{label} passes an option no worker inherits"
+                )
+    assert split
