@@ -1,8 +1,9 @@
 # Cutting a release
 
-How a version reaches an index: what is read before the bump, the wheels a
+How a version reaches an index: what is made ready before the bump, the wheels a
 release builds, the surfaces a bump touches, the two dispatches that publish,
-what to check between them, and the tag that records the result.
+what to check between them, the tag that records the result, and the advisory
+and the reading that follow it.
 `.github/workflows/release.yml` owns the build and the upload; this page owns the
 order and the checks that happen outside it.
 
@@ -83,33 +84,107 @@ for env in testpypi pypi; do
 done
 ```
 
+## Before the bump
+
+Everything the version carries is committed before the bump, one concern to a
+commit, so the bump holds the version and the changelog alone. `LAST` is the
+version PyPI serves, and the window is `git log --oneline "v$LAST"..HEAD`.
+
+**A push, a dispatch, a tag and an advisory each wait for the maintainer's
+word.** A word given for one is not given for the next, and a request to run the
+tests is a word for `github_ci`, never for `main`: a push to `main` deploys the
+site and puts the changelog's `Security` entries in public.
+
+**Dependencies, tools and actions**, in one `build(deps)` commit. Each moves to
+its latest tagged release; the commit names each one held back, and why, and
+each one younger than the week Dependabot waits.
+
+| What moves | By | Read after |
+|---|---|---|
+| `Cargo.lock` and `fuzz/Cargo.lock` | `cargo update`, and again with `--manifest-path fuzz/Cargo.toml`; a requirement in a manifest by hand | `cargo deny --locked check`, for each |
+| `uv.lock`, and a floor in `pyproject.toml` | `uv lock --upgrade` | the `pip-audit` lane's two commands |
+| an action | its tag in each `uses:`, then `gh actions-lock` | `gh actions-lock --verify`, and the `zizmor` lane's command |
+| a tool a lane installs: uv, maturin, zizmor, pip-audit, each `cargo-*`, the fuzz build's nightly | its pin in `.github/` | that lane's own command |
+| the pre-commit hooks | `uv run --no-sync pre-commit autoupdate` | `uv run --no-sync pre-commit run --all-files` |
+
+A dependency bump is tested at the call sites it changes, and by the lanes.
+
+**Performance, of the code that changed and of no other.** The window's diff
+names it:
+
+```bash
+git diff --stat "v$LAST" -- crates python/valgebra Cargo.lock
+```
+
+Where the diff moves no compiled code, steps 1 and 9 are skipped and the bump's
+message says so. Elsewhere, name the functions the diff changes, then the shapes
+of `scripts/perf_shapes.py` and the modes of `scripts/perf_gate.py` that reach
+them, and read those. A rise against the last release is restored even under the
+gate's ceiling: `symbols` names the function that spends it, and the repair is
+folded into the commit of the window that made it. One that stays is named in
+the version's section with what it buys. A figure a page states is taken again
+where the code behind it changed, by the reading its section names;
+`scripts/page_figures.py`, which takes every figure of two pages, is no part of
+a cut.
+
+**Documentation.** Each page that owns a zone the diff touches states the tree as
+it stands, by the table in [the agent instructions](../../AGENTS.md): the
+developer page, the guides, the README, `SECURITY.md`, the docstrings and the
+stubs. `scripts/docs_lint.py` passes, and so does the site's strict build.
+
+**Papers and theorems.** Every item the diff adds or changes that implements a
+numbered result cites it by label and place, and
+[the theory page](theory.md) names the item, as
+[Citing a paper](writing.md#citing-a-paper) says. No check sees a citation that
+is missing, so the diff is read for one, and the ledgers are run where the
+papers are at hand, which is on no runner:
+
+```bash
+git diff "v$LAST" -- crates/valgebra-core/src
+uv run --no-sync python -m pytest tests/test_theory_ledger.py tests/test_citation_ledger.py
+```
+
+**Security.** Each defect of `LAST` that is one
+[the security policy](../../SECURITY.md#what-is-a-security-issue) names stands
+under `Security` in `Unreleased`, and [its advisory](#an-advisory) is drafted
+before the dispatch to PyPI.
+
+**The changelog.** Each `feat` and `fix` of the window has its line under
+`Unreleased`, which `tests/test_changelog_ledger.py` holds. A commit that moves
+CI or tests alone is a `ci`, `test` or `build`, and has none.
+
 ## The order
 
-1. **Read the tree against the last release**, on every CPython release a
-   wheel is built for with a profile: an environment holding the version PyPI
-   serves, built here from its tag, and one holding the tree, named at one
-   length, and a `count` of the two, as [Reading one build against another](../guides/performance.md#reading-one-build-against-another)
-   reads them. Built here, the two differ in their sources alone. Run the
-   three for each release, `LAST` the version PyPI serves:
+1. **Read the changed code against the last release**, on the CPython release
+   `.venv` holds and on no other, unless the code that changed is compiled for
+   another alone: an environment holding the version PyPI serves, built here from its
+   tag, and one holding the tree, named at one length, and a `count` of the two
+   over the shapes the change reaches, as [Reading one build against another](../guides/performance.md#reading-one-build-against-another)
+   reads them. Built here, the two differ in their sources alone.
+   [Before the bump](#before-the-bump) says which shapes, `SHAPES` their names, and
+   when none is read:
 
    ```bash
-   py="$(uv python find --managed-python 3.14)"
+   py="$(uv python find --managed-python 3.15)"
    uv run --no-sync python scripts/perf_inspect.py env last --python "$py" --build "v$LAST"
    uv run --no-sync python scripts/perf_inspect.py env head --python "$py" --build
-   uv run --no-sync python scripts/perf_inspect.py count last head
+   uv run --no-sync python scripts/perf_inspect.py count last head --shapes $SHAPES
    ```
 
-   The merge gates hold each change to its base, on the interpreters the bench
-   lanes run: a cost that grows by less than their band in each of several
-   changes, or on another interpreter, passes every one of them. A shape that
+   The merge gates hold each change to its base: a cost that grows by less than
+   their band in each of several changes passes every one of them. A shape that
    reads dearer is confirmed and placed as that section says, then fixed
    before the bump, or named in the version's section with what it buys.
 
-2. **Bump, in one commit.** The workspace version, both lockfiles, and the
-   changelog: roll the `Unreleased` entries into a section for the version,
-   dated the day of this commit rather than the day the tag lands, and add its
-   compare and tag links. Land it on `main`, so the merge gates run
-   against the tree that is about to be published.
+2. **Bump, in one commit, the tip of the window.** The workspace version, both
+   lockfiles, and the changelog: roll the `Unreleased` entries into a section for
+   the version, dated the day of this commit rather than the day the tag lands,
+   open it with a paragraph saying what a user gets, and add its compare and tag
+   links. The message says which checks ran, what they read, and what was not
+   measured. Push it to `github_ci`, and land it on `main` once its `ci` check is
+   green there, so the merge gates run against the tree that is about to be
+   published. A lane a commit of the window broke is repaired by amending that
+   commit, and the bump stays the tip.
 
    The changelog ledger (`tests/test_changelog_ledger.py`) reads the *page* for
    which version is released and measures the roll against that version's tag.
@@ -126,11 +201,11 @@ done
 
 3. **Dispatch to TestPyPI** — `publish_target: testpypi`, `confirm_version` the
    new version.
-4. **Check what the index serves** (below).
+4. **Check what the index serves** ([the fast test](#checking-an-index-steps-4-and-6)).
 5. **Dispatch to PyPI** — `publish_target: pypi`, the same version.
 6. **Check what the index serves** again, against PyPI. A section with
-   `Security` entries has their advisories published now, beside the release,
-   as `SECURITY.md`'s process says: a fix and its advisory go out together.
+   `Security` entries has [its advisory](#an-advisory) published now, beside the
+   release, as `SECURITY.md`'s process says: a fix and its advisory go out together.
 7. **Tag the published commit**, annotated, subject `valgebra X.Y.Z`:
 
    ```bash
@@ -156,7 +231,8 @@ done
    release's section says. `test_the_reference_is_the_last_release` holds the version.
 
 9. **Read the published wheels' time against the last release's**, in the commit step 8
-   makes, on every CPython release a wheel with the global lock is built for. A profiled
+   makes, on every CPython release a wheel with the global lock is built for, over the
+   shapes step 1 read; where step 1 read none, neither does this one. A profiled
    build places its code anew each time it is built, so the wheel PyPI serves is a build
    no earlier step read, and step 1's count sees no placement at all. Four environments
    from PyPI, named at one length, two holding each release:
@@ -169,8 +245,8 @@ done
    for name in new1 new2; do
      uv run --no-sync python scripts/perf_inspect.py env "$name" --python "$py" --release "$NEW"
    done
-   uv run --no-sync python scripts/perf_inspect.py count old1 new1
-   uv run --no-sync python scripts/perf_inspect.py cycles old1 old2 new1 new2
+   uv run --no-sync python scripts/perf_inspect.py count old1 new1 --shapes $SHAPES
+   uv run --no-sync python scripts/perf_inspect.py cycles old1 old2 new1 new2 --shapes $SHAPES
    ```
 
    A shape both of this release's environments read moved alike, by 5% or more either
@@ -202,6 +278,25 @@ suite. They cannot prove the
 metadata a caller reads are all downstream of the upload. That is what these steps
 check, and they are the only steps that do.
 
+**The fast test**, in minutes and from outside the checkout:
+
+1. The release run is green on the commit that will be tagged, and the index lists
+   the version and every wheel set the run uploaded.
+2. Each file read has the sha256 the index states, and a provenance naming this
+   repository, `release.yml` and the index's environment
+   (`https://pypi.org/integrity/valgebra/X.Y.Z/<file>/provenance`). Two dispatches
+   build twice and a wheel is not reproducible, so TestPyPI's hashes are not PyPI's.
+3. The sdist's files that are in the tree equal the commit's.
+4. The wheel installs on the floor and on the newest release, and `uv pip check`
+   passes; `__version__` is the version.
+5. The package imports with every warning an error, from `site-packages`, and the
+   lines below hold.
+6. One behavior for each `Security` and `Fixed` entry, asked of the last release
+   and of this one. The two answer differently, and a control both answer alike
+   shows that the question reaches the code: one they answer alike tests nothing.
+
+The suite is not part of it: the release's smoke ran it on the files it uploaded.
+
 ```bash
 uv venv /tmp/vg
 VIRTUAL_ENV=/tmp/vg uv pip install --index-url https://test.pypi.org/simple/ "valgebra==X.Y.Z"
@@ -210,8 +305,8 @@ VIRTUAL_ENV=/tmp/vg uv pip install --index-url https://test.pypi.org/simple/ "va
     assert v.Validator(list[int]).is_valid([1, 2]) and v.Validator(int).is_valid_json('1')"
 ```
 
-Then run the suite against the installed wheel rather than a local build. Nothing
-puts `python/` on the path, so the tests import whichever `valgebra` the
+**Where the fast test leaves a wheel in doubt**, run the suite against the installed
+wheel rather than a local build. Nothing puts `python/` on the path, so the tests import whichever `valgebra` the
 environment holds — install the test group into the same environment first,
 at the lock's versions, **from PyPI and in their own install**, as the release
 smokes do, and run the product suite, as they run it:
@@ -309,6 +404,29 @@ selector resolves to whichever build is on the machine: `uv venv --python 3.14`
 can land on the free-threaded interpreter, so read
 `sysconfig.get_config_var("Py_GIL_DISABLED")` in the venv to record which wheel
 the check actually covered.
+
+## An advisory
+
+A section with `Security` entries has one advisory, published at step 6. It is a
+row for each way through, with what went through and the releases affected.
+
+**A range is what the published releases answer.** Each one is installed from PyPI
+and asked the case, beside a control that release handles, so a release without
+the feature does not read as one unaffected. A case an earlier advisory covers
+names that advisory.
+
+**Each sentence is probed before it is published.** The draft is made, read back
+and corrected, then published:
+
+```bash
+gh api -X POST repos/ppigazzini/valgebra/security-advisories --input advisory.json
+gh api repos/ppigazzini/valgebra/security-advisories/$GHSA --jq .description
+gh api -X PATCH repos/ppigazzini/valgebra/security-advisories/$GHSA -f state=published
+```
+
+`advisory.json` holds `summary`, `description`, `cvss_vector_string`, `cwe_ids` and
+one of `vulnerabilities`, the `pip` package with `vulnerable_version_range` and
+`patched_versions`. It names no person and no address.
 
 ## The wheels a release builds
 
@@ -423,10 +541,14 @@ surface, and each holds answers this tree's gates do not. What that asks of a re
 
 ## What this does not cover
 
-- **The wheels a local count cannot run.** Step 1 reads each CPython release's
-  Linux x86_64 build, and step 9 the one PyPI serves. Every other wheel is a build
+- **The wheels a local count cannot run.** Step 1 reads one CPython release's
+  Linux x86_64 build, and step 9 those PyPI serves. Every other wheel is a build
   of its own, for another platform, architecture or implementation, and no reading
-  holds it to the release before.
+  holds it to the release before. Step 1 can miss a rise on a CPython release it
+  does not read, which step 9 reads once the wheel is published.
+- **A shape the window's diff does not reach.** Steps 1 and 9 read the changed code
+  alone, and a profiled build places every loop anew, so a shape no change reaches
+  can move between two releases with no reading here to name it.
 - **A source install off Linux.** `uv pip install` takes the wheel; the sdist
   path is compiled and tested once by the workflow, on Linux, and
   `--no-binary valgebra` locally is the only way to reach it on another

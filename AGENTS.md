@@ -40,6 +40,7 @@ zone you are changing before changing it, and fix that page in the same commit.
 | whether new work is a recipe, a frontend form, a decider, a node or a companion | [Where new work goes](docs/dev/architecture.md#where-new-work-goes) |
 | whether the algebra may gain a node | [The schema IR page](docs/dev/schema-ir.md) |
 | code that implements a paper's result | [Citing a paper](docs/dev/writing.md#citing-a-paper), [the theory page](docs/dev/theory.md) |
+| a release, from its first commit to its advisory | [The releasing page](docs/dev/releasing.md) |
 | any prose at all | [The writing page](docs/dev/writing.md) |
 
 [The glossary](docs/dev/glossary.md) defines the words this project
@@ -144,6 +145,12 @@ forty minutes. Push, and read the lanes. Stop anything local that was gating a
 push once that push is made. A red lane is repaired by running the one command
 that failed, as `ci.yml` spells it, and reading the rest off the run.
 `scripts/gate.py --list` answers which steps a lane holds.
+
+**A cut follows [The releasing page](docs/dev/releasing.md), from
+[Before the bump](docs/dev/releasing.md#before-the-bump) on**, every step in its
+order. Performance is read for the code the window changed and for no other. A
+push, a dispatch, a tag and an advisory each wait for the maintainer's word, given
+for that one.
 
 
 ## Layout

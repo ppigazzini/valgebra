@@ -1717,14 +1717,16 @@ where `--tolerance` is given and a shape rose past it; every reading exits 2
 where it cannot be taken. It needs valgrind, `uv` for `--release`, and for
 `--build` the `llvm-tools` component the PGO build needs.
 
-**Read a change against the last release on every interpreter the wheels
-ship.** Each interpreter's wheel is trained and laid out on its own, so a
-reading on one says nothing about another: one release read a list nested
-twenty-five deep 3.1% dearer than the release before it on 3.12 and 0.2% on
-3.14, and a hundred-entry `dict[str, int]` 5.4% dearer on 3.14t and 2% to 3%
-cheaper on every build with a global lock. One `env` per interpreter and side, and one
-`count` per pair, is the reading; a survey of one interpreter is a reading of
-that one.
+**Read a change against the last release on every interpreter the wheels ship.**
+Each interpreter's wheel is trained and laid out on its own, so a reading on one
+says nothing about another: one release read a list nested twenty-five deep 3.1%
+dearer than the release before it on 3.12 and 0.2% on 3.14, and a hundred-entry
+`dict[str, int]` 5.4% dearer on 3.14t and 2% to 3% cheaper on every build with a
+global lock. One `env` per interpreter and side, and one `count` per pair, is
+the reading; a survey of one interpreter is a reading of that one. A release's
+cut reads the code it changed on one interpreter before its bump, and on every
+one with a global lock once its wheels are published: `docs/dev/releasing.md`
+owns that, and names what it does not read.
 
 **Decide on the count, and confirm in cycles.** On a build with the GIL a count
 is deterministic: two builds of one source and one toolchain read it to the
