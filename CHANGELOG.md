@@ -6,6 +6,33 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+<!-- changelog-roll
+
+Every feat/fix commit this section accounts for, oldest first; held to
+`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
+a caller cannot see: a step of the set representation that changed no
+answer of its own, or a repair to a change not yet released.
+
+-->
+
+## [0.0.36] - 2026-11-26
+
+A release of two features and one fix, with no node. `ensure` takes `fail_fast` and `limit=n` and
+stops after the full report's first `n` failures, as `validate` does; a failed predicate is named by
+its callable, `a passing total_games_must_match`, and one that raised keeps its exception's text
+whole; and `is_empty` of a meet below an excluded middle is read empty, as the relation proves it. A
+meet no reading decides is declined at a cost bounded a complement, and one whose complements
+together are past the nodes a lowering reads is lowered under as many nodes a complement: a model
+checker's abstraction of thirty-two integer tools, built through `valgebra-jsonschema` 0.0.5, reads
+in 0.63 s on a wheel of this tree built as the release builds its wheels, for CPython 3.15 on Linux
+x86_64, where 0.0.35's published wheel took 29.51 s. The metamorphic gate's corpus, read against
+0.0.35's recording, moves no membership and loses no decision. Read against 0.0.35 by the
+instruction gate on CPython 3.15.2, the 20 workloads whose code moved count within 0.09% of it,
+every checksum unchanged, and eleven read less: the repeating decision workload 0.73% less, the
+matrix decision workload 0.10% and the relation between dataclasses 0.09%. The record explain with
+every field accepted reads the most, 0.09% more, a count that moves with the addresses its compared
+keys sit at and not with its code.
+
 ### Added
 
 - **`ensure` stops after a given number of failures.** `ensure(obj, fail_fast=True)` and
@@ -43,19 +70,6 @@ All notable changes to valgebra are recorded here. The format follows
   complement is read, a union holding a scalar atom is inhabited before its other members are
   read, and a meet's complements share the asking's respelling allowance a complement. The
   metamorphic gate's corpus moves no membership and loses no decision.
-
-<!-- changelog-roll
-
-Every feat/fix commit this section accounts for, oldest first; held to
-`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
-a caller cannot see: a step of the set representation that changed no
-answer of its own, or a repair to a change not yet released.
-
-- fix: the emptiness of a meet splits on a set a complement negates
-- feat: ensure stops after a given number of failures
-- feat: a failed predicate names its rule, and a raised one keeps its text
-
--->
 
 ## [0.0.35] - 2026-11-24
 
@@ -5556,7 +5570,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.35...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.36...HEAD
+[0.0.36]: https://github.com/ppigazzini/valgebra/compare/v0.0.35...v0.0.36
 [0.0.35]: https://github.com/ppigazzini/valgebra/compare/v0.0.34...v0.0.35
 [0.0.34]: https://github.com/ppigazzini/valgebra/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/ppigazzini/valgebra/compare/v0.0.32...v0.0.33
