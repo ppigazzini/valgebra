@@ -1627,7 +1627,7 @@ a wide pair that declines pays for it, `[int, int]` below 256 lists of a literal
 twice the instructions of a query with no such asking.
 
 **A complement is built only where it is read.** The parts of the universe are
-questions of their own [FCB08, (4)], and most sets hold a kind or two, so a
+questions of their own [FCB08, §6.2, (4)], and most sets hold a kind or two, so a
 complement spends most of what it costs on a top for every kind the set misses.
 `Guard::leaves` answers what a table asks of a letter and of its else edge: a part
 holding no line leaves a value there, and past those the first part proved to leave

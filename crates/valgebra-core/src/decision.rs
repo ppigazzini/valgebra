@@ -896,7 +896,7 @@ impl Schema {
         // difference proves the inclusion and an inhabited one is a decline,
         // but at a kind no cut reaches: a cut beneath a constructor changes that
         // constructor's kind of values alone, the difference being read a kind
-        // at a time [FCB08, (4)], so a value it holds at another kind is a
+        // at a time [FCB08, §6.2, (4)], so a value it holds at another kind is a
         // value of the real difference (`parts_a_cut_reaches`). An inhabited
         // reading refuting nothing there hands the pair to the reading the
         // other way round ([`Self::refuted_narrowed`]).
@@ -1763,7 +1763,9 @@ impl Schema {
     /// complement.
     ///
     /// `U ⊆ T` holds exactly where `U ∧ C ⊆ T` and `U ∧ ¬C ⊆ T` both do, `C` any
-    /// set, since `U` is the union of the two [FCB08, §6.9]. It is the split a
+    /// set: a decision tree's node over `C` is `(C ∧ B+) ∨ (¬C ∧ B−)`
+    /// [LN26, §3.1, Def. 3.3], so `U` is the union of its two halves, and a union
+    /// is below `T` exactly where each member is [FCB08, Def. 4.1]. It is the split a
     /// normal form makes on every atom, made here on one, the step a binary
     /// decision diagram is built from, and it is made on a `C` the supertype holds
     /// under a complement, as a member or a conjunct of one, so that one half
@@ -1771,7 +1773,8 @@ impl Schema {
     /// a translation from JSON Schema writes `anyOf [Y, not Y]` so, `J` the JSON
     /// values. Either half refuted refutes the pair, since each is a part of `U`.
     /// `C` must denote a set: a predicate answering two calls apart obeys no
-    /// excluded middle. Both goals are meets of signed subterms, asked of the
+    /// excluded middle. Both goals are meets of signed subterms, so they stay
+    /// among the normal forms over the atoms the pair holds [FCB08, §6.9], asked of the
     /// rules and the set representation for every set first, and only where none
     /// decided there of their parts ([`decided_by_parts`](Self::decided_by_parts)):
     /// a union supertype narrowed to the branches the half meets, a meet one

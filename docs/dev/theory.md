@@ -887,7 +887,7 @@ finite approximation of a recursive type at the depth of the cut [AC93, §3.4].
 The widened difference contains the real one, so its emptiness proves the
 inclusion and its inhabitance proves nothing at a kind a cut reaches. A cut
 beneath a constructor reaches that constructor's kind alone, the difference
-being read a kind at a time [FCB08, (4)], so a value it holds at any other
+being read a kind at a time [FCB08, §6.2, (4)], so a value it holds at any other
 kind is a value of the real difference and refutes; a cut beneath no
 constructor reaches every kind, and so does a cut beneath an attribute record,
 whatever constructor stands between the two, the record holding values of every
@@ -912,7 +912,7 @@ HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_only_past_the_cut,
 **Kinds decompose emptiness.** Positives of two kinds that share no value make a
 clause empty outright [FCB08, (5)] -- every pair but `bool` and `int`, a
 deviation below -- negatives of another kind are dropped, and each kind is then
-an independent question [FCB08, (4)] -- which is what lets every kind carry its
+an independent question [FCB08, §6.2, (4)] -- which is what lets every kind carry its
 own representation and the whole be a product over them. `Kind` is the one
 partition both deciders read; `Region` is derived from it, never maintained
 beside it, and a scalar atom's region is the set of constants its basic type
@@ -923,7 +923,7 @@ complement of a container of anything, is dropped beside a member of the
 container's kind alone, the meet being the same set: the guard holds no value of
 that kind, the container holding every one [FCB08, Def. 4.1]. And a kind is a value: a subject that
 holds every value of a kind the supertype holds none of is outside it, each
-kind being its own question [FCB08, (4)] and inhabited. **[LOAD-BEARING: kinds-decompose-emptiness]**
+kind being its own question [FCB08, §6.2, (4)] and inhabited. **[LOAD-BEARING: kinds-decompose-emptiness]**
 
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
@@ -1113,6 +1113,22 @@ SOURCE: §14.2 "Regularity bounds the number of distinct"
 IMPLEMENTED-BY: decision/emptiness.rs::meet_through_a_reference, valgebra-py/src/build.rs::refuse_a_growing_argument, decision.rs::Schema::split_on_a_set_it_negates, decision.rs::one_sequence_below
 
 HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, a_supertype_union_is_respelled_through_its_nested_union_inside_the_closure, a_split_asks_its_halves_past_the_rules_inside_the_closure, a_half_asked_below_a_complement_asks_inside_the_closure, a_mapping_a_rule_rebuilds_is_asked_inside_the_closure, a_meet_of_sequences_is_asked_as_one_sequence_inside_the_closure, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, the_widened_unfolding_is_in_the_closure, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
+
+**A pair is split on one set its supertype negates.** `U ⊆ T` holds exactly
+where `U ∧ C ⊆ T` and `U ∧ ¬C ⊆ T` both hold, `C` any set: a decision tree's
+node over `C` denotes `(C ∧ B+) ∨ (¬C ∧ B−)` [LN26, §3.1, Def. 3.3], so `U` is
+the union of its two halves, and a union is below a set exactly where each
+member is [FCB08, Def. 4.1]. The relation makes the split on one `C` its
+supertype holds under a complement, where every decider declined, and `is_empty`
+reads a meet's complement through the same split, so a pair below an excluded
+middle `(¬C ∧ D) ∪ C` -- what a translation from JSON Schema writes for
+`anyOf [not C, C]` -- is proved by both routes alike. `C` must denote a set: a
+predicate answering two calls apart obeys no excluded middle.
+**[LOAD-BEARING: a-pair-is-split-on-one-set]**
+
+IMPLEMENTED-BY: decision.rs::Schema::split_on_a_set_it_negates
+
+HELD-BY: a_declined_pair_is_split_on_a_set_its_supertype_negates, a_meet_below_an_excluded_middle_is_read_empty_by_its_split, a_split_asks_its_halves_past_the_rules_inside_the_closure
 
 **A cache under coinduction is revertible or absent.** A memo added to the
 coinductive procedure must be persistent, so a failed disjunct can roll it

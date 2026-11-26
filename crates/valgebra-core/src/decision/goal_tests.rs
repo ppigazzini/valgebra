@@ -904,7 +904,7 @@ fn every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms() {
     }
 }
 
-// THEORY: regularity-bounds-the-goals
+// THEORY: regularity-bounds-the-goals, a-pair-is-split-on-one-set
 /// A split's halves, asked of their parts once every set's halves declined
 /// before the rules and the sets, ask goals inside the closure.
 ///

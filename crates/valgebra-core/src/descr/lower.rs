@@ -209,7 +209,7 @@ pub(crate) fn lower_unfolded(
 /// so holds ([`parts_built_by`]), or every part for a cut beneath none.
 ///
 /// A constructor builds values of its one kind, and a union, a meet and a
-/// complement are read a kind at a time [FCB08, (4)], so a cut beneath a
+/// complement are read a kind at a time [FCB08, §6.2, (4)], so a cut beneath a
 /// `list[...]` widens or narrows the lists and leaves every other kind's values
 /// as the schema denotes them: a finite approximation of a recursive type is
 /// exact up to the depth it cuts at [AC93, §3.4], and the depth starts at the

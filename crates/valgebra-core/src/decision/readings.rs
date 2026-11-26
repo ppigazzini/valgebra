@@ -1069,7 +1069,7 @@ impl Schema {
     /// Whether the subject holds every value of a kind the supertype holds
     /// none of. Every kind is inhabited -- `None`, `False`, `0`, `0.0`, `""`,
     /// `b""`, `[]`, `()`, `set()`, `frozenset()`, `{}` -- and each kind is a
-    /// question of its own [FCB08, (4)], so such a kind names a value of the
+    /// question of its own [FCB08, §6.2, (4)], so such a kind names a value of the
     /// subject outside the supertype: `anything` is outside the JSON values at
     /// `b""`, and so is the complement of the JSON values.
     ///
@@ -1102,7 +1102,7 @@ impl Schema {
 
 /// [`Schema::spills_a_kind`] past its shape test: the kinds the subject holds
 /// whole, less those the supertype may hold any value of, each kind a question
-/// of its own [FCB08, (4)]. Asked of any subject by the respelling of a pair the
+/// of its own [FCB08, §6.2, (4)]. Asked of any subject by the respelling of a pair the
 /// rules declined, where it is the kinds the difference holds whole.
 ///
 /// The subject is read first: most subjects hold no kind whole, which ends the

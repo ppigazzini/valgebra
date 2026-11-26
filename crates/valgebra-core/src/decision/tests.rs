@@ -16423,7 +16423,7 @@ mod a_meet_holding_complements {
         assert!(cell(8, true).is_empty_with(&Indexed, &[]));
     }
 
-    // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
+    // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures, a-pair-is-split-on-one-set
     /// `list[J] & ~((~C & J) | C)` is empty: `list[J]` is below the union, as
     /// the relation proves by splitting it on `C`, and `is_empty` reads the
     /// same pair through the split among a complement's readings. The split
@@ -17471,8 +17471,11 @@ fn a_set_inside_c_that_holds_a_value_is_refuted_below_the_complement_of_c() {
     );
 }
 
+// THEORY: a-pair-is-split-on-one-set
 /// A pair every decider declines is split on a set its supertype negates: `U ⊆ T`
-/// is `U ∧ C ⊆ T` and `U ∧ ¬C ⊆ T` [FCB08, §6.9].
+/// is `U ∧ C ⊆ T` and `U ∧ ¬C ⊆ T`, `U` being the union of its halves
+/// [LN26, §3.1, Def. 3.3] and a union below `T` where each member is
+/// [FCB08, Def. 4.1].
 ///
 /// `J ⊆ 1 ∪ (J ∧ ¬1)` is the excluded middle a translation from JSON Schema
 /// writes for `anyOf [Y, not Y]`, `J` the JSON values, and holds for every `J`;

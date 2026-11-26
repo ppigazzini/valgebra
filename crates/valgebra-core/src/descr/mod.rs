@@ -935,7 +935,7 @@ impl Descr {
     /// Every value this set holds and `other` does not, or `None` where a
     /// component cannot hold the result: the meet with `other`'s complement.
     ///
-    /// Each kind is its own question [FCB08, (4)], so a kind this set holds no line
+    /// Each kind is its own question [FCB08, §6.2, (4)], so a kind this set holds no line
     /// of holds no line of the difference, whatever `other` holds there, and its
     /// complement is not built. A subject holds a kind or two, and a complement
     /// builds a top for every kind `other` leaves out.
@@ -1020,7 +1020,7 @@ impl Descr {
     /// The question a constraint asks of the base it narrows, and it is a
     /// **read** of the components rather than a set built to ask it: every
     /// component outside `kinds`, and the kindless slot beside them, proved to
-    /// hold nothing, each kind a question of its own [FCB08, (4)].
+    /// hold nothing, each kind a question of its own [FCB08, §6.2, (4)].
     ///
     /// Asked the other way -- meet the base with the complement of a union of
     /// those kinds and test the result for emptiness -- it costs two thirds of
@@ -1058,7 +1058,7 @@ impl Descr {
     /// or the values of no kind where [`KINDLESS_PART`] is none.
     ///
     /// The parts are read one at a time, each a question of its own
-    /// [FCB08, (4)], so a value found in one is a value of the set whatever
+    /// [FCB08, §6.2, (4)], so a value found in one is a value of the set whatever
     /// the others are read as.
     pub(crate) fn holds_a_value_outside(&self, reached: Parts) -> bool {
         self.kinds.iter().zip(Kind::ALL).any(|(lines, kind)| {
@@ -1075,7 +1075,7 @@ impl Descr {
     /// What is known about this set admitting a value.
     ///
     /// The kinds partition the universe, so a value the descriptor admits is a
-    /// value some component admits [FCB08, (4)], and the verdict is the
+    /// value some component admits [FCB08, §6.2, (4)], and the verdict is the
     /// union's, empty only when every component is proved empty and inhabited
     /// as soon as one is proved inhabited. `Unknown` is what is left -- no
     /// component proved either way, and one of them could not say.
@@ -1204,7 +1204,7 @@ impl Guard for Arc<Descr> {
         Descr::minus(self, other).map(Arc::new)
     }
 
-    /// Read a part at a time, since they partition the universe [FCB08, (4)]. One
+    /// Read a part at a time, since they partition the universe [FCB08, §6.2, (4)]. One
     /// holding no line here stands whole in the complement, and a whole part holds
     /// a value whatever the others hold. Most letters hold a kind or two, and a
     /// complement builds a top for every kind they miss, so those are asked first;
