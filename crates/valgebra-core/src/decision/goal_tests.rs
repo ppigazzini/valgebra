@@ -52,6 +52,9 @@ pub(crate) mod goals {
         static DEEPEST: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
         /// How many pairs the set representation was asked on this thread.
         static READ_BY_THE_SETS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+        /// How many rests a meet was read below one of its complements, on this
+        /// thread.
+        static COMPLEMENTS_READ: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
         /// How many constructors stand on the path to the frame running.
         static CROSSED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
         /// The goals the path holds open, each with [`CROSSED`] as it was opened.
@@ -142,6 +145,18 @@ pub(crate) mod goals {
     /// read before and after a reading, what moved is how many it lowered.
     pub(crate) fn pairs_read_by_the_sets() -> u64 {
         READ_BY_THE_SETS.with(std::cell::Cell::get)
+    }
+
+    /// Count a meet's rest read below one of its complements
+    /// ([`Schema::below_one_complement`]).
+    pub(crate) fn read_a_complement_at_a_time() {
+        COMPLEMENTS_READ.with(|read| read.set(read.get() + 1));
+    }
+
+    /// How many rests were read below a complement on this thread so far: read
+    /// before and after a question, what moved is how many it asked.
+    pub(crate) fn complements_read() -> u64 {
+        COMPLEMENTS_READ.with(std::cell::Cell::get)
     }
 
     /// What one counted query asked.

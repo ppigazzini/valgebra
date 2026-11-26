@@ -1082,6 +1082,7 @@ def run_relative(modes: list[str], rev: str) -> int:
             continue
         step = recorded_step(mode, record.get("steps", []), carried)
         outcomes.append(judge_relative(head[mode], base[mode], subject, step))
+    outcomes.append(judge_parity(head))
     outcome = worst(outcomes)
     if batch and outcome == EXIT_FAIL:
         print("\nThe ceiling is written for one commit and this reading covers")
@@ -1091,6 +1092,39 @@ def run_relative(modes: list[str], rev: str) -> int:
         print("\nA pass over a batch is a pass on the sum: a regression inside it")
         print("canceled by an improvement beside it reads exactly like this.")
     return outcome
+
+
+#: The shapes asking one corpus of `is_empty` and of the relation below
+#: `nothing`, and how many times the second's count the first's may read.
+#:
+#: The two answer one question by two procedures, so a reading one asks and the
+#: other does not is a cost on one route alone, which no comparison with a base
+#: reads where the base carries it too. Twice, since the emptiness of a meet
+#: holding complements reads the relation's set reading and the readings before
+#: it, and a pair past twice is a reading `is_empty` asks that the relation
+#: answers without.
+PARITY = ("decision-emptiness", "decision-below")
+PARITY_RATIO = 2
+
+
+def judge_parity(head: Mapping[str, Measurement]) -> int:
+    """Hold `is_empty`'s count over the corpus to twice the relation's.
+
+    Read only where one run measured both shapes, on the head alone, since the
+    pair is one build's two procedures and a base holds its own.
+    """
+    emptiness, below = PARITY
+    if emptiness not in head or below not in head:
+        return EXIT_OK
+    ratio = head[emptiness].irefs / head[below].irefs
+    print(f"\n--- {MODES[emptiness][1]}, against {MODES[below][1]}")
+    print(f"ratio:    {ratio:.2f} (ceiling {PARITY_RATIO})")
+    if ratio > PARITY_RATIO:
+        print("FAIL: is_empty reads this corpus past twice the relation below")
+        print("nothing, a reading one procedure asks and the other answers without.")
+        return EXIT_FAIL
+    print("OK: the two procedures read the corpus within the ceiling.")
+    return EXIT_OK
 
 
 def worst(outcomes: Sequence[int]) -> int:

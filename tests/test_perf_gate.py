@@ -423,6 +423,34 @@ def test_an_improvement_against_the_base_passes() -> None:
     assert _relative(80_000_000) == 0
 
 
+def test_two_procedures_within_twice_pass() -> None:
+    # One corpus read by `is_empty` and below `nothing`: a reading each asks
+    # alike leaves the two counts near, and the ceiling holds the pair.
+    head = {
+        "decision-emptiness": gate.Measurement(irefs=200, checksum=1),
+        "decision-below": gate.Measurement(irefs=100, checksum=1),
+    }
+    assert gate.judge_parity(head) == 0
+
+
+def test_an_emptiness_past_twice_the_relation_fails() -> None:
+    # A reading `is_empty` asks that the relation answers without reads as a
+    # count on one route alone, which no base comparison sees where the base
+    # carries the reading too.
+    head = {
+        "decision-emptiness": gate.Measurement(irefs=201, checksum=1),
+        "decision-below": gate.Measurement(irefs=100, checksum=1),
+    }
+    assert gate.judge_parity(head) == 1
+
+
+def test_the_pair_is_read_only_where_both_are_measured() -> None:
+    # A run measuring one shape of the pair has nothing to hold it to.
+    alone = {"decision-emptiness": gate.Measurement(irefs=10**9, checksum=1)}
+    assert gate.judge_parity(alone) == 0
+    assert gate.judge_parity({}) == 0
+
+
 def test_a_workload_that_changed_is_not_a_comparison() -> None:
     # Neither a pass nor a regression: the two runs measured different work, so
     # exit 2 -- "could not measure" -- which is the code a lane must not read as

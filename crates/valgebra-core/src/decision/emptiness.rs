@@ -120,8 +120,10 @@ impl Schema {
     }
 
     /// The verdict [`is_empty_with`](Self::is_empty_with) reads, in one
-    /// asking under `budget`: the readings of the set, then a meet holding one
-    /// complement and a complement read as the relations they are.
+    /// asking under `budget`: the readings of the set; then a meet the sets find
+    /// a value in ([`the_sets_find_a_value`](Self::the_sets_find_a_value)),
+    /// which is inhabited; then a meet holding complements and a complement read
+    /// as the relations they are.
     fn emptiness_on(
         &self,
         oracle: &dyn LeafRelations,
@@ -130,6 +132,7 @@ impl Schema {
     ) -> Verdict {
         let cx = &mut Cx::new(oracle, defs, budget);
         match self.emptiness_under(cx) {
+            Verdict::Unknown if self.the_sets_find_a_value(cx) => Verdict::Inhabited,
             Verdict::Unknown
                 if (matches!(self, Schema::Intersection(_))
                     && self.below_the_set_it_complements(cx).holds())
@@ -159,6 +162,35 @@ impl Schema {
             }),
             _ => false,
         }
+    }
+
+    /// Whether the set representation finds a value in this meet, read as the
+    /// relation below `Nothing` reads its subject ([`Schema::descriptor_contained_in`]),
+    /// for a meet the readings after it would read dearly: one holding
+    /// [`COMPLEMENTS_READ_DEARLY`] complements or more, each asked as a relation
+    /// of the rest ([`below_the_set_it_complements`](Self::below_the_set_it_complements)),
+    /// or one holding a complement beside a union, whose undecided reading the
+    /// further asking distributes and reads again. A set is empty exactly where
+    /// it is below the empty set [FCB08, §4.1], so a value the sets find refutes
+    /// the emptiness, and the question ends inhabited where the relation's own
+    /// reading ends it: both procedures find the value by one reading. The
+    /// reading spends no step, as no lowering does, so it starves nothing after
+    /// it, and a meet whose lowering the bounds refuse reads as before.
+    #[inline(never)]
+    fn the_sets_find_a_value(&self, cx: &Cx<'_>) -> bool {
+        let Schema::Intersection(members) = self else {
+            return false;
+        };
+        let complements = members
+            .iter()
+            .filter(|member| matches!(member, Schema::Complement(_)))
+            .count();
+        let read_again = complements > 0
+            && members
+                .iter()
+                .any(|member| matches!(member, Schema::Union(_)));
+        (complements >= COMPLEMENTS_READ_DEARLY || read_again)
+            && self.descriptor_contained_in(&Schema::Nothing, cx.oracle, cx.defs) == Relation::Fails
     }
 
     /// A meet holding complements, read as the relations it is, at the root of
@@ -243,6 +275,8 @@ impl Schema {
         cx: &Cx<'_>,
         allowance: &Budget,
     ) -> Relation {
+        #[cfg(test)]
+        super::goal_tests::goals::read_a_complement_at_a_time();
         let rest = Schema::meet_within(
             members
                 .iter()
@@ -1748,6 +1782,22 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
     }
     verdict
 }
+
+/// The complements a meet holds from which `is_empty` asks the set
+/// representation for a value of the whole meet before reading it a complement
+/// at a time ([`Schema::the_sets_find_a_value`]).
+///
+/// **This bound is cost.** The complement-at-a-time reading asks one relation a
+/// complement, of a rest holding the others, and the lowering asks one build of
+/// the whole meet. Below the bound the relations are the cheaper: asked first of
+/// `int & ~bool & ~[3, 3]` and of `list[J] & ~list[int] & ~J`, the lowering read
+/// 75 thousand and 1.78 million instructions more, and neither meet is refuted
+/// by it. From the bound up the build is: a meet of the integer kind, a range
+/// and the complements of 8 ranges read 384 million instructions a complement
+/// at a time and 11 million with the lowering first, and the 32-complement cell
+/// 572 million and 10 million, each meet counted alone under cachegrind;
+/// `scripts/perf_gate.py --decision-emptiness` holds their corpus.
+pub(super) const COMPLEMENTS_READ_DEARLY: usize = 3;
 
 /// The clauses a meet with no reference may be read as before it is distributed.
 ///

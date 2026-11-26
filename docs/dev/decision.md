@@ -1134,8 +1134,17 @@ because the rules prove `list[J] & ~list[int]` below `J`, a fixpoint's relation
 its emptiness alone does not settle. The union `b | c` the same meet is below
 is a term no member wrote, so it is not asked. That reading asks the
 relation's rules under the steps the question has left, as the relation is
-asked, and the complements of one meet share those steps, so a meet holding
-several spends what a meet holding one may. What it leaves apart is a
+asked, and the complements of one meet share those steps. The steps are a
+ceiling, not the cost: each complement asks a relation of a rest holding the
+others, and an undecided meet holding a union is read again by the further
+asking. So a meet that reading would read dearly -- one holding
+`COMPLEMENTS_READ_DEARLY` complements or more, or a complement beside a union
+(`decision/emptiness.rs`) -- is first asked of the set representation as the
+relation below `nothing` asks its subject (`Schema::the_sets_find_a_value`),
+and a value found there ends the question inhabited, by the reading the
+relation refutes it with. `scripts/perf_gate.py --decision-emptiness` and
+`--decision-below` read one corpus of such meets by the two procedures. What
+it leaves apart is a
 complement it does not take -- one running a callback, whose two occurrences
 may answer apart, so `P <= P` holds while `P & ~P` is not proved empty, which
 stays beside the rest as written -- and a pair only the set readings after the
