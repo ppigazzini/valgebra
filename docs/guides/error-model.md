@@ -551,6 +551,38 @@ with the hash seed; `fail_fast` keeps the first of that order. The exact output
 is locked by snapshot tests (the message format on the Rust side, the structured
 `errors` on the Python side), so any change to it is reviewed, never silent.
 
+The order is the walk's, and it is the order `limit=n` and `fail_fast` cut. A
+record's failures -- a `TypedDict`'s, a dataclass's, a dict written as a schema
+-- come by field name, whatever order the class declares its fields in and
+whatever order the value holds its keys in, a missing key in its name's place,
+and a key a closed record does not declare comes after them, in the value's
+order. A mapping's failures come in the value's order, a key's before its
+value's, and a sequence's by position. A record reads its fields in that order
+and stops at the `n`th failure, so `limit=1` reads as many fields as it takes to
+meet one: the key a value inserted first is known only once every field is read,
+and naming it would cost the full report.
+
+```python
+from typing import TypedDict
+
+from valgebra import ValidationError, Validator
+
+
+class Point(TypedDict):
+    z: int
+    a: int
+
+
+for value in ({"z": "x", "a": "y"}, {"a": "y", "z": "x"}):
+    raised = False
+    try:
+        Validator(Point).validate(value)
+    except ValidationError as err:
+        raised = True
+        assert [e["path"] for e in err.errors] == [("a",), ("z",)]
+    assert raised
+```
+
 ## Message style guide
 
 Messages and codes follow a fixed style so they stay predictable:

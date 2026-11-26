@@ -2,7 +2,7 @@ import os
 import subprocess
 import sys
 import textwrap
-from typing import Literal
+from typing import Literal, TypedDict
 
 import pytest
 
@@ -61,6 +61,49 @@ def test_aggregation_order_is_deterministic() -> None:
         schema.validate({"items": [1, "x"], "name": 5})
     paths = [item["path"] for item in info.value.errors]
     assert paths == [("items", 1), ("name",)]
+
+
+class _DeclaredLast(TypedDict):
+    z: int
+    m: int
+    a: int
+
+
+class _DeclaredFirst(TypedDict):
+    a: int
+    m: int
+    z: int
+
+
+# PROMISE: Determinism
+@pytest.mark.parametrize("declared", [_DeclaredLast, _DeclaredFirst])
+@pytest.mark.parametrize("inserted", ["za", "az"])
+def test_a_record_reports_by_field_name_and_a_mapping_in_the_value_order(
+    declared: type, inserted: str
+) -> None:
+    """A record's failures come by field name, a mapping's in the value's order.
+
+    Whatever order the class declares its fields in and the value holds its keys
+    in, a record reports `a`, `m`, `z`, the missing `m` in its name's place, and
+    a closed record reports a key it does not declare after them, in the value's
+    order. A `dict[str, int]` reports its keys as the value inserted them.
+    """
+    value = dict.fromkeys(inserted, "x")
+    by_name = [(("a",), "int_type"), (("m",), "missing_key"), (("z",), "int_type")]
+    with pytest.raises(ValidationError) as info:
+        Validator(declared).validate(value)
+    assert [(item["path"], item["code"]) for item in info.value.errors] == by_name
+    closed = Validator(dict.fromkeys(declared.__annotations__, int))
+    with pytest.raises(ValidationError) as info:
+        closed.validate({"q": 1, **value, "b": 2})
+    assert [(item["path"], item["code"]) for item in info.value.errors] == [
+        *by_name,
+        (("q",), "extra_forbidden"),
+        (("b",), "extra_forbidden"),
+    ]
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[str, int]).validate(value)
+    assert [item["path"] for item in info.value.errors] == [(key,) for key in inserted]
 
 
 def test_a_single_failure_is_one_item() -> None:
