@@ -218,16 +218,22 @@ impl Schema {
     /// holds a value the relation `P ⊆ P` says nothing about. A complement of
     /// such a set stays in `R` as written, a member like any other.
     ///
-    /// Asked under the steps the question has left, as the relation of the same
-    /// pair is, so the two spellings decide alike: under
-    /// [`RESPELLING`](super::RESPELLING) steps the rules declined a union of
-    /// length bounds below another that the relation proves, and the meet of
-    /// the one with the other's complement was `undecided` beside a `subset`.
-    /// The steps are an allowance of its own, charged to nothing, so they
-    /// starve no reading after it, and one allowance for all the complements a
-    /// meet holds, so a meet holding several spends at most what a meet holding
-    /// one does; the rules it asks never ask it again, so a query asks it a
-    /// fixed number of times and spends at most that multiple of its budget.
+    /// Asked under an allowance of its own, charged to nothing, so it starves no
+    /// reading after it, and shared by the complements a meet holds
+    /// ([`complements_allowance`]): each asks a relation of a rest holding the
+    /// others, as a respelled pair is asked, so the allowance is the asking's
+    /// respelling allowance a complement taken
+    /// ([`respelling`]), and never more than the question
+    /// has left. A meet nothing decides then spends what that many respellings
+    /// would, where with every step the question had left each of its askings
+    /// spent them all. A reading stopped at the allowance meets a bound, so the
+    /// question is asked again ([`asked_again`]) with
+    /// [`RESPELLING_AGAIN`](super::RESPELLING_AGAIN) a complement, sixteen times
+    /// as many: a union of length bounds below another, which the rules prove
+    /// only past [`RESPELLING`](super::RESPELLING) steps, is decided there
+    /// (`test_a_meet_holding_a_complement_is_read_as_its_relation`). The
+    /// rules it asks never ask it again, so a query asks it a fixed number of
+    /// times and spends at most that multiple of its budget.
     /// The relation's readings past the sets are not asked here:
     /// they reach this reading again through the respellings, each time under
     /// steps of its own and at no depth, and drawn questions overflowed the
@@ -240,16 +246,22 @@ impl Schema {
         let Schema::Intersection(members) = self else {
             return Relation::Unknown;
         };
-        // One allowance for every complement asked, so a meet holding several
-        // spends what a meet holding one may.
-        let allowance = Budget::new(cx.budget.left());
-        for (at, member) in members.iter().enumerate() {
-            let Schema::Complement(inner) = member else {
-                continue;
-            };
-            if !denotes_a_set_within(inner, cx.oracle, cx.defs) {
-                continue;
-            }
+        let taken: Vec<(usize, &Schema)> = members
+            .iter()
+            .enumerate()
+            .filter_map(|(at, member)| match member {
+                Schema::Complement(inner) if denotes_a_set_within(inner, cx.oracle, cx.defs) => {
+                    Some((at, &**inner))
+                }
+                _ => None,
+            })
+            .collect();
+        let allowance = Budget::new(complements_allowance(
+            cx.budget.left(),
+            taken.len(),
+            super::respelling(),
+        ));
+        for (at, inner) in taken {
             let answer = Self::below_one_complement(members, at, inner, cx, &allowance);
             if answer != Relation::Unknown {
                 return answer;
@@ -1816,6 +1828,15 @@ fn meet_through_a_reference(members: &[Schema], cx: &mut Cx<'_>) -> Verdict {
 /// 572 million and 10 million, each meet counted alone under cachegrind;
 /// `scripts/perf_gate.py --decision-emptiness` holds their corpus.
 pub(super) const COMPLEMENTS_READ_DEARLY: usize = 3;
+
+/// The steps the complement-at-a-time reading shares between the `taken`
+/// complements of a meet, in an asking whose respelled pairs spend `each`: as
+/// many as that many respellings, and never more than the question has `left`
+/// ([`Schema::below_the_set_it_complements`]). Saturating, so a meet of more
+/// complements than a step count names is held to what is left.
+pub(super) fn complements_allowance(left: u32, taken: usize, each: u32) -> u32 {
+    left.min(each.saturating_mul(u32::try_from(taken).unwrap_or(u32::MAX)))
+}
 
 /// The clauses a meet with no reference may be read as before it is distributed.
 ///

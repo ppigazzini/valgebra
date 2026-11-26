@@ -1420,7 +1420,7 @@ SOURCE: §14.2 "running a work budget instead"; §13.1 "work budget rather than 
 
 IMPLEMENTED-BY: decision.rs::Budget, decision.rs::asked_again
 
-HELD-BY: a_query_no_bound_stopped_answers_alike_with_more_steps, a_respelled_pair_stops_at_its_allowance, a_spent_query_reads_its_bounds_under_steps_of_its_own, a_question_declined_at_a_bound_is_asked_again_with_more
+HELD-BY: a_query_no_bound_stopped_answers_alike_with_more_steps, a_respelled_pair_stops_at_its_allowance, a_spent_query_reads_its_bounds_under_steps_of_its_own, a_question_declined_at_a_bound_is_asked_again_with_more, the_complements_of_a_meet_share_a_respelling_allowance_each
 
 **A memo saves time, and is charged as the reading it stands for.** The
 shelf's memos serve complete procedures: an assumption set caching every

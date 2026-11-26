@@ -18469,6 +18469,33 @@ fn a_subject_naming_no_definition_is_asked_no_deeper_reading() {
     }
 }
 
+// THEORY: the-decision-is-fuel
+/// The complements a meet's reading takes share the asking's respelling
+/// allowance a complement, never more than the question has left, and a meet of
+/// more complements than a step count names is held to what is left.
+#[test]
+fn the_complements_of_a_meet_share_a_respelling_allowance_each() {
+    use super::emptiness::complements_allowance;
+    assert_eq!(
+        complements_allowance(1_000_000, 3, RESPELLING),
+        3 * RESPELLING
+    );
+    assert_eq!(
+        complements_allowance(3 * RESPELLING, 3, RESPELLING),
+        3 * RESPELLING
+    );
+    assert_eq!(complements_allowance(10_000, 3, RESPELLING), 10_000);
+    assert_eq!(
+        complements_allowance(1_000_000, 1, RESPELLING_AGAIN),
+        RESPELLING_AGAIN
+    );
+    assert_eq!(complements_allowance(1_000_000, 0, RESPELLING), 0);
+    assert_eq!(
+        complements_allowance(u32::MAX, usize::MAX, RESPELLING),
+        u32::MAX
+    );
+}
+
 // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
 /// A union holding a scalar atom is inhabited at its fold's first step: the
 /// members beside the atom are read for their regions alone, so a member whose

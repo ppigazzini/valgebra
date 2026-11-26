@@ -1138,11 +1138,13 @@ others kept beside the rest: `a & ~b & ~c` is `a & ~b <= c` and `a & ~c <= b`
 because the rules prove `list[J] & ~list[int]` below `J`, a fixpoint's relation
 its emptiness alone does not settle. The union `b | c` the same meet is below
 is a term no member wrote, so it is not asked. That reading asks the
-relation's rules under the steps the question has left, as the relation is
-asked, and the complements of one meet share those steps. The steps are a
-ceiling, not the cost: each complement asks a relation of a rest holding the
-others, and an undecided meet holding a union is read again by the further
-asking. So a meet that reading would read dearly -- one holding
+relation's rules under an allowance of its own, the asking's respelling
+allowance a complement it takes (`complements_allowance`), never more than the
+question has left: each complement asks a relation of a rest holding the
+others, as a respelled pair is asked, so a meet nothing decides spends what as
+many respellings would, and a reading stopped at the allowance is asked again
+with sixteen times the steps a complement. An undecided meet holding a union is
+read again by the further asking too. So a meet that reading would read dearly -- one holding
 `COMPLEMENTS_READ_DEARLY` complements or more, or a complement beside a union
 (`decision/emptiness.rs`) -- is first asked of the set representation as the
 relation below `nothing` asks its subject (`Schema::the_sets_find_a_value`),
