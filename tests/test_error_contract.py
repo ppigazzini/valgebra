@@ -105,6 +105,19 @@ def _report(validator: Validator, value: object, **how: object) -> list[dict] | 
     return None
 
 
+def _ensured(validator: Validator, value: object, **how: object) -> list[dict] | None:
+    """Return the failures `ensure` reports under `how`, or `None` for a member.
+
+    A member is handed back as itself.
+    """
+    try:
+        kept = validator.ensure(value, **how)  # ty: ignore[no-matching-overload]
+    except ValidationError as caught:
+        return list(caught.errors)
+    assert kept is value
+    return None
+
+
 #: A schema drawn as a tree, so a value shaped like it can be drawn beside it: a
 #: leaf names its type and a composite its children. Each composite is a site
 #: that reports more than one failure, or, for the union, one that chooses.
@@ -196,6 +209,24 @@ def test_a_limit_reports_the_first_failures_the_full_report_lists(
     for count in range(1, len(full) + 2):
         assert _report(validator, value, limit=count) == full[:count], count
     assert _report(validator, value, fail_fast=True) == full[:1]
+
+
+# PROMISE: Aggregation and fail-fast
+@given(st.data())
+def test_ensure_takes_a_limit_as_validate_does(data: st.DataObject) -> None:
+    """`ensure` reports under `limit` and `fail_fast` what `validate` does.
+
+    Over the drawn schemas and values of the test above, at every count from one
+    to one past the report's length: a non-member's report is `validate`'s, and a
+    member comes back as itself under every count.
+    """
+    tree = data.draw(_TREES)
+    validator = Validator(_schema(tree))
+    value = data.draw(_shaped(tree))
+    full = _report(validator, value)
+    counts = range(1, len(full) + 2) if full else range(1, 3)
+    for how in [*({"limit": count} for count in counts), {"fail_fast": True}]:
+        assert _ensured(validator, value, **how) == _report(validator, value, **how)
 
 
 #: A recursive definition with a failure under each of its references.
@@ -320,6 +351,10 @@ def test_a_limit_no_report_can_meet_is_refused(how: dict, words: str) -> None:
         validator.validate_json('"x"', **how)
     with pytest.raises(ValueError, match=re.escape(words)):
         validator.load("1", **how)
+    with pytest.raises(ValueError, match=re.escape(words)):
+        validator.ensure("x", **how)
+    with pytest.raises(ValueError, match=re.escape(words)):
+        validator.ensure(1, **how)
     assert _report(validator, "x", fail_fast=True, limit=1) == _report(
         validator, "x", limit=1
     )

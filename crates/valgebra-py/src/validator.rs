@@ -667,18 +667,28 @@ impl Validator {
     ///
     /// Args:
     ///     obj: The object to check.
+    ///     fail_fast: Stop at the first failure instead of aggregating, as
+    ///         `validate` does.
+    ///     limit: Report at most this many failures, as `validate` does.
     ///
     /// Returns:
     ///     `obj` unchanged.
     ///
     /// Raises:
     ///     ValidationError: If `obj` is not a member of the schema's set.
+    ///     ValueError: If `limit` is 0, or `fail_fast` is set beside a `limit`
+    ///         other than 1.
     ///     BaseException: If a comparison the walk performs, or a `repr` its
     ///         message names, raises a fatal interpreter signal; it propagates
     ///         rather than being read as a non-member.
-    #[pyo3(signature = (obj, /))]
-    fn ensure<'py>(&self, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        self.validate(obj, false, None)?;
+    #[pyo3(signature = (obj, /, *, fail_fast = false, limit = None))]
+    fn ensure<'py>(
+        &self,
+        obj: &Bound<'py, PyAny>,
+        fail_fast: bool,
+        limit: Option<usize>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.validate(obj, fail_fast, limit)?;
         Ok(obj.clone())
     }
 

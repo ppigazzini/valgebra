@@ -186,6 +186,24 @@ except ValidationError as err:
 assert raised
 ```
 
+`ensure`, `validate_json` and `load` take both and mean the same by them, and
+`ensure` hands a member back as itself:
+
+```python
+from valgebra import ValidationError, Validator
+
+checked = Validator(list[int])
+items = [1, 2, 3]
+assert checked.ensure(items, limit=1) is items
+raised = False
+try:
+    checked.ensure(["a", 1, "b"], limit=1)
+except ValidationError as err:
+    raised = True
+    assert [e["path"] for e in err.errors] == [(0,)]
+assert raised
+```
+
 A node-level type mismatch (a value that is not a dict where a record is
 expected) is terminal for that subtree: there is nothing to descend into. So is
 a wrong length — a fixed shape's arity (`list_length`, `tuple_length`) or a

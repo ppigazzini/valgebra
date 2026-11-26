@@ -94,7 +94,8 @@ validator's own index spaces and shares no type with them
 
 ## Aggregation is the caller's choice
 
-`validate` takes `fail_fast` and `limit`. By default it aggregates a violation
+`validate` takes `fail_fast` and `limit`, and `ensure`, `validate_json` and
+`load` take them to mean the same. By default it aggregates a violation
 for each independent failure — every record field, sequence element and mapping
 entry — `fail_fast` stops at the first, and `limit=n` at the `n`th. The walk
 carries the choice as a mode rather than a flag ([the walk page](walk.md)),

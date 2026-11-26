@@ -6,6 +6,15 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`ensure` stops after a given number of failures.** `ensure(obj, fail_fast=True)` and
+  `ensure(obj, limit=n)` report what `validate` reports under the same count, the full report's
+  first `n` failures in its order, and refuse `limit=0` and `fail_fast` beside another count with
+  `ValueError`, as `validate`, `validate_json` and `load` do; a member is still handed back as
+  itself. A refusal that shows three failures of thousands now pays for three on the
+  value-returning check too.
+
 ### Fixed
 
 - **A meet below an excluded middle is read empty.** `is_empty` of `list[J] & ~whole`, `J` the
@@ -35,6 +44,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: the emptiness of a meet splits on a set a complement negates
+- feat: ensure stops after a given number of failures
 
 -->
 
