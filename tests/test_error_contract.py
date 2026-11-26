@@ -16,6 +16,7 @@ sentence the page wrote the rule for.
 
 from __future__ import annotations
 
+import functools
 import re
 import sys
 import typing
@@ -406,18 +407,59 @@ def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_by_its_repr() ->
 
 
 # PROMISE: When a comparison raises
-def test_a_predicate_that_raises_names_its_error_without_flooding_the_message() -> None:
-    """A large error is summarized, as every other value in a message is."""
+def test_a_predicate_that_raises_keeps_its_error_whole() -> None:
+    """The exception's text is the predicate's account, and is kept whole.
+
+    Past the eighty characters a value's summary keeps, in `expected`, in the
+    message and in `str()`, while the value itself is cut as every value is.
+    """
 
     def boom(_value: object) -> bool:
         raise ValueError("Z" * 5000)
 
-    errors = _errors(Annotated[int, at.Predicate(boom)], 1)
+    value = "v" * 500
+    errors = _errors(Annotated[str, at.Predicate(boom)], value)
     assert errors[0]["code"] == "predicate_error"
-    assert len(errors[0]["expected"]) < 200
-    assert len(errors[0]["message"]) < 400
-    # And the message still says what raised.
-    assert "Z" in errors[0]["expected"]
+    assert errors[0]["expected"] == (
+        f"a {boom.__qualname__} that does not raise (raised ValueError: {'Z' * 5000})"
+    )
+    assert errors[0]["expected"] in errors[0]["message"]
+    assert len(errors[0]["value"]) < 100
+    with pytest.raises(ValidationError) as info:
+        Validator(Annotated[str, at.Predicate(boom)]).validate(value)
+    assert "Z" * 5000 in str(info.value)
+
+
+class _Rule:
+    def check(self, _value: object) -> bool:
+        return False
+
+    def __call__(self, _value: object) -> bool:
+        return False
+
+
+def _refuses(_value: object) -> bool:
+    return False
+
+
+# PROMISE: When a comparison raises
+@pytest.mark.parametrize(
+    ("predicate", "name"),
+    [
+        (_refuses, "_refuses"),
+        (lambda _value: False, "<lambda>"),
+        (_Rule().check, "_Rule.check"),
+        (functools.partial(lambda _bound, _value: False, 1), "partial"),
+        (_Rule(), "_Rule"),
+    ],
+)
+def test_a_failed_predicate_is_named_by_its_qualified_name(
+    predicate: Callable[[object], bool], name: str
+) -> None:
+    """`a passing <name>`, the callable's `__qualname__` or its type's."""
+    errors = _errors(Annotated[int, at.Predicate(predicate)], 1)
+    assert errors[0]["code"] == "predicate_failed"
+    assert errors[0]["expected"] == f"a passing {name}"
 
 
 def test_a_value_summary_is_bounded_and_says_it_was_cut() -> None:

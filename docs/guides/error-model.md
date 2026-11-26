@@ -397,6 +397,42 @@ where the interpreter is told to raise it: a predicate that calls
 `warnings.warn` admits its value by default and refuses it with
 `predicate_error` under `-W error`.
 
+A predicate is named in its failure by its `__qualname__`: one that returns a
+falsy value reads `expected a passing total_games_must_match`, and one that
+raises `expected a total_games_must_match that does not raise (raised
+ValueError: ...)`, with the exception's text whole, since it is the predicate's
+own account of what is wrong. A lambda reads `<lambda>`, and a callable with no
+`__qualname__`, a `functools.partial` or an instance with `__call__`, its
+type's name.
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import ValidationError, Validator
+
+
+def total_games_must_match(run: dict) -> bool:
+    tasks, total = sum(run["tasks"]), run["total"]
+    if total != tasks:
+        raise ValueError(f"From tasks: {tasks}. From the run: {total}")
+    return True
+
+
+checked = Validator(Annotated[dict, at.Predicate(total_games_must_match)])
+raised = False
+try:
+    checked.validate({"tasks": [60, 40], "total": 102})
+except ValidationError as err:
+    raised = True
+    assert err.errors[0]["expected"] == (
+        "a total_games_must_match that does not raise"
+        " (raised ValueError: From tasks: 100. From the run: 102)"
+    )
+assert raised
+```
+
 A **fatal interpreter signal is never folded** — at every site, the predicate and
 attribute access included. A base exception that is not an ordinary exception
 (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`), or a `MemoryError` or

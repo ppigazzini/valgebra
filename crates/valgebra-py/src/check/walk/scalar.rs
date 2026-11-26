@@ -38,7 +38,7 @@ use crate::codes::{
     Code, GREATER_THAN, GREATER_THAN_EQUAL, LESS_THAN, LESS_THAN_EQUAL, LITERAL_ERROR, MULTIPLE_OF,
     PREDICATE_ERROR, PREDICATE_FAILED, STRING_PATTERN_MISMATCH, TOO_LONG, TOO_SHORT,
 };
-use crate::errors::{SUMMARY_CHARS, shorten, stored};
+use crate::errors::stored;
 use crate::input::Value;
 use crate::oracle::is_stdlib_class;
 
@@ -1024,13 +1024,14 @@ enum Expected<'py> {
     Multiple(&'py Bound<'py, PyAny>),
     /// A pattern the whole string must match.
     Pattern(&'py str),
-    /// A message with nothing to render into it.
-    Fixed(&'static str),
-    /// A predicate that raised, carrying the exception it raised. Only ever
-    /// built on the failing path, and rendered only where a violation is
-    /// recorded: its text is the exception's own `__str__`, code the deciding
-    /// walk has no reason to run.
-    Raised(Bound<'py, PyBaseException>),
+    /// A predicate the value did not pass, carrying the callable, named where a
+    /// violation is recorded ([`predicate_name`]).
+    Passing(&'py Bound<'py, PyAny>),
+    /// A predicate that raised, carrying the callable and the exception it
+    /// raised. Only ever built on the failing path, and rendered only where a
+    /// violation is recorded: its text is the exception's own `__str__`, code
+    /// the deciding walk has no reason to run.
+    Raised(&'py Bound<'py, PyAny>, Bound<'py, PyBaseException>),
 }
 
 impl Expected<'_> {
@@ -1041,10 +1042,11 @@ impl Expected<'_> {
             Self::Length(symbol, n) => format!("length {symbol} {n}"),
             Self::Multiple(operand) => format!("a multiple of {}", summarize_in(operand, ctx)),
             Self::Pattern(pattern) => format!("a string matching {}", quoted(pattern)),
-            Self::Fixed(text) => (*text).to_owned(),
-            Self::Raised(error) => {
+            Self::Passing(predicate) => format!("a passing {}", predicate_name(predicate, ctx)),
+            Self::Raised(predicate, error) => {
                 format!(
-                    "a predicate that does not raise (raised {})",
+                    "a {} that does not raise (raised {})",
+                    predicate_name(predicate, ctx),
                     raised_text(error, ctx)
                 )
             }
@@ -1316,12 +1318,8 @@ fn check_predicate(index: PredIx, value: &Bound<'_, PyAny>, frame: &mut Frame<'_
         return false;
     };
     let (ok, code, expected) = match predicate_passes(value, predicate, ctx.state) {
-        Ok(passed) => (
-            passed,
-            PREDICATE_FAILED,
-            Expected::Fixed("a passing predicate"),
-        ),
-        Err(err) => match predicate_raised(err, py, ctx) {
+        Ok(passed) => (passed, PREDICATE_FAILED, Expected::Passing(predicate)),
+        Err(err) => match predicate_raised(predicate, err, py, ctx) {
             Some(expected) => {
                 record_stop(PREDICATE_ERROR, ctx);
                 (stopped(ctx.mode), PREDICATE_ERROR, expected)
@@ -1340,12 +1338,45 @@ fn check_predicate(index: PredIx, value: &Bound<'_, PyAny>, frame: &mut Frame<'_
 /// Out of line and cold, for the reason [`set_aside`] is.
 #[cold]
 #[inline(never)]
-fn predicate_raised<'py>(err: PyErr, py: Python<'py>, ctx: Ctx<'_>) -> Option<Expected<'py>> {
+fn predicate_raised<'e>(
+    predicate: &'e Bound<'e, PyAny>,
+    err: PyErr,
+    py: Python<'e>,
+    ctx: Ctx<'_>,
+) -> Option<Expected<'e>> {
     if is_fatal(&err, py) {
         record_fatal(err, ctx);
         return None;
     }
-    Some(Expected::Raised(err.into_value(py).into_bound(py)))
+    Some(Expected::Raised(
+        predicate,
+        err.into_value(py).into_bound(py),
+    ))
+}
+
+/// The name a predicate's expectation calls it by: its `__qualname__`, as an
+/// exception's class is named, so a rule written as a function reads as the
+/// rule (`a passing total_games_must_match`) and a lambda as `<lambda>`; or its
+/// type's where it carries none, as a `functools.partial` or an instance with
+/// `__call__` does. Read on the failing path alone, and a signal the read raises
+/// recorded as [`raised_text`] records one.
+fn predicate_name(predicate: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> String {
+    let py = predicate.py();
+    match predicate.getattr(intern!(py, "__qualname__")) {
+        Ok(name) => {
+            if let Ok(name) = name.cast::<PyString>() {
+                return stored(name);
+            }
+        }
+        Err(err) => record_if_fatal(err, py, ctx),
+    }
+    match predicate.get_type().qualname() {
+        Ok(name) => stored(&name),
+        Err(err) => {
+            record_if_fatal(err, py, ctx);
+            "predicate".to_owned()
+        }
+    }
 }
 
 /// What a raised exception says of itself, as `Name: text`: its class's
@@ -1355,9 +1386,10 @@ fn predicate_raised<'py>(err: PyErr, py: Python<'py>, ctx: Ctx<'_>) -> Option<Ex
 /// exception's `__str__` raises and prints `<exception str() failed>` in its
 /// place: the interrupt is lost and the walk carries on. Here the signal is
 /// recorded, so the walk unwinds and the entry point raises it, and an
-/// ordinary exception keeps the placeholder. The text is bounded like every
-/// other value a message carries: a predicate raising a megabyte of text is a
-/// message nobody reads.
+/// ordinary exception keeps the placeholder. The text is kept whole: it is the
+/// predicate's author's own message, written to say which numbers disagree,
+/// where a value's `repr` is the caller's data and is cut at
+/// [`SUMMARY_CHARS`](crate::errors::SUMMARY_CHARS).
 fn raised_text(error: &Bound<'_, PyBaseException>, ctx: Ctx<'_>) -> String {
     let py = error.py();
     let name = match error.get_type().qualname() {
@@ -1374,7 +1406,7 @@ fn raised_text(error: &Bound<'_, PyBaseException>, ctx: Ctx<'_>) -> String {
             "<exception str() failed>".to_owned()
         }
     };
-    shorten(format!("{name}: {text}"), SUMMARY_CHARS)
+    format!("{name}: {text}")
 }
 
 /// Drop an error a constraint reads as its answer, out of line: the error is

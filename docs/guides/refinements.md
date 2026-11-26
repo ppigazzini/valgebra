@@ -729,7 +729,8 @@ assert not even.is_valid(3)
 
 A predicate that *raises* is reported distinctly, as `predicate_error` rather
 than an ordinary failure, so a buggy predicate is not mistaken for a rejected
-value.
+value. Either failure names the predicate by its `__qualname__`, and a raised
+one keeps the exception's text whole.
 
 A bare callable is a predicate too, without the wrapper:
 

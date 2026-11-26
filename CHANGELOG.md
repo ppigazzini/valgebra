@@ -26,6 +26,14 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Changed
 
+- **A failed predicate names its rule, and a raised one keeps its text.** A predicate's failure
+  read `expected a passing predicate` whatever the callable, and a predicate that raised had its
+  exception's text cut at eighty characters. `expected` now names the callable by its
+  `__qualname__`, `a passing total_games_must_match` and `a total_games_must_match that does not
+  raise (raised ValueError: ...)`, a lambda as `<lambda>` and a `functools.partial` or an instance
+  with `__call__` by its type's name, and keeps the raised text whole in `expected`, the message
+  and `str()`, so a rule that says which numbers disagree is read whole. The codes do not change.
+
 - **A meet no reading decides is declined at a cost bounded a complement.** 0.0.33 asked a meet's
   clauses again once every reading of its emptiness declined, and 0.0.34 read a meet's complements
   one at a time, each under every step the question had left, so an `is_empty` no reading decides
@@ -45,6 +53,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: the emptiness of a meet splits on a set a complement negates
 - feat: ensure stops after a given number of failures
+- feat: a failed predicate names its rule, and a raised one keeps its text
 
 -->
 

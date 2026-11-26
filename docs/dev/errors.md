@@ -19,6 +19,16 @@ The rendered sentence is derived from those four, not stored. A caller that want
 to branch on a failure reads `code`; a caller that wants to point at the input
 reads `path`. Formatting is the last step and never the record.
 
+**`value_summary` is cut; a predicate's text is not.** A value's `repr` is the
+caller's data, and the summary keeps `SUMMARY_CHARS` characters of it.
+`expected` names the set, and a predicate in it by its callable's
+`__qualname__` (`predicate_name` in `check/walk/scalar.rs`): `a passing
+total_games_must_match`, `a passing <lambda>`, and a `functools.partial` or an
+instance with `__call__` by its type's. One that raised carries the exception's
+text whole (`raised_text`), since that text is the predicate's author's account
+of what is wrong -- which numbers disagree, and by how much -- and is read only
+whole.
+
 **The code, the exception type and the path format are part of the documented
 API.** They are pinned by snapshot tests, so a wording change is a reviewed diff
 rather than a silent break in someone's error handling. `docs/guides/error-model.md`
