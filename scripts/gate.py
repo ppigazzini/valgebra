@@ -381,8 +381,9 @@ NOTES_STEPS = (
 #:
 #: One mode: `--decision-matrix`, the relation matrix whose shapes reach the
 #: set representation. `--decision-sets`, `--decision-lengths`, `--decision-steps`,
-#: `--decision-keys` and `--decision-unions` reach it too, and are read in the lane
-#: alone. A binding-path regression is held by the `--binding-*` modes, which want
+#: `--decision-keys`, `--decision-unions`, `--decision-emptiness` and
+#: `--decision-below` reach it too, and are read in the lane alone. A
+#: binding-path regression is held by the `--binding-*` modes, which want
 #: the extension built into an interpreter and are left to the lane.
 PERF_STEPS = (
     (

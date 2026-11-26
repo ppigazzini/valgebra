@@ -4929,6 +4929,52 @@ PLANTS = (
         trips=("test_the_corpus_asks_both_answers_of_both_relations",),
     ),
     Plant(
+        # An `is_empty` row read as no emptiness row: its proof is checked
+        # against no member, so the one a member refutes passes.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            'for head in ("empty ", IS_EMPTY):',
+            'for head in ("empty ",):',
+        ),
+        trips=("test_an_is_empty_proof_a_member_refutes_fails",),
+    ),
+    Plant(
+        # The parting read against a proof below `nothing`: an `is_empty`
+        # proof the relation refutes passes.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            '{key.removeprefix(IS_EMPTY)}") == "n"',
+            '{key.removeprefix(IS_EMPTY)}") == "s"',
+        ),
+        trips=("test_an_is_empty_proof_the_relation_refutes_fails",),
+    ),
+    Plant(
+        # Any answer but a proof below `nothing` read as a refutation: a proof
+        # by `is_empty` the relation declines is reported as parted.
+        "tests/test_metamorphic_gate.py",
+        ("scripts/metamorphic_gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/metamorphic_gate.py",
+            '{key.removeprefix(IS_EMPTY)}") == "n"',
+            '{key.removeprefix(IS_EMPTY)}") != "s"',
+        ),
+        trips=("test_an_emptiness_one_procedure_declines_is_not_parted",),
+    ),
+    Plant(
+        # A schema the relation asks below `nothing` and `is_empty` never asks.
+        "tests/test_metamorphic_gate.py",
+        (_REFERENCE,),
+        lambda tree: _edit(tree, _REFERENCE, '  "is_empty bool": "u",\n', ""),
+        trips=("test_every_schema_is_asked_its_emptiness_by_both_procedures",),
+    ),
+    Plant(
         # The inline pattern with its multiline flag dropped: `^` anchors at the
         # start of the file only, and the scan reads no module at all.
         "tests/test_module_placement.py",

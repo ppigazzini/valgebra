@@ -97,7 +97,7 @@ Two more are refused, each by a test:
 | Algebra laws | every claimed equivalence, against membership | a law nobody thought to claim |
 | Completeness ledger | that the procedure *decides* an enumerated relation | a relation nobody enumerated |
 | Completeness probe | that every `False` has a value witnessing it | a gap no value in its universe can expose |
-| Metamorphic gate | every membership and every decision against the last release: no value moves, no answer is lost, turned or raised; in the bench lane, no decision ten times slower than the release's past 50 ms | a shape its corpus does not compose |
+| Metamorphic gate | every membership and every decision against the last release, each schema's emptiness by both procedures: no value moves, no answer is lost, turned or raised, and `is_empty` proves empty no set the relation refutes below `nothing`; in the bench lane, no decision ten times slower than the release's past 50 ms | a shape its corpus does not compose |
 | Snapshots | error messages and `repr` | whether the message is *right* |
 | Fuzzing | panic-freedom, idempotence, the order laws | anything outside the budget |
 

@@ -39,8 +39,11 @@ Three workloads, and the shapes each is read in:
   length bounds over a list asked of the sets (`--decision-lengths`), which
   read what a bound costs an element, floats under a whole step
   (`--decision-steps`), which read a list of intervals per residue, dicts keyed
-  by words (`--decision-keys`), which read a split of the `str` keys, and unions
-  of tagged records (`--decision-unions`), which read what a join holds.
+  by words (`--decision-keys`), which read a split of the `str` keys, unions
+  of tagged records (`--decision-unions`), which read what a join holds, and
+  one corpus of meets holding complements asked by `is_empty`
+  (`--decision-emptiness`) and below `nothing` (`--decision-below`), the one
+  question by its two procedures, whose two counts are what each route costs.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
   thirty-four shapes: the membership walk (`--binding`), the call boundary
@@ -185,6 +188,8 @@ BRANCH_MODES = frozenset(
         "decision-steps",
         "decision-keys",
         "decision-unions",
+        "decision-emptiness",
+        "decision-below",
     }
 )
 # Both workloads print one trailing line holding the checksum, bare or prefixed.
@@ -473,6 +478,14 @@ MODES = {
     "decision-steps": ("decision_sets_workload", "whole steps asked of the sets"),
     "decision-keys": ("decision_sets_workload", "keys by words asked of the sets"),
     "decision-unions": ("decision_sets_workload", "wide unions asked of the sets"),
+    "decision-emptiness": (
+        "decision_emptiness_workload",
+        "meets holding complements asked for their emptiness",
+    ),
+    "decision-below": (
+        "decision_emptiness_workload",
+        "meets holding complements asked below nothing",
+    ),
     "binding": ("binding_workload", "binding walk"),
     "binding-boundary": ("binding_workload", "binding call boundary"),
     "binding-record": ("binding_workload", "binding record walk"),
@@ -512,13 +525,15 @@ MODES = {
     "binding-compose": ("binding_workload", "binding nested composition"),
 }
 
-#: The reading a core shape passes its example, for the six that share one.
+#: The reading a core shape passes its example, for the shapes that share one.
 #:
 #: The rules and the sets are asked the same pairs, so the ratio of the two
 #: counts is a ratio over one question rather than over two corpora. One
 #: example holds the corpus, and the argument names which decider answers it.
 #: The length bounds, the whole steps, the keys and the wide unions are corpora of
-#: their own, asked of the sets through the same reading.
+#: their own, asked of the sets through the same reading. The emptiness and the
+#: relation below `nothing` share a second example the same way: one corpus of
+#: meets, and the argument names the procedure.
 CORE_READINGS = {
     "decision-rules": "rules",
     "decision-sets": "sets",
@@ -526,6 +541,8 @@ CORE_READINGS = {
     "decision-steps": "steps",
     "decision-keys": "keys",
     "decision-unions": "unions",
+    "decision-emptiness": "empty",
+    "decision-below": "below",
 }
 
 #: The iteration pair each binding mode runs at.

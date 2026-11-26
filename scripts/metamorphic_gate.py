@@ -18,7 +18,10 @@ a reference build and the build under test:
 * **Decisions only widen.** A relation the reference decided must still be
   decided, and decided the same way. A decision is one of three answers --
   `subset`, `not_subset`, `undecided` -- for every ordered pair, and for every
-  schema against `nothing`, which is its emptiness. A proof or a refutation
+  schema against `nothing`, which is its emptiness. Every schema is asked
+  `is_empty` too, the same question by the other procedure, whose `True` is a
+  proof and whose `False` is no answer; a proof it makes where the relation
+  refutes the schema below `nothing` is a contradiction. A proof or a refutation
   that becomes `undecided` is an answer lost; one that becomes the other is a
   contradiction, since the procedure is sound and at most one of the two
   builds can be right. Gaining an answer is allowed, because the procedure is
@@ -53,7 +56,10 @@ the release made slower or lost an answer on: a tuple and a record against the
 corners that cover them, two discriminated unions, a list against a union of
 length bounds, a guarded record against the complement of a record, a word table
 beneath lists, sets of one literal, a dict of literal keys, a step table beneath
-a bound, a recursion holding no value. A pair's two schemas are asked of every
+a bound, a recursion holding no value. Two schemas are meets of integer
+ranges with many taken out, as a translation from JSON Schema writes a cell of
+a model checker, whose emptiness the two procedures read at the widest apart
+cost. A pair's two schemas are asked of every
 value too, so a proof it gains is checked as any other.
 
 Usage:
@@ -112,6 +118,9 @@ class Recording(TypedDict):
 ANSWERS = {"subset": "s", "not_subset": "n", "undecided": "u"}
 RAISED = "x"
 DECIDED = frozenset("sn")
+# The prefix of an emptiness row asked by `is_empty`, beside `empty `, the row
+# that asks the relation below `nothing`.
+IS_EMPTY = "is_empty "
 
 # A decision is slower than the release's where it takes ten times as long and
 # past 50 ms: the ratio is what a change moves, and the floor keeps a decision
@@ -187,6 +196,43 @@ def _schemas() -> tuple[dict[str, object], dict[str, tuple[object, object]]]:
     guarded_4 = guarded(guarded(guarded(guarded(int))))
     integer = intersection(
         union(int, Annotated[float, MultipleOf(1)]), complement(bool)
+    )
+
+    def number(low: int, high: int) -> object:
+        """`{"type": "integer", "minimum": low, "maximum": high}`, translated."""
+        return intersection(
+            union(
+                Annotated[float, Ge(low), Le(high)], Annotated[int, Ge(low), Le(high)]
+            ),
+            integer,
+        )
+
+    # A cell of a model checker over integer arguments: a range met with the
+    # complements of eight others, each ending below 1000, so 1000 is a value of
+    # it; and a range with thirty-two taken out of it. Their emptiness is where
+    # `is_empty` and the relation below `nothing` read the most apart.
+    integer_cell = intersection(
+        integer,
+        number(500, 1000),
+        *(
+            complement(number(37 * i % 400, 37 * i % 400 + 200 + 53 * i % 399))
+            for i in range(8)
+        ),
+    )
+    range_less_32 = intersection(
+        union(
+            Annotated[int, Ge(0), Le(1280)],
+            Annotated[float, MultipleOf(1), Ge(0), Le(1280)],
+        ),
+        *(
+            complement(
+                union(
+                    Annotated[int, Ge(40 * i), Le(40 * i + 20)],
+                    Annotated[float, MultipleOf(1), Ge(40 * i), Le(40 * i + 20)],
+                )
+            )
+            for i in range(32)
+        ),
     )
     integer_tree = recursive(lambda ref: union({"a": integer}, str, keyed(ref)))
     nested_closed = Validator(
@@ -271,6 +317,8 @@ def _schemas() -> tuple[dict[str, object], dict[str, tuple[object, object]]]:
         "integer-tree&nested-closed": intersection(integer_tree, nested_closed),
         "(int|str)&(str|none)": intersection(union(int, str), union(str, None)),
         "lit-a-1&~str": intersection(Literal["a", 1], complement(str)),
+        "integer-cell": integer_cell,
+        "range-less-32": range_less_32,
         "open-a&open-b": intersection(
             Validator({"a": int}).open(), Validator({"b": str}).open()
         ),
@@ -568,12 +616,28 @@ def _relation(left: Any, right: Any, key: str, times: dict[str, int]) -> str:
     return answer
 
 
+def _is_empty(validator: Any, key: str, times: dict[str, int]) -> str:
+    """Ask `is_empty`, keeping how long it took under `key`.
+
+    `s` where it proves the set empty and `u` where it does not: its `False` is
+    no refutation, so it never reads `n`, and a raise is `x`, as a relation's is.
+    """
+    start = time.perf_counter_ns()
+    try:
+        answer = "s" if validator.is_empty() else "u"
+    except Exception:  # noqa: BLE001 -- any raise is the same verdict here
+        answer = RAISED
+    times[key] = (time.perf_counter_ns() - start) // 1000
+    return answer
+
+
 def _decisions(schemas: dict[str, Any], times: dict[str, int]) -> dict[str, str]:
     """Every ordered pair under subtyping, and every schema under emptiness.
 
-    Each in the three answers of `relation_to`, and emptiness as the schema
-    against `nothing`: a boolean reads a refutation and a decline as one `False`,
-    so a refutation lost to a decline would not move it.
+    Each in the three answers of `relation_to`, and emptiness twice, by its two
+    procedures: as the schema against `nothing`, whose three answers keep a
+    refutation lost to a decline, and as `is_empty`, the boolean a caller asks,
+    whose answers and time nothing else here reads.
     """
     from valgebra import nothing  # noqa: PLC0415
 
@@ -583,6 +647,8 @@ def _decisions(schemas: dict[str, Any], times: dict[str, int]) -> dict[str, str]
             continue
         key = f"empty {name}"
         verdicts[key] = _relation(validator, nothing, key, times)
+        key = f"{IS_EMPTY}{name}"
+        verdicts[key] = _is_empty(validator, key, times)
         for other_name, other in schemas.items():
             if other is None:
                 continue
@@ -791,8 +857,26 @@ def _subtype_claim(key: str) -> tuple[str, str] | None:
 
 def _emptiness_claim(key: str) -> str | None:
     """Read the schema an emptiness row is about, or `None` for a subtyping row."""
-    prefix, separator, name = key.partition("empty ")
-    return name if separator and not prefix else None
+    for head in ("empty ", IS_EMPTY):
+        if key.startswith(head):
+            return key.removeprefix(head)
+    return None
+
+
+def parted_emptiness(decisions: dict[str, str]) -> list[str]:
+    """List the sets `is_empty` proves empty and the relation refutes below `nothing`.
+
+    The two procedures answer one question, so a proof by one and a refutation
+    by the other means one of them is wrong. A proof by one where the other
+    declines is the incompleteness each is allowed, and is not listed.
+    """
+    return [
+        f"{key}: proved empty by is_empty, refuted below nothing"
+        for key in sorted(decisions)
+        if key.startswith(IS_EMPTY)
+        and decisions[key] == "s"
+        and decisions.get(f"empty {key.removeprefix(IS_EMPTY)}") == "n"
+    ]
 
 
 def unwitnessed_widenings(
@@ -900,6 +984,7 @@ def _answers(reference: dict[str, Any], measured: Recording) -> list[str] | None
     refuted = unwitnessed_widenings(
         reference_decisions, decisions, membership, _values()
     )
+    parted = parted_emptiness(decisions)
     widened = sum(
         1
         for key in reference_decisions
@@ -913,8 +998,9 @@ def _answers(reference: dict[str, Any], measured: Recording) -> list[str] | None
     _report("decisions contradicted", contradicted)
     _report("decisions raised", raised)
     _report("widenings refuted by a value", refuted)
+    _report("emptiness parted from the relation", parted)
     print(f"widenings: {widened}")
-    return moved + lost + contradicted + raised + refuted
+    return moved + lost + contradicted + raised + refuted + parted
 
 
 def _against_the_release(path: Path, measured: Recording) -> list[str] | None:

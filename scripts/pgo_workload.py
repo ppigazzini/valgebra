@@ -140,6 +140,16 @@ UNTRAINED: dict[str, str] = {
         "automaton's product through a meet of lists, and no call here relates "
         "a length-bounded list."
     ),
+    "decision-emptiness": (
+        "A meet holding complements asked for its emptiness, the readings "
+        "`is_empty` asks where its rules decline: `_relations` asks the "
+        "emptiness of no meet holding a complement."
+    ),
+    "decision-below": (
+        "A meet holding complements asked below `nothing`, the relation's set "
+        "reading of the whole meet: `_relations` relates no meet holding a "
+        "complement to `nothing`."
+    ),
     "decision-steps": (
         "A float line under a whole step, a list of intervals per residue: "
         "`_relations` asks no float a step, so no call here reaches the residues."

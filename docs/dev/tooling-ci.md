@@ -90,7 +90,8 @@ that reads sound and costs **seventy-one times** the instructions on the
 relation matrix would pass this script green. One mode runs, `--decision-matrix`
 (`PERF_STEPS` in `scripts/gate.py`), the relation matrix whose shapes reach the
 set representation; `--decision-sets`, `--decision-lengths`, `--decision-steps`,
-`--decision-keys` and `--decision-unions` reach it too and are read in the lane alone, and the `--binding-*` modes want the extension
+`--decision-keys`, `--decision-unions`, `--decision-emptiness` and
+`--decision-below` reach it too and are read in the lane alone, and the `--binding-*` modes want the extension
 built into an interpreter and stay with the lane. Missing valgrind is named as the reason rather than passed
 over.
 
@@ -297,7 +298,8 @@ gate only catches what it exercises, and the wheel a release ships:
 - the **decision** procedures (`--decision`, `--decision-refute`,
   `--decision-repeat`, `--decision-matrix`, `--decision-rules`,
   `--decision-sets`, `--decision-lengths`, `--decision-steps`,
-  `--decision-keys`, `--decision-unions`) — subtyping, emptiness,
+  `--decision-keys`, `--decision-unions`, `--decision-emptiness`,
+  `--decision-below`) — subtyping, emptiness,
   equivalence; `MODES` in
   `scripts/perf_gate.py` owns the list, and the first three are the
   workloads one whose relations hold, one whose relations are refuted, and one
@@ -307,12 +309,17 @@ gate only catches what it exercises, and the wheel a release ships:
   refutation and a repeated goal walk different paths, and a workload that
   asks only for proofs holds a refuting rule to nothing. Two are one example
   asked of the rules and of the sets, so a lowering made dearer or cheaper
-  reads on its own shape rather than as a share of the matrix's, and the last
-  four ask the sets what no other pair reaches: length bounds over a list, whose
+  reads on its own shape rather than as a share of the matrix's; four ask the
+  sets what no other pair reaches: length bounds over a list, whose
   automaton holds a state per element, so a cost an element pays reads as one;
   floats under a whole step, up to the longest period the component reads; dicts
   keyed by words, each meet reading the refinement of two splits; and unions of
   tagged records, one at the node ceiling, so what a join holds reads as a cost;
+  and the last two are one corpus of meets holding complements asked by
+  `is_empty` and below `nothing`, the one question by its two procedures, since
+  no other workload asks `is_empty` of a meet holding a complement and a
+  reading one procedure asks and the other does not reads as a cost on one
+  route alone;
 - the **binding** shapes, which `MODES` in `scripts/perf_gate.py` owns (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`,
   `--binding-record-list`, `--binding-mapping`, `--binding-mapping-lists`,
@@ -628,7 +635,10 @@ published wheel:
 
 - **Answers, in the `metamorphic` lane.** The reference is recorded from the
   published wheel at every cut, so no membership moves, and no decision is lost,
-  turned or raised against what a user of the release has.
+  turned or raised against what a user of the release has. Each schema's
+  emptiness is asked twice, by the relation below `nothing` and by `is_empty`,
+  and an `is_empty` proof the relation refutes fails: the two procedures answer
+  one question, so one of them is wrong.
 - **Time and memory, in the `bench` lane.** That lane installs this tree's
   optimized wheel, built as the release workflow builds one. Beside it, the
   published wheel answers the corpus in an environment of its own and records

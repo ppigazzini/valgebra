@@ -199,6 +199,53 @@ def test_an_emptiness_proof_no_member_refutes_passes() -> None:
     assert gate.unwitnessed_widenings(reference, measured, hollow, VALUES) == []
 
 
+def test_an_is_empty_proof_a_member_refutes_fails() -> None:
+    # `is_empty`'s row reads as the relation's does: `one` is in `narrow`, so a
+    # proof that `narrow` is empty is refuted by it.
+    reference = {"is_empty narrow": "u"}
+    measured = {"is_empty narrow": "s"}
+    assert gate.unwitnessed_widenings(reference, measured, MEMBERSHIP, VALUES) == [
+        "is_empty narrow: one is in narrow"
+    ]
+
+
+def test_an_is_empty_proof_the_relation_refutes_fails() -> None:
+    # One question by two procedures: a proof by one and a refutation by the
+    # other mean one of them is wrong.
+    decisions = {"empty narrow": "n", "is_empty narrow": "s"}
+    assert gate.parted_emptiness(decisions) == [
+        "is_empty narrow: proved empty by is_empty, refuted below nothing"
+    ]
+
+
+def test_an_emptiness_one_procedure_declines_is_not_parted() -> None:
+    # A proof by one where the other declines is the incompleteness each is
+    # allowed, in either direction.
+    for decisions in (
+        {"empty narrow": "u", "is_empty narrow": "s"},
+        {"empty narrow": "s", "is_empty narrow": "u"},
+        {"empty narrow": "n", "is_empty narrow": "u"},
+    ):
+        assert gate.parted_emptiness(decisions) == [], decisions
+
+
+def test_every_schema_is_asked_its_emptiness_by_both_procedures() -> None:
+    # The relation below `nothing` and `is_empty` answer one question; a schema
+    # asked by one alone leaves the other's answers and time unread.
+    reference = json.loads(gate.REFERENCE_FILE.read_text(encoding="utf-8"))
+    decisions = reference["decisions"]
+    below = {
+        key.removeprefix("empty ") for key in decisions if key.startswith("empty ")
+    }
+    asked = {
+        key.removeprefix(gate.IS_EMPTY)
+        for key in decisions
+        if key.startswith(gate.IS_EMPTY)
+    }
+    assert below == asked
+    assert "s" in {decisions[f"{gate.IS_EMPTY}{name}"] for name in asked}
+
+
 def test_the_reference_the_gate_ships_with_describes_a_commit() -> None:
     # A reference recorded outside a checkout carries `unknown`, which makes the
     # comparison unattributable: a reader cannot tell what the tree is being
