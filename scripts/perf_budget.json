@@ -132,8 +132,8 @@
   "binding_compose_workload_irefs": 161237784,
   "_decision_emptiness_comment": "Seven meets holding complements asked `is_empty`, one pass: the integer kind a translation from JSON Schema writes, met with a range and the complements of 8 and of 16 ranges, not empty; the 16 with the range covered, empty; the 32-complement cell `--decision-steps` asks of the sets alone; a meet of two complements a rule decides; a list beside the complements of `list[int]` and of the JSON values, empty below the fixpoint; and a cell of sixty complements whose every bound is spelled per kind, past the nodes one lowering reads, not empty. The same corpus as `--decision-below`, so the two counts are one question by its two procedures; a reading one asks and the other does not reads on one count alone. Read with valgrind 3.26.0 on glibc 2.43.",
   "decision_emptiness_workload_checksum": 11182,
-  "decision_emptiness_workload_irefs": 2749149038,
+  "decision_emptiness_workload_irefs": 72525457,
   "_decision_below_comment": "The seven meets of `--decision-emptiness` related below `nothing`, one pass, the procedure that reads the whole meet as a set where its rules decline. Read with valgrind 3.26.0 on glibc 2.43.",
-  "decision_below_workload_checksum": 11181,
-  "decision_below_workload_irefs": 2689905145
+  "decision_below_workload_checksum": 11182,
+  "decision_below_workload_irefs": 49900093
 }

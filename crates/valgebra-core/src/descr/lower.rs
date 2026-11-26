@@ -120,9 +120,10 @@ pub trait Constants {
 /// **The figure is a meet of ranges.** A JSON integer range, an `int` that is no
 /// `bool` or a float that is a multiple of one, reads about nine nodes, so a cell
 /// of a model checker, one range with others taken out of it, is read up to 112 of
-/// them and declined at 120. Each one taken out adds a span to a component, which
-/// is linear in them: 112 take 2.5 ms. `tests/test_universe.py` holds both widths,
-/// so a commit moving the figure either way fails there.
+/// them and declined at 120 against any set but `Nothing`. Each one taken out adds
+/// a span to a component, which is linear in them: 112 take 2.5 ms.
+/// `tests/test_universe.py` holds both widths, so a commit moving the figure either
+/// way fails there.
 ///
 /// **It is not what stops a product.** A record whose fields each take two types,
 /// against the union of the records that fix every field, reads 22 nodes at two
@@ -145,6 +146,11 @@ pub trait Constants {
 /// 0.9% of the nodes read were a subtree with parts the same lowering had read at
 /// the same depth, and the members of a wide union are distinct. What repeats a
 /// lowering is a query asking for it again, which is the query's to answer.
+///
+/// **A meet holding complements below `Nothing` reads it a complement**
+/// ([`nodes_for_complements`]): read a complement at a time, it would lower each
+/// complement's rest under this figure, so the whole meet read once under that
+/// many nodes reads no more of the schema than the reading after it.
 pub(crate) const BUDGET: u32 = 1024;
 
 /// The set a schema denotes, or `None` where the descriptor cannot yet hold it.
@@ -158,6 +164,22 @@ pub(crate) const BUDGET: u32 = 1024;
 /// schema past the bounds one lowering spends.
 pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
     lower_within(Bounds::DEFAULT, schema, pool)
+}
+
+/// The nodes the set reading of a meet holding `complements` complements reads
+/// below `Nothing`: [`BUDGET`] a complement, and never fewer than [`BUDGET`].
+///
+/// Where every other reading declines, `is_empty` and the relation read such a
+/// meet a complement at a time, each complement's rest asked of the sets and so
+/// lowered under [`BUDGET`]; one lowering of the whole meet under this many
+/// reads no more of the schema than that reading would, and settles a meet it
+/// would spend each asking's allowance on. A model checker's cell spelling every
+/// bound per kind reads eighteen nodes a complement, so sixty are past
+/// [`BUDGET`] whole.
+pub(crate) fn nodes_for_complements(complements: usize) -> u32 {
+    BUDGET
+        .saturating_mul(u32::try_from(complements).unwrap_or(u32::MAX))
+        .max(BUDGET)
 }
 
 /// How many times a reference is unfolded before the descriptor is built.
@@ -338,6 +360,7 @@ pub(crate) fn read_widened<T>(
     schema: &Schema,
     definitions: &[Schema],
     pool: &dyn Constants,
+    nodes: u32,
     answers: impl FnMut(&[Schema]) -> bool,
     mut decide: impl FnMut(&Descr, Option<&[Schema]>) -> Option<T>,
 ) -> Option<T> {
@@ -348,12 +371,12 @@ pub(crate) fn read_widened<T>(
         unfolded = schema.unfolded(definitions, UNFOLDS, Polarity::Widen);
         &unfolded
     };
-    let past = reach(schema, DEPTH, &Cell::new(BUDGET));
+    let past = reach(schema, DEPTH, &Cell::new(nodes));
     let mut answers = answers;
     match past {
-        Reach::Container => return thinned_readings(schema, pool, answers, decide),
+        Reach::Container => return thinned_readings(schema, pool, nodes, answers, decide),
         Reach::Scalar => {
-            if let Some(answer) = thinned_readings(schema, pool, &mut answers, &mut decide) {
+            if let Some(answer) = thinned_readings(schema, pool, nodes, &mut answers, &mut decide) {
                 return Some(answer);
             }
             if !answers(core::slice::from_ref(schema)) {
@@ -365,14 +388,14 @@ pub(crate) fn read_widened<T>(
     // Decided where it is built: a set returned out of here to be decided
     // would be copied, and the copy is most of what this costs a schema that
     // lowers.
-    let room = Room::new(BUDGET);
+    let room = Room::new(nodes);
     if let Some(set) = budget::under(WORK, || descend(schema, pool, &room, DEPTH)) {
         return budget::under(WORK, || decide(&set, None));
     }
     if past == Reach::Scalar || !room.unread.get() {
         return None;
     }
-    thinned_readings(schema, pool, answers, decide)
+    thinned_readings(schema, pool, nodes, answers, decide)
 }
 
 /// The first reading [`read_widened`] builds, and the conjuncts it kept: what
@@ -385,7 +408,7 @@ pub(crate) fn lower_widened(
     kept: &mut Option<Vec<Schema>>,
     answers: impl FnMut(&[Schema]) -> bool,
 ) -> Option<Descr> {
-    read_widened(schema, definitions, pool, answers, |set, read| {
+    read_widened(schema, definitions, pool, BUDGET, answers, |set, read| {
         *kept = read.map(<[Schema]>::to_vec);
         Some(set.clone())
     })
@@ -409,6 +432,7 @@ pub(crate) fn lower_widened(
 fn thinned_readings<T>(
     schema: &Schema,
     pool: &dyn Constants,
+    nodes: u32,
     mut answers: impl FnMut(&[Schema]) -> bool,
     mut decide: impl FnMut(&Descr, Option<&[Schema]>) -> Option<T>,
 ) -> Option<T> {
@@ -427,7 +451,12 @@ fn thinned_readings<T>(
         if !answers(&read) {
             return None;
         }
-        let Some(set) = lower(&Schema::Intersection(read.clone().into()), pool) else {
+        let bounds = Bounds {
+            nodes,
+            ..Bounds::DEFAULT
+        };
+        let Some(set) = lower_within(bounds, &Schema::Intersection(read.clone().into()), pool)
+        else {
             continue;
         };
         if let Some(answer) = budget::under(WORK, || decide(&set, Some(&read))) {
@@ -751,6 +780,12 @@ pub(crate) const DEPTH: u32 = 5;
 /// `bounds`. That refusal is not a statement about the schema: the same schema
 /// lowers under larger bounds. It is what makes the cost of asking bounded,
 /// which is the only thing that makes asking safe.
+///
+/// Inline, so [`lower`]'s copy folds its default bounds into the build: a
+/// thinned reading of a meet below `Nothing` calls this under the nodes it is
+/// allowed, and out of line one body read its bounds from every call, two
+/// instructions a lowering, `--decision-sets` +0.01% over the release before.
+#[inline]
 pub fn lower_within(bounds: Bounds, schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
     if nests_past_the_depth(schema, bounds) {
         return None;

@@ -3397,6 +3397,7 @@ fn a_member_deep_by_its_key_is_left_out_by_the_last_reading() {
         &subject,
         &[],
         &pool,
+        BUDGET,
         |_| true,
         |set, kept| {
             let stands = match kept {
@@ -3477,7 +3478,7 @@ fn each_reading_is_decided_under_an_allowance_of_its_own() {
         (units == WORK).then_some(units)
     };
     assert_eq!(
-        read_widened(&words("^a+$"), &[], &pool, |_| true, spent),
+        read_widened(&words("^a+$"), &[], &pool, BUDGET, |_| true, spent),
         Some(WORK),
         "read whole"
     );
@@ -3490,6 +3491,7 @@ fn each_reading_is_decided_under_an_allowance_of_its_own() {
             &meet(vec![words("^a+$"), beside]),
             &[],
             &pool,
+            BUDGET,
             |_| true,
             spent
         ),

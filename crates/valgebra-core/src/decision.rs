@@ -26,8 +26,8 @@ use std::sync::Arc;
 use rustc_hash::FxHashMap;
 
 use crate::descr::lower::{
-    Constants, UNFOLDS, WORK, an_empty_reading_stands, lower, lower_unfolded, parts_a_cut_reaches,
-    read_widened,
+    BUDGET, Constants, UNFOLDS, WORK, an_empty_reading_stands, lower, lower_unfolded,
+    nodes_for_complements, parts_a_cut_reaches, read_widened,
 };
 use crate::descr::{Descr, budget};
 use crate::ir::{Constraint, DefIx, Members, Polarity, Schema, SeqShape};
@@ -858,6 +858,23 @@ impl Drop for Narrowing {
 }
 
 impl Schema {
+    /// The nodes the set reading of this schema below `Nothing` lowers it under:
+    /// [`nodes_for_complements`] for a meet, [`BUDGET`] for any other. Out of
+    /// line and cold, so a relation below any other set pays one comparison.
+    #[cold]
+    #[inline(never)]
+    fn nodes_below_nothing(&self) -> u32 {
+        match self {
+            Schema::Intersection(members) => nodes_for_complements(
+                members
+                    .iter()
+                    .filter(|member| matches!(member, Schema::Complement(_)))
+                    .count(),
+            ),
+            _ => BUDGET,
+        }
+    }
+
     /// Whether the descriptor proves every value of this schema is one of
     /// `other`, by proving the difference empty.
     ///
@@ -878,6 +895,15 @@ impl Schema {
     ) -> Relation {
         #[cfg(test)]
         goal_tests::goals::read_by_the_sets();
+        // A meet holding complements below `Nothing` is lowered under the nodes
+        // its reading a complement at a time would read ([`nodes_for_complements`]),
+        // so `is_empty` and the relation read it under one allowance; every other
+        // subject under `BUDGET`.
+        let nodes = if matches!(other, Schema::Nothing) {
+            self.nodes_below_nothing()
+        } else {
+            BUDGET
+        };
         // A term of length bounds over one base is the lengths it holds, read
         // without a build ([`lengths`]).
         if let Some(answer) = self.related_by_lengths(other) {
@@ -963,6 +989,7 @@ impl Schema {
             self,
             defs,
             pool,
+            nodes,
             |kept| !the_rules_find_a_value(kept) || theirs().is_some(),
             |mine, kept| {
                 // The schemas the subject's side reads as widened are itself,

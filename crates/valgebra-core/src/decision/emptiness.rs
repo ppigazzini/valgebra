@@ -520,6 +520,7 @@ impl Schema {
             self,
             defs,
             pool,
+            crate::descr::lower::BUDGET,
             |read| !the_rules_find_a_value(read),
             |set, kept| {
                 (set.emptiness() == Verdict::Empty

@@ -1156,7 +1156,13 @@ few, leaves undecided. So a meet that reading would read dearly -- one holding
 (`decision/emptiness.rs`) -- is first asked of the set representation as the
 relation below `nothing` asks its subject (`Schema::the_sets_find_a_value`),
 and a value found there ends the question inhabited, by the reading the
-relation refutes it with. `scripts/perf_gate.py --decision-emptiness` and
+relation refutes it with. That reading lowers a meet holding complements under
+`BUDGET` nodes a complement (`nodes_for_complements`), for both procedures:
+read a complement at a time, the meet's every rest is asked of the sets under
+`BUDGET`, so one lowering of the whole meet under that many reads no more of
+the schema, and a cell of a hundred and fifty complements whose bounds are
+spelled per kind, past `BUDGET` whole, is refuted there
+(`a_meet_past_the_node_budget_is_lowered_under_it_a_complement`). `scripts/perf_gate.py --decision-emptiness` and
 `--decision-below` read one corpus of such meets by the two procedures. What
 it leaves apart is a
 complement it does not take -- one running a callback, whose two occurrences

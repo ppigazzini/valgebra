@@ -1291,8 +1291,9 @@ cost of reading every meet as its relation, which took 7 to 33 ms a call.
 So parity is kept a reading at a time, a reading the relation asks of a meet
 asked by `is_empty` of the same meet, and a law over drawn meets holds it. The
 relation's set reading of a whole meet is one: `is_empty` asks it of a meet it
-would otherwise read a complement at a time, and a value it finds ends the
-question as it ends the relation's. Parity of answers is a law's; parity of
+would otherwise read a complement at a time, under the nodes a complement both
+procedures lower that meet under, and a value it finds ends the question as it
+ends the relation's. Parity of answers is a law's; parity of
 cost is the instruction gate's, which holds `--decision-emptiness` to twice
 `--decision-below` over one corpus.
 **[DEVIATION: emptiness-and-the-relation-below-nothing-are-two-procedures]**
@@ -1301,7 +1302,7 @@ SOURCE: §14.4 "completeness is a property of **one**"; §13.1 "`is_subtype_of` 
 
 IMPLEMENTED-BY: decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::Schema::the_sets_find_a_value, decision.rs::Schema::inside_what_it_complements
 
-HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_holding_two_complements_is_its_rest_below_either, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set, a_meet_the_sets_find_a_value_in_is_not_read_a_complement_at_a_time, a_meet_of_two_complements_is_read_a_complement_at_a_time, a_meet_below_an_excluded_middle_is_read_empty_by_its_split, a_union_holding_a_scalar_atom_reads_its_other_members_for_their_regions_alone, a_meet_past_the_node_budget_is_read_empty_by_one_complement
+HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_holding_two_complements_is_its_rest_below_either, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set, a_meet_the_sets_find_a_value_in_is_not_read_a_complement_at_a_time, a_meet_of_two_complements_is_read_a_complement_at_a_time, a_meet_below_an_excluded_middle_is_read_empty_by_its_split, a_union_holding_a_scalar_atom_reads_its_other_members_for_their_regions_alone, a_meet_past_the_node_budget_is_read_empty_by_one_complement, a_meet_past_the_node_budget_is_lowered_under_it_a_complement
 
 **The domain is a family of models, one per interpreter.** Models are
 compared by the subtyping they induce, and the source decides the one a

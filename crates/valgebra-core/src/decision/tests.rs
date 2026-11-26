@@ -16485,6 +16485,73 @@ mod a_meet_holding_complements {
         assert!(goal_tests::goals::complements_read() > before);
     }
 
+    // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
+    /// A meet of a hundred and fifty complements past the nodes one lowering
+    /// reads, and past twice them, with a value outside every complement, is
+    /// refuted by the set reading of the whole meet under the nodes a complement
+    /// that reading gives it, before any complement is read, and the relation
+    /// below `nothing` refutes it by the same reading.
+    #[test]
+    fn a_meet_past_the_node_budget_is_lowered_under_it_a_complement() {
+        let mut members = integers_within(
+            &[500, 497, 494, 491, 488, 485, 482],
+            &[1000, 1003, 1006, 1009, 1012, 1015, 1018],
+        );
+        for i in 0..149 {
+            let low = 37 * i % 400;
+            members.push(met(integers_within(&[low], &[low + 200 + 53 * i % 399])).complement());
+        }
+        let meet = met(members);
+        let nodes = crate::descr::lower::Bounds {
+            nodes: 2 * crate::descr::lower::BUDGET,
+            ..crate::descr::lower::Bounds::DEFAULT
+        };
+        assert!(crate::descr::lower::lower_within(nodes, &meet, &Indexed).is_none());
+        let before = goal_tests::goals::complements_read();
+        assert!(!meet.is_empty_with(&Indexed, &[]));
+        assert_eq!(goal_tests::goals::complements_read(), before);
+        assert_eq!(
+            meet.subtype_relation_under(&Schema::Nothing, &Indexed, &[]),
+            Relation::Fails
+        );
+        assert_eq!(goal_tests::goals::complements_read(), before);
+    }
+
+    /// The same meet covered, with a predicate beside it, is proved below
+    /// `nothing` by the set reading the predicate leaves: the whole meet's
+    /// lowering refuses at the predicate, and the members read whole, past twice
+    /// the nodes one lowering reads, are lowered under the nodes a complement
+    /// and read empty, before any complement is read. A reading of fewer members
+    /// holds more values, so its emptiness proves the meet's.
+    #[test]
+    fn a_meet_past_the_node_budget_beside_a_predicate_is_read_without_it() {
+        let mut members = integers_within(
+            &[500, 497, 494, 491, 488, 485, 482],
+            &[1000, 1003, 1006, 1009, 1012, 1015, 1018],
+        );
+        for i in 0..149 {
+            let (low, high) = if i == 2 {
+                (450, 1001)
+            } else {
+                let low = 37 * i % 400;
+                (low, low + 200 + 53 * i % 399)
+            };
+            members.push(met(integers_within(&[low], &[high])).complement());
+        }
+        members.push(Schema::refine(
+            Schema::Int,
+            vec![Constraint::Predicate(PredIx::new(0))],
+        ));
+        let meet = met(members);
+        let before = goal_tests::goals::complements_read();
+        assert_eq!(
+            meet.subtype_relation_under(&Schema::Nothing, &Indexed, &[]),
+            Relation::Holds
+        );
+        assert_eq!(goal_tests::goals::complements_read(), before);
+        assert!(meet.is_empty_with(&Indexed, &[]));
+    }
+
     // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures, a-pair-is-split-on-one-set
     /// `list[J] & ~((~C & J) | C)` is empty: `list[J]` is below the union, as
     /// the relation proves by splitting it on `C`, and `is_empty` reads the

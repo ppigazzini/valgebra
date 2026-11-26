@@ -490,7 +490,9 @@ def _json_integers(low: int, high: int) -> object:
 def test_a_cell_of_a_checker_reads_every_range_taken_out_of_it() -> None:
     # A model checker's cell over JSON integers: one range with others taken out of
     # it, which is what the lowering's ceiling is sized from. The widest it reads
-    # holds the one integer left, and nothing at all with that integer gone.
+    # holds the one integer left, and nothing at all with that integer gone. Past
+    # it a relation declines, but below `nothing`, where a meet holding complements
+    # is lowered under the ceiling a complement, the integer left is found.
     def cell(width: int, top: int) -> Validator[object]:
         taken = [complement(_json_integers(i * 2, i * 2 + 1)) for i in range(width)]
         return Validator(intersection(_json_integers(0, top), *taken))
@@ -503,7 +505,8 @@ def test_a_cell_of_a_checker_reads_every_range_taken_out_of_it() -> None:
     assert not left.is_valid(True)
     assert left.relation_to(_json_integers(224, 224)) == "subset"
     assert cell(112, 223).relation_to(nothing) == "subset"
-    assert cell(120, 240).relation_to(nothing) == "undecided"
+    assert cell(120, 240).relation_to(_json_integers(240, 240)) == "undecided"
+    assert cell(120, 240).relation_to(nothing) == "not_subset"
 
 
 def test_a_document_of_each_universe_is_a_value_of_its_top() -> None:
