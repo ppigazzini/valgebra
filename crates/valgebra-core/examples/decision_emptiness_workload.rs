@@ -14,10 +14,11 @@
 //! complement of `bool`, met with a range and the complements of `n` ranges, at
 //! 8 and 16 complements and not empty; the same at 16 with two ranges covering
 //! the range, so empty; the 32-complement cell `decision_sets_workload` asks of
-//! the sets alone; a meet of two complements whose rest a rule decides; and a
-//! list beside the complements of `list[int]` and of the JSON values, empty
-//! only below the fixpoint. Keep the corpus fixed; changing it moves both
-//! records.
+//! the sets alone; a meet of two complements whose rest a rule decides; a list
+//! beside the complements of `list[int]` and of the JSON values, empty only
+//! below the fixpoint; and a cell of sixty complements whose every bound is
+//! spelled per kind, past the nodes one lowering reads, not empty. Keep the
+//! corpus fixed; changing it moves both records.
 
 use valgebra_core::descr::classes::Class;
 use valgebra_core::descr::lower::{Constants, Operand};
@@ -126,6 +127,49 @@ fn steps_cell() -> Schema {
     )
 }
 
+/// A bound over a number spelled per kind, as a translation from JSON Schema
+/// writes one when it reads `int` and `float` apart.
+fn per_kind(bound: Constraint) -> Schema {
+    Schema::union([
+        Schema::refine(Schema::Int, vec![bound.clone()]),
+        Schema::refine(Schema::Float, vec![bound]),
+    ])
+}
+
+/// The integers between `lows`' greatest and `highs`' least, every bound a
+/// member of its own, beside the complement of `bool`.
+fn integers_within(lows: &[usize], highs: &[usize]) -> Vec<Schema> {
+    std::iter::once(integral())
+        .chain(
+            lows.iter()
+                .map(|&low| per_kind(Constraint::Ge(OperandIx::new(low)))),
+        )
+        .chain(
+            highs
+                .iter()
+                .map(|&high| per_kind(Constraint::Le(OperandIx::new(high)))),
+        )
+        .chain(std::iter::once(Schema::Bool.complement()))
+        .collect()
+}
+
+/// `[500, 1000]` written as seven bounds a side, met with the complements of `n`
+/// cells written the same way, each ending below 1000, so 1000 is a value: a
+/// model checker's cell over an integer argument, at sixty complements past the
+/// nodes one lowering reads.
+fn per_kind_cell(n: usize) -> Schema {
+    let mut members = integers_within(
+        &[500, 497, 494, 491, 488, 485, 482],
+        &[1000, 1003, 1006, 1009, 1012, 1015, 1018],
+    );
+    for i in 0..n {
+        let low = (37 * i) % 400;
+        let high = low + 200 + (53 * i) % 399;
+        members.push(Schema::meet(integers_within(&[low], &[high])).complement());
+    }
+    Schema::meet(members)
+}
+
 /// The JSON values, `μj. None | bool | int | float | str | list[j] | dict[str, j]`.
 fn json() -> (Schema, Vec<Schema>) {
     let at = Schema::Ref(DefIx::new(0));
@@ -164,6 +208,7 @@ fn corpus() -> Vec<(Schema, Vec<Schema>)> {
         (steps_cell(), Vec::new()),
         (two, Vec::new()),
         (below_the_fixpoint, defs),
+        (per_kind_cell(60), Vec::new()),
     ]
 }
 
