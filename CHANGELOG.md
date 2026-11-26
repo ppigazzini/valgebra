@@ -33,6 +33,16 @@ matrix decision workload 0.10% and the relation between dataclasses 0.09%. The r
 every field accepted reads the most, 0.09% more, a count that moves with the addresses its compared
 keys sit at and not with its code.
 
+PyPI's wheels for CPython 3.11 to 3.15 on Linux x86_64, read against 0.0.35's (release step 9, an
+AMD Ryzen 7 PRO 7840U), count the same instructions as 0.0.35's on each of the nine shapes release
+step 1 counted. On CPython 3.13 a `TypedDict` record of three fields validates 35% to 42% slower in
+cycles in both of 0.0.36's environments, and again on a second reading, on the same 1,283
+instructions a call and eight to twelve times the frontend stalls, where 0.0.35's second
+environment reads it within 1%: a move of where the profiled build placed that code, charged to no
+change. Every other shape on every interpreter reads within 5% in both of 0.0.36's environments
+or does not repeat: a refined string on 3.11 read 6% faster in both, and 3% and 6% on a second
+reading.
+
 ### Added
 
 - **`ensure` stops after a given number of failures.** `ensure(obj, fail_fast=True)` and
