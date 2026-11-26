@@ -1133,6 +1133,19 @@ PLANTS = (
         trips=("test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",),
     ),
     Plant(
+        # The core sweep starts whatever the plan answered: on a push the plan
+        # finds nothing for, its shards run anyway.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "      !cancelled() && needs['mutants-plan'].outputs.core == 'yes' &&\n",
+            "      !cancelled() &&\n",
+        ),
+        trips=("test_a_diff_scoped_sweep_runs_exactly_where_the_plan_names_a_file",),
+    ),
+    Plant(
         # A dispatcher that answers nothing where it dispatched nothing: the
         # one night the push jobs must run on `main`, they do not.
         "tests/test_required_jobs.py",
@@ -2486,7 +2499,7 @@ PLANTS = (
         lambda tree: _edits(
             tree,
             ".github/workflows/ci.yml",
-            ("        zizmor,\n", "        zizmor,\n        planted-job,\n"),
+            ("        audits,\n", "        audits,\n        planted-job,\n"),
             (
                 "\n  ci:\n",
                 (

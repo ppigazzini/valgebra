@@ -177,9 +177,9 @@ like one that has not. Commands that need an embedded interpreter need its libra
 on the loader path — the binding-coverage job in `.github/workflows/ci.yml` shows
 the two lines that set it. The lint row is the two workspace passes; the
 `rust lint` job adds a third, three restriction lints over the library targets.
-The `pip audit` and `zizmor` jobs pin the tool versions their `uvx` commands
-run, and a local `uvx` without a pin takes the latest. The `actions lock` job
-installs the `gh` extension at the release it names.
+The `audits` job pins the tool versions its `uvx` commands run, `pip-audit`'s
+and `zizmor`'s, and a local `uvx` without a pin takes the latest; it installs
+the `gh` extension at the release it names.
 
 `tests/test_contract_inventory.py` holds this table to the tree in both
 directions: a gate script with no row fails, and a row naming a script or a

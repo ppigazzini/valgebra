@@ -1139,6 +1139,24 @@ branch, where the scheduled run is the only one.
 `needs:` *and* fails unless each result is `success` rather than merely
 not-failure. The duplicated list is a deliberate second copy.
 
+**A sweep starts only where the diff reaches it.** A job is what GitHub's
+concurrency limit counts, twenty at once, the account's and shared by every
+repository on it, and the core sweep is twenty-four shards and the binding sweep
+three: started on every push, they held more runners than the limit gives to
+sweep nothing on a push that moved no Rust. So `mutants-plan` reads the diff
+once, as the shards read it, and a sweep starts only where it names a file that
+sweep examines. The aggregate takes a sweep's `skipped` only where the plan
+answered `no`, and refuses it where the plan named a file or gave no answer.
+Each shard still reads the diff for itself, so what a shard sweeps is its own
+reading, and the plan decides only whether it starts.
+`tests/test_required_jobs.py` evaluates the gate under both of the plan's
+answers.
+
+**The audits are one job.** `cargo deny` over both workspaces, `pip-audit` over
+the lock, `zizmor` over `.github/` and the actions lockfile run as steps of
+`audits`, each after whatever failed before it, for the same limit: each was a
+minute's work behind a job's own checkout and setup.
+
 **A canceled job is red.** A job that reaches its timeout is reported
 `cancelled` rather than `failure`, and a job nothing waits on is canceled in
 silence -- so a ratchet behind a timeout runs nowhere while every lane reads
@@ -1354,7 +1372,7 @@ the commit each tag resolved to when it was locked, an action another action
 calls included: `actions/setup-python` inside the PyPI publish action,
 `actions/upload-artifact` inside the Pages upload. The runner runs that commit,
 and refuses a commit only a fork carries or a repository that is no longer the
-one locked under its name. The `actions lock` job reads the file against the
+one locked under its name. The `audits` job reads the file against the
 workflows and upstream with `gh actions-lock --verify`, so a `uses:` with no
 entry, or a tag moved off its commit, fails there. After a change to a `uses:`,
 `gh actions-lock` writes the entry; Dependabot writes it in its own pull request

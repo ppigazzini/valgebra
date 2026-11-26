@@ -118,13 +118,29 @@ def _needs(job: dict) -> list[str]:
     return [needs] if isinstance(needs, str) else list(needs)
 
 
-def _results(run: str, **planted: str) -> dict[str, dict]:
-    """Give each job's result on a run, and the dispatcher's outputs.
+#: The job that reads a push's diff once for both diff-scoped sweeps.
+PLAN = "mutants-plan"
+
+#: What the plan answers: a change touching a function each sweep examines, and
+#: one touching none, which starts neither sweep.
+ANSWERS = {
+    "a change the sweeps examine": {"core": "yes", "walk": "yes"},
+    "a change they do not": {"core": "no", "walk": "no"},
+}
+
+
+def _results(
+    run: str,
+    plan: dict[str, str] = ANSWERS["a change the sweeps examine"],
+    **planted: str,
+) -> dict[str, dict]:
+    """Give each job's result on a run, the dispatcher's outputs and the plan's.
 
     Each job runs where its condition holds, reading the results of the jobs it
     needs, and a job that runs succeeds unless `planted` names another result
     for it. A condition with no status function in it holds only where every
-    job it needs succeeded, as the runner reads one.
+    job it needs succeeded, as the runner reads one. The plan, where it runs,
+    answers `plan`.
     """
     jobs = _jobs()
     event, answered, inputs = RUNS[run]
@@ -142,7 +158,7 @@ def _results(run: str, **planted: str) -> dict[str, dict]:
         if not re.search(r"\b(always|cancelled|success|failure)\(", condition):
             runs = runs and all(need["result"] == "success" for need in needs.values())
         result = planted.get(name, "success") if runs else "skipped"
-        outputs = answered if name == DISPATCH and runs else {}
+        outputs = {DISPATCH: answered, PLAN: plan}.get(name, {}) if runs else {}
         done[name] = {"result": result, "outputs": outputs}
     return done
 
@@ -179,23 +195,47 @@ def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
     A nightly lane is accepted `skipped` on every run, the ones that run it
     among them: which nights run it is its own condition's to say, and
     `test_the_nightly_runs_on_the_branch_development_is_on` holds those.
+
+    And each run is read under both of the plan's answers: a diff-scoped sweep
+    is accepted `skipped` where the plan found nothing for it, and refused it
+    where the plan named a file, since there a skip is a sweep that did not run.
     """
     needs = read_workflow()["jobs"][GATE]["needs"]
-    pushed = {
-        name for name, read in _results("a push").items() if read["result"] == "success"
-    }
     wrong = []
-    for run, (event, _, _) in RUNS.items():
-        healthy = _results(run)
-        if _gate_fails(healthy, event):
-            wrong.append(f"{run}: every job did what it should, and the gate fails")
-        for name in needs:
-            ran = healthy[name]["result"] == "success" and name in pushed
-            for result in ("failure", "cancelled", *(("skipped",) if ran else ())):
-                planted = {**healthy, name: {**healthy[name], "result": result}}
-                if not _gate_fails(planted, event):
-                    wrong.append(f"{run}: {name} reads {result} and the gate passes")
+    for answer, plan in ANSWERS.items():
+        pushed = {
+            name
+            for name, read in _results("a push", plan).items()
+            if read["result"] == "success"
+        }
+        for run, (event, _, _) in RUNS.items():
+            healthy = _results(run, plan)
+            if _gate_fails(healthy, event):
+                wrong.append(
+                    f"{run}, {answer}: every job did what it should, and the gate fails"
+                )
+            for name in needs:
+                ran = healthy[name]["result"] == "success" and name in pushed
+                for result in ("failure", "cancelled", *(("skipped",) if ran else ())):
+                    planted = {**healthy, name: {**healthy[name], "result": result}}
+                    if not _gate_fails(planted, event):
+                        wrong.append(
+                            f"{run}, {answer}: {name} reads {result}; the gate passes"
+                        )
     assert not wrong, "\n".join(wrong)
+
+
+def test_a_diff_scoped_sweep_runs_exactly_where_the_plan_names_a_file() -> None:
+    """A push starts a sweep's shards exactly where the plan names a file."""
+    for answer, plan in ANSWERS.items():
+        read = _results("a push", plan)
+        assert read[PLAN]["result"] == "success", answer
+        for sweep, key in (
+            ("mutants-diff-core", "core"),
+            ("mutants-diff-walk", "walk"),
+        ):
+            expected = "success" if plan[key] == "yes" else "skipped"
+            assert read[sweep]["result"] == expected, (answer, sweep, read[sweep])
 
 
 def test_a_night_handed_to_the_development_branch_runs_no_push_job_here() -> None:

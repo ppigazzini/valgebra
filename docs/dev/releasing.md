@@ -102,8 +102,8 @@ each one younger than the week Dependabot waits.
 | What moves | By | Read after |
 |---|---|---|
 | `Cargo.lock` and `fuzz/Cargo.lock` | `cargo update`, and again with `--manifest-path fuzz/Cargo.toml`; a requirement in a manifest by hand | `cargo deny --locked check`, for each |
-| `uv.lock`, and a floor in `pyproject.toml` | `uv lock --upgrade` | the `pip-audit` lane's two commands |
-| an action | its tag in each `uses:`, then `gh actions-lock` | `gh actions-lock --verify`, and the `zizmor` lane's command |
+| `uv.lock`, and a floor in `pyproject.toml` | `uv lock --upgrade` | the `audits` job's `pip-audit` command |
+| an action | its tag in each `uses:`, then `gh actions-lock` | `gh actions-lock --verify`, and the `audits` job's `zizmor` command |
 | a tool a lane installs: uv, maturin, zizmor, pip-audit, each `cargo-*`, the fuzz build's nightly | its pin in `.github/` | that lane's own command |
 | the pre-commit hooks | `uv run --no-sync pre-commit autoupdate` | `uv run --no-sync pre-commit run --all-files` |
 
