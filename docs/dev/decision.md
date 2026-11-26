@@ -1147,8 +1147,12 @@ relation refutes it with. `scripts/perf_gate.py --decision-emptiness` and
 it leaves apart is a
 complement it does not take -- one running a callback, whose two occurrences
 may answer apart, so `P <= P` holds while `P & ~P` is not proved empty, which
-stays beside the rest as written -- and a pair only the set readings after the
-rules prove, which it does not ask.
+stays beside the rest as written -- and a pair only the relation's readings past
+the rules prove that this one does not ask: it asks the rules, the leaves, the
+branches of the inner set the rest meets, and last the split on a set the inner
+one negates (`split_on_a_set_it_negates`), so `list[J]` below the excluded
+middle `(~list[int] & J) | list[int]` is read empty as the relation proves it,
+and a pair only the respellings or the parts prove stays apart.
 
 `tests/test_completeness_probe.py` measures the gap over the survey corpus and
 holds it to the count recorded there, which is none. That is a ratchet rather

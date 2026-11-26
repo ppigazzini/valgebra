@@ -16424,6 +16424,34 @@ mod a_meet_holding_complements {
     }
 
     // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
+    /// `list[J] & ~((~C & J) | C)` is empty: `list[J]` is below the union, as
+    /// the relation proves by splitting it on `C`, and `is_empty` reads the
+    /// same pair through the split among a complement's readings. The split
+    /// proves it for a one-element `list[int]`, a `list[bool]` and a `list[int]`
+    /// alike, the fixpoint `J` beside each.
+    #[test]
+    fn a_meet_below_an_excluded_middle_is_read_empty_by_its_split() {
+        let (json, defs) = json();
+        let one = Schema::refine(
+            list_of(Schema::Int),
+            vec![Constraint::MinLen(1), Constraint::MaxLen(1)],
+        );
+        for split_on in [one, list_of(Schema::Bool), list_of(Schema::Int)] {
+            let whole = Schema::union([
+                met(vec![split_on.clone().complement(), json.clone()]),
+                split_on.clone(),
+            ]);
+            assert_eq!(
+                list_of(json.clone()).subtype_relation_under(&whole, &NoLeafRelations, &defs),
+                Relation::Holds,
+                "{split_on:?}"
+            );
+            let meet = met(vec![list_of(json.clone()), whole.complement()]);
+            assert!(meet.is_empty_with(&NoLeafRelations, &defs), "{split_on:?}");
+        }
+    }
+
+    // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
     /// Below the bound a meet is read a complement at a time with no lowering
     /// asked first: `list[J] & ~list[int] & ~J` is proved empty by the rest below
     /// `J`, a fixpoint's relation the set representation does not settle, and

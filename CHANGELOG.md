@@ -6,12 +6,23 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A meet below an excluded middle is read empty.** `is_empty` of `list[J] & ~whole`, `J` the
+  JSON values and `whole` the union `(~C & J) | C`, was `False` where `list[J].relation_to(whole)`
+  was `"subset"`: the relation proves the pair by splitting it on `C`, and the reading `is_empty`
+  takes of a meet's complements did not split. It splits now, last, so the two answer alike. A
+  translation from JSON Schema writes `anyOf: [{"not": C}, C]` so, and with `C` a constant list
+  or an enum of lists the arrays' meet with that union's complement is now read empty.
+
 <!-- changelog-roll
 
 Every feat/fix commit this section accounts for, oldest first; held to
 `git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
+
+- fix: the emptiness of a meet splits on a set a complement negates
 
 -->
 

@@ -268,6 +268,15 @@ impl Schema {
     /// relation the rules' coinductive hypothesis proves and the emptiness of
     /// the difference alone does not. A value of `R` outside `I` is a value of
     /// the meet, so a refutation answers it too.
+    ///
+    /// Asked of the rules, of the leaves, of the branches of `I` the rest meets,
+    /// and last split on a set `I` negates
+    /// ([`split_on_a_set_it_negates`](Self::split_on_a_set_it_negates)), the
+    /// reading that proves a pair below the excluded middle `(¬C ∩ D) ∪ C`, as
+    /// `list[J]` below `(¬list[int] ∩ J) ∪ list[int]`, where no branch holds `R`
+    /// alone. The split guards itself, splitting once a query, and its halves are
+    /// meets of the pair's own signed subterms, so the goals stay in the query's
+    /// closure and a nested asking splits nothing again.
     fn below_one_complement(
         members: &[Schema],
         at: usize,
@@ -290,6 +299,7 @@ impl Schema {
             .or_else(|| {
                 rest.below_the_branches_it_meets(inner, &mut cx.within_this_query(allowance))
             })
+            .or_else(|| rest.split_on_a_set_it_negates(inner, &mut cx.within_this_query(allowance)))
     }
 
     /// What the rules read of this refinement, and where they read nothing and the

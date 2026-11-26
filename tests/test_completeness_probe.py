@@ -239,6 +239,15 @@ SCHEMAS: list[tuple[str, Validator]] = [
         intersection(list[_JSON], complement(list[int])),  # ty: ignore[invalid-type-form]
     ),
     ("J", _JSON),
+    # A list of JSON values beside the excluded middle over a list of integers:
+    # the list is below the union, which the relation proves by splitting it on
+    # `list[int]`, and the emptiness of the difference reads the same split among
+    # a complement's readings, so the two routes answer the pair alike.
+    ("list[J]", _v(list[_JSON])),  # ty: ignore[invalid-type-form]
+    (
+        "(~list[int]&J)|list[int]",
+        union(intersection(complement(list[int]), _JSON), list[int]),
+    ),
     # The edges of each kind's universe, which a schema written for a reader
     # does not reach and a relation is decided at: the end of the integer
     # carrier, the first float no integer equals, a key kind that is a subset of
