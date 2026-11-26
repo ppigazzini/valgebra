@@ -1452,12 +1452,18 @@ mod drawn {
 /// A goal met again under no constructor is refused by the recorder, on each of
 /// the three lists a goal is held open on. Each table is one the build refuses, a
 /// reference standing unguarded in its own definition, since no contractive one
-/// reaches this: the rows say the recorder is wired to the hit.
+/// reaches this: the rows say the recorder is wired to the hit. Beside the
+/// reference stands `int & ~bool`, whose region is known and not opaque, so the
+/// fold reads past it to the reference: a bare atom there would answer the union
+/// inhabited and read no other member.
 #[should_panic(expected = "under no constructor")]
 #[test]
 fn a_goal_met_again_on_the_trail_stands_under_a_constructor() {
     let this = Schema::Ref(DefIx::new(0));
-    let defs = [Schema::union([this.clone(), Schema::Int])];
+    let defs = [Schema::union([
+        this.clone(),
+        Schema::meet([Schema::Int, Schema::Bool.complement()]),
+    ])];
     let budget = Budget::new(DECISION_BUDGET);
     let _ = this.subtype_relation(&Schema::Str, &super::NoLeafRelations, &defs, &budget);
 }
@@ -1468,7 +1474,10 @@ fn a_goal_met_again_on_the_trail_stands_under_a_constructor() {
 #[test]
 fn a_reference_met_again_stands_under_a_constructor() {
     let this = Schema::Ref(DefIx::new(0));
-    let defs = [Schema::union([this.clone(), Schema::Int])];
+    let defs = [Schema::union([
+        this.clone(),
+        Schema::meet([Schema::Int, Schema::Bool.complement()]),
+    ])];
     let budget = Budget::new(DECISION_BUDGET);
     let _ = this.verdict_rec(&mut super::Cx::new(&super::NoLeafRelations, &defs, &budget));
 }

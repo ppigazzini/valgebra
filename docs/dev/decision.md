@@ -801,7 +801,12 @@ verdict is split the same way: every asking but the last stops at the first memb
 not proven empty, and the last reads on to a member holding a value, which a
 refutation of the union stands on. The members' order is their pooled constants',
 so without it a refutation turned on which constant was pooled first; read on in
-every asking, it cost a JSON value's law six times its instructions.
+every asking, it cost a JSON value's law six times its instructions. A union
+holding a scalar atom is the exception to the order: the atom names a kind every
+interpreter builds values of, so the union holds a value before any member is
+folded, and the fold reads the members' regions alone (`region_set`), spending
+no step on a verdict already given, so `str | X` costs one step whatever `X`
+costs to read.
 
 It is asked of a **union** and of nothing else, because a union is the only
 shape that folds a member list and so the only one with a stop to read past. A

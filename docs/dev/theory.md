@@ -1285,7 +1285,7 @@ SOURCE: §14.4 "completeness is a property of **one**"; §13.1 "`is_subtype_of` 
 
 IMPLEMENTED-BY: decision/emptiness.rs::intersection_verdict, decision/emptiness.rs::Schema::the_sets_find_a_value, decision.rs::Schema::inside_what_it_complements
 
-HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_holding_two_complements_is_its_rest_below_either, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set, a_meet_the_sets_find_a_value_in_is_not_read_a_complement_at_a_time, a_meet_of_two_complements_is_read_a_complement_at_a_time, a_meet_below_an_excluded_middle_is_read_empty_by_its_split
+HELD-BY: a_meet_is_read_empty_exactly_where_it_is_below_nothing, below_nothing_exactly_where_read_empty, a_meet_holding_two_complements_is_its_rest_below_either, a_meet_that_may_hold_no_kind_is_read_empty, test_a_meet_that_may_hold_no_kind_is_below_every_set, a_meet_the_sets_find_a_value_in_is_not_read_a_complement_at_a_time, a_meet_of_two_complements_is_read_a_complement_at_a_time, a_meet_below_an_excluded_middle_is_read_empty_by_its_split, a_union_holding_a_scalar_atom_reads_its_other_members_for_their_regions_alone
 
 **The domain is a family of models, one per interpreter.** Models are
 compared by the subtyping they induce, and the source decides the one a

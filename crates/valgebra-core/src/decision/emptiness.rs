@@ -701,6 +701,14 @@ impl Schema {
             // member is [FCB08, Def. 4.1]; its region is the union of the
             // members' regions, again folded from the children.
             Schema::Union(members) => {
+                // A scalar atom denotes a kind every interpreter builds values
+                // of, so a union holding one is inhabited, and the members
+                // beside it are read for their regions alone: folding each for
+                // its emptiness spends steps on a verdict already given, and
+                // `region_set` reads the region the fold would, with none.
+                if members.iter().any(|member| member.atom_region().is_some()) {
+                    return (Verdict::Inhabited, self.region_set());
+                }
                 let mut verdict = Verdict::Empty;
                 let mut region = Regions::UNION_UNIT;
                 for m in members.iter() {

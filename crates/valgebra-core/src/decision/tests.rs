@@ -18468,3 +18468,26 @@ fn a_subject_naming_no_definition_is_asked_no_deeper_reading() {
         assert_eq!(reads(&[Schema::Int]), (alone, read_alone));
     }
 }
+
+// THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
+/// A union holding a scalar atom is inhabited at its fold's first step: the
+/// members beside the atom are read for their regions alone, so a member whose
+/// emptiness takes many steps costs none, as the relation below `nothing` reads
+/// the atom and refutes. The region is the one `region_set` reads.
+#[test]
+fn a_union_holding_a_scalar_atom_reads_its_other_members_for_their_regions_alone() {
+    // A pair is empty where a component is, so its fold reads every level.
+    let mut deep = Schema::Int;
+    for _ in 0..32 {
+        deep = Schema::tuple(SeqShape::fixed([deep, Schema::Int]));
+    }
+    assert!(deep.empty_steps() > 32);
+    let union = Schema::union([deep, Schema::Str]);
+    assert_eq!(union.empty_steps(), 1);
+    assert_eq!(union.verdict(), Verdict::Inhabited);
+    assert!(!union.is_empty());
+    assert_eq!(
+        union.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+}
