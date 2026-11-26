@@ -16423,6 +16423,68 @@ mod a_meet_holding_complements {
         assert!(cell(8, true).is_empty_with(&Indexed, &[]));
     }
 
+    /// A bound over a number as a translation from JSON Schema writes one when it
+    /// spells each kind apart: `int` and `float` each under `op`.
+    fn per_kind(op: Constraint) -> Schema {
+        Schema::union([
+            Schema::refine(Schema::Int, vec![op.clone()]),
+            Schema::refine(Schema::Float, vec![op]),
+        ])
+    }
+
+    /// The integers between `lows`' greatest and `highs`' least, every bound a
+    /// member of its own, as the cells of a model checker's abstraction write
+    /// them: `int | float & MultipleOf(1)` met with a bound per kind and the
+    /// complement of `bool`.
+    fn integers_within(lows: &[usize], highs: &[usize]) -> Vec<Schema> {
+        let mut members = vec![Schema::union([
+            Schema::Int,
+            Schema::refine(
+                Schema::Float,
+                vec![Constraint::MultipleOf(OperandIx::new(1))],
+            ),
+        ])];
+        members.extend(
+            lows.iter()
+                .map(|&low| per_kind(Constraint::Ge(OperandIx::new(low)))),
+        );
+        members.extend(
+            highs
+                .iter()
+                .map(|&high| per_kind(Constraint::Le(OperandIx::new(high)))),
+        );
+        members.push(Schema::Bool.complement());
+        members
+    }
+
+    // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures
+    /// A meet of sixty complements past the nodes one lowering reads is read
+    /// empty by the one complement whose inner set holds its bounds, the fourth.
+    /// The sets do not lower it, so no reading of the whole meet settles it, and
+    /// the complements around that one read as its rest: a reading that passed
+    /// over a meet of more complements than a count names would leave it
+    /// undecided.
+    #[test]
+    fn a_meet_past_the_node_budget_is_read_empty_by_one_complement() {
+        let mut members = integers_within(
+            &[500, 497, 494, 491, 488, 485, 482],
+            &[1000, 1003, 1006, 1009, 1012, 1015, 1018],
+        );
+        for i in 0..59 {
+            let (low, high) = if i == 2 {
+                (450, 1001)
+            } else {
+                (37 * i % 400, 37 * i % 400 + 200 + 53 * i % 399)
+            };
+            members.push(met(integers_within(&[low], &[high])).complement());
+        }
+        let meet = met(members);
+        assert!(crate::descr::lower::lower(&meet, &Indexed).is_none());
+        let before = goal_tests::goals::complements_read();
+        assert!(meet.is_empty_with(&Indexed, &[]));
+        assert!(goal_tests::goals::complements_read() > before);
+    }
+
     // THEORY: emptiness-and-the-relation-below-nothing-are-two-procedures, a-pair-is-split-on-one-set
     /// `list[J] & ~((~C & J) | C)` is empty: `list[J]` is below the union, as
     /// the relation proves by splitting it on `C`, and `is_empty` reads the

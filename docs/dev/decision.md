@@ -1144,7 +1144,14 @@ question has left: each complement asks a relation of a rest holding the
 others, as a respelled pair is asked, so a meet nothing decides spends what as
 many respellings would, and a reading stopped at the allowance is asked again
 with sixteen times the steps a complement. An undecided meet holding a union is
-read again by the further asking too. So a meet that reading would read dearly -- one holding
+read again by the further asking too. No count bounds the complements read,
+the allowance bounding their cost instead: a meet of sixty complements of
+integer cells, each bound spelled per kind as a translation from JSON Schema
+writes it, is past the nodes one lowering reads, and is read empty by the one
+complement whose cell holds its bounds
+(`a_meet_past_the_node_budget_is_read_empty_by_one_complement`), which a reading
+passing over a meet of more complements than a count, or reading only its first
+few, leaves undecided. So a meet that reading would read dearly -- one holding
 `COMPLEMENTS_READ_DEARLY` complements or more, or a complement beside a union
 (`decision/emptiness.rs`) -- is first asked of the set representation as the
 relation below `nothing` asks its subject (`Schema::the_sets_find_a_value`),
