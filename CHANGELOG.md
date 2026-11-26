@@ -15,6 +15,18 @@ All notable changes to valgebra are recorded here. The format follows
   translation from JSON Schema writes `anyOf: [{"not": C}, C]` so, and with `C` a constant list
   or an enum of lists the arrays' meet with that union's complement is now read empty.
 
+### Changed
+
+- **A meet no reading decides is declined at a cost bounded a complement.** 0.0.33 asked a meet's
+  clauses again once every reading of its emptiness declined, and 0.0.34 read a meet's complements
+  one at a time, each under every step the question had left, so an `is_empty` no reading decides
+  ran each of its askings to its whole budget: a model checker's abstraction of thirty-two integer
+  tools, built through `valgebra-jsonschema` 0.0.5, read in 0.51 s on 0.0.32's wheel for CPython
+  3.15 on Linux x86_64, 4.20 s on 0.0.33's and 29.76 s on 0.0.34's. A meet the set representation finds a value in is now inhabited before any
+  complement is read, a union holding a scalar atom is inhabited before its other members are
+  read, and a meet's complements share the asking's respelling allowance a complement. The
+  metamorphic gate's corpus moves no membership and loses no decision.
+
 <!-- changelog-roll
 
 Every feat/fix commit this section accounts for, oldest first; held to

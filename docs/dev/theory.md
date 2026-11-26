@@ -1429,12 +1429,15 @@ root question that ends undecided at a bound, with steps of its own left, is
 asked once more under a larger allowance, the fast-fail pattern of
 [BBC+26, §6] with the same procedure in both tiers: the first asking's answer
 stands wherever it decides, and an answer at the first allowance's edge is
-lost only where the second declines it too.
+lost only where the second declines it too. A meet's complements are read one
+at a time as the tentative tests of [BBC+26, §6.2, Alg. 3] are, before any
+complete reading, and the tests before the one that answers "must fail
+rapidly", so they share the asking's respelling allowance a complement.
 **[DEVIATION: the-decision-is-fuel]**
 
 SOURCE: §14.2 "running a work budget instead"; §13.1 "work budget rather than on finiteness of `N(A)`"
 
-IMPLEMENTED-BY: decision.rs::Budget, decision.rs::asked_again
+IMPLEMENTED-BY: decision.rs::Budget, decision.rs::asked_again, decision/emptiness.rs::Schema::below_the_set_it_complements
 
 HELD-BY: a_query_no_bound_stopped_answers_alike_with_more_steps, a_respelled_pair_stops_at_its_allowance, a_spent_query_reads_its_bounds_under_steps_of_its_own, a_question_declined_at_a_bound_is_asked_again_with_more, the_complements_of_a_meet_share_a_respelling_allowance_each
 

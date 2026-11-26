@@ -234,6 +234,14 @@ impl Schema {
     /// (`test_a_meet_holding_a_complement_is_read_as_its_relation`). The
     /// rules it asks never ask it again, so a query asks it a fixed number of
     /// times and spends at most that multiple of its budget.
+    ///
+    /// Each complement read is the rest merged with one negated set before any
+    /// complete reading, a tentative test in the sense of [BBC+26, §6.2, Alg. 3]
+    /// that answers the meet where it proves, and the tests before it "must fail
+    /// rapidly". Theirs drops the other negations and is cheap by construction;
+    /// this one keeps them in the rest, so the allowance is what keeps a
+    /// declining test rapid.
+    ///
     /// The relation's readings past the sets are not asked here:
     /// they reach this reading again through the respellings, each time under
     /// steps of its own and at no depth, and drawn questions overflowed the
