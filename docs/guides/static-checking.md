@@ -136,8 +136,8 @@ an annotation that is evaluated finds it; it is not a schema, and
 
 ## Spellings a checker refuses, and what to write instead
 
-Each pair builds one schema, and the second spelling is the one ty, mypy and
-pyright accept.
+Each pair admits one set of values, and the second spelling is the one ty, mypy
+and pyright accept.
 
 | Written | Why a checker refuses it | Write instead |
 | --- | --- | --- |
@@ -147,6 +147,8 @@ pyright accept.
 | `{"name": str}` where a type is expected | a dict literal is not a type expression | a `TypedDict` class |
 | `count: v` for a validator `v`, as a class field | a variable is not a type expression | `count: Annotated[T, v]`, for a `T` holding every member of `v`: a checker reads `T` |
 | `tuple[int, v]` for a validator `v` | a variable is not a type expression | `tuple[int, Annotated[object, v]]`: `Annotated[object, v]` is `v` |
+| `Annotated[v, P]` for a validator `v`, a combinator's result or a call | ty reads every subscript of `Annotated` as a type expression and reports a variable or a call as its base; the typing spec asks a type expression of the base only where `Annotated` is one, and mypy and pyright accept it as an argument | `Annotated[T, v, P]`, for a `T` holding every member of `v`: a meet asks `P` only of a value `v` admits, as the base would |
+| `Annotated[{"name": str}, P]`, a display as the base | a dict display is no type expression to ty or pyright, and ruff reads its keys as forward references: F821 for a key that is a name, F722 for one holding `?` or a space | `Annotated[dict, Validator({"name": str}), P]`, or a `TypedDict` as the base |
 
 ```python
 from typing import Annotated
@@ -160,6 +162,15 @@ assert Validator([v]).is_valid([1, 2])
 assert Validator({str: v}).is_valid({"a": 1})
 assert Validator(Annotated[int, v]) == v
 assert Validator(tuple[int, Annotated[object, v]]).is_valid((1, 2))
+
+
+def is_named(value: object) -> bool:
+    return isinstance(value, dict) and value.get("name") != ""
+
+
+named = Validator(Annotated[dict, Validator({"name": str}), is_named])
+assert named.is_valid({"name": "a"})
+assert not named.is_valid({"name": ""})
 ```
 
 ## The ruff settings a validated class needs

@@ -81,7 +81,10 @@ record as the catch-all entry it carries, the nullary product as `tuple[()]`, a
 union holding a record or a list display as the `union(...)` call, since `|`
 between two dicts is Python's merge, a record or a list display refined as the
 validator it builds, `Annotated[Validator({'a': int}), MinLen(1)]`, since Python
-3.11's `typing` refuses a display as `Annotated`'s base, and a key and a constant by Python's own
+3.11's `typing` refuses a display as `Annotated`'s base (Python reads it back; ty
+reports a call as that base, and [the static-checking
+guide](../guides/static-checking.md#spellings-a-checker-refuses-and-what-to-write-instead)
+gives the spelling it reads), and a key and a constant by Python's own
 `repr`, whole — so it can be pasted into a session that holds the names it
 prints and read back. A refinement marker prints by its bare name, `Ge(0)` rather than
 `at.Ge(0)`, so that session imports each marker by name, as

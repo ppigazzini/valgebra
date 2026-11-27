@@ -961,6 +961,42 @@ assert not rows.is_valid(Row(True))  # a bool is an int, and not a member
 assert Validator(Annotated[int, non_bool_int]) == intersection(int, non_bool_int)
 ```
 
+A validator can stand as the base itself, `Annotated[v, Predicate(rule)]`, and so
+can a combinator's result: the base is checked first, so `rule` reads only the
+values `v` admits. Python builds that subscript and valgebra reads it, but ty
+reads every subscript of `Annotated` as a type expression and reports a variable
+or a call as its base, where the typing spec asks a type expression of the base
+only where `Annotated` is one ([the static-checking
+guide](static-checking.md#spellings-a-checker-refuses-and-what-to-write-instead)).
+Written in the metadata beside a type holding its members, the validator guards
+the rule the same way, since a meet asks a member running a predicate only of a
+value its other members admit:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import ValidationError, Validator
+
+record = Validator({"a": int, "b": int, "total": int})
+
+
+def total_matches(run: dict) -> bool:
+    return run["a"] + run["b"] == run["total"]
+
+
+checked = Validator(Annotated[dict, record, at.Predicate(total_matches)])
+refused = False
+try:
+    checked.validate({"a": 1})
+except ValidationError as err:
+    refused = True
+    # The record's missing keys, and no rule run on a record that failed.
+    assert {error["code"] for error in err.errors} == {"missing_key"}
+assert refused
+```
+
 ## Unrecognized markers
 
 Per the typing spec, metadata valgebra does not recognize as a constraint is
