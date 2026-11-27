@@ -98,8 +98,12 @@ as `instance_of(Name)` where a dataclass's or a named tuple's class stands
 without them: `intersection(list[int], Plain)` prints as itself, and
 `instance_of(Pair)` met with `tuple[bool]` for a named tuple declaring an `int`
 prints as `intersection(tuple[bool], instance_of(Pair))`; a
-**predicate**, which is a function and appears as `Predicate(...)`, and which
-the frontend refuses where it is built; a **constant whose `repr` is not an
+**predicate**, which is a function and appears by its name as a class does, where its
+`__qualname__` is a dotted path of identifiers -- `Predicate(is_slug)`,
+`Predicate(Rules.check)`, `Predicate(str.isdigit)`, read back in a session holding the
+name -- and as `Predicate(...)` where no name reads back as it, a lambda, a function
+defined inside another or a callable instance, which the frontend refuses where it is
+built; a **constant whose `repr` is not an
 expression of it**, which is a syntax error where it is parsed -- an enum
 member's own `<Color.RED: 1>`, an `int` past the interpreter's digit limit
 printed as `<unrepresentable>`, and a value of a subclass of `int`, `float`,

@@ -16,7 +16,19 @@ answer of its own, or a repair to a change not yet released.
 - fix: a union's predicate branch names its callable
 - fix: a raised predicate reads as a failed one, with what it raised
 - fix: a meet asks a predicate only of a value its other members admit
+- feat: a predicate prints by a name that reads back as it
 -->
+
+### Added
+
+- **A predicate prints by a name that reads back as it.** `repr` printed every predicate as
+  `Predicate(...)`, and a build refusal summarizing a schema did the same, so a refused map key read
+  `Annotated[str, Predicate(...)]` and named no rule. A predicate whose `__qualname__` is a dotted
+  path of identifiers prints by it, as a class prints by its name: `Predicate(is_ip_address)`,
+  `Predicate(Rules.check)`, `Predicate(str.isdigit)`, which a session holding the name reads back
+  as the schema. A lambda, a function defined inside another, a callable instance and a callable
+  whose `__qualname__` was set to other text print as `Predicate(...)`, where annotated-types'
+  own repr prints a closure by a bare name no session reads back.
 
 ### Fixed
 

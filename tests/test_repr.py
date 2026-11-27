@@ -102,8 +102,9 @@ _ROUNDTRIP_NS = {
 
 # The round-trippable subset: every form whose repr re-parses to the same schema.
 # Two are excluded by design and no more: a class renders only its name and a
-# predicate renders as `Predicate(...)`, and neither is an expression that
-# rebuilds what it names -- a class is an object, and a predicate is a callable.
+# predicate renders by its name where one reads back as it and as `Predicate(...)`
+# where none does, and each is read back only in a session holding the name -- a
+# class is an object, and a predicate is a callable.
 # Everything else here is, the recursive form and the open record included.
 ROUNDTRIP_SCHEMAS = [
     int,
@@ -214,8 +215,9 @@ def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> 
 
     Each fails in its own place: a constant whose `repr` is not an expression,
     a required key whose name ends in `?`, which no dict display spells, and a
-    given-up render are syntax errors where they are parsed, and a predicate
-    parses to a call the frontend refuses where the schema is built.
+    given-up render are syntax errors where they are parsed, and a predicate no
+    name reads back as parses to a call the frontend refuses where the schema is
+    built.
     """
 
     class Level(enum.Enum):
@@ -241,6 +243,25 @@ def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> 
     parsed = eval(repr(predicate), namespace)  # noqa: S307
     with pytest.raises(NotImplementedError):
         Validator(parsed)
+
+
+def _is_positive(value: int) -> bool:
+    return value > 0
+
+
+def test_a_named_predicate_renders_by_its_name_and_reads_back() -> None:
+    """A predicate prints by a `__qualname__` that reads back as it.
+
+    As a class prints by its name: in a session holding the name, the render is
+    the schema.
+    """
+    named = Validator(Annotated[int, at.Predicate(_is_positive)])
+    assert repr(named) == "Annotated[int, Predicate(_is_positive)]"
+    namespace = dict(_ROUNDTRIP_NS) | {
+        "Predicate": at.Predicate,
+        "_is_positive": _is_positive,
+    }
+    assert Validator(eval(repr(named), namespace)) == named  # noqa: S307
 
 
 def test_a_constant_prints_whole_and_reads_back() -> None:

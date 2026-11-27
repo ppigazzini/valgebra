@@ -577,9 +577,49 @@ fn render_constraint(
         Constraint::MinLen(n) => format!("MinLen({n})"),
         Constraint::MaxLen(n) => format!("MaxLen({n})"),
         Constraint::MultipleOf(i) => format!("MultipleOf({})", operand_repr(py, pool, i.get())?),
-        Constraint::Predicate(_) => "Predicate(...)".to_owned(),
+        Constraint::Predicate(i) => match predicate_name(py, pool, i.get())? {
+            Some(name) => format!("Predicate({name})"),
+            None => "Predicate(...)".to_owned(),
+        },
         Constraint::Regex(pattern) => format!("Regex({})", python_repr(py, pattern)?),
     })
+}
+
+/// The name a predicate prints by where that name reads back as the callable: its
+/// `__qualname__`, where every dotted part is an identifier, as a class prints by
+/// its name. A session holding the name rebuilds the predicate from it. A lambda,
+/// a function defined inside another (`<locals>`), a `functools.partial`, an
+/// instance with `__call__` and a callable whose `__qualname__` was set to other
+/// text have no such name and print as `Predicate(...)`, and so does one whose name
+/// raises an ordinary error when read; a fatal signal propagates.
+fn predicate_name(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<Option<String>> {
+    let Some(predicate) = pool.get(index) else {
+        return Ok(None);
+    };
+    unless_fatal(read_predicate_name(predicate.bind(py)), py, None)
+}
+
+/// [`predicate_name`] read off the callable, every error the read raises returned.
+fn read_predicate_name(predicate: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    let py = predicate.py();
+    let Some(name) = predicate.getattr_opt(intern!(py, "__qualname__"))? else {
+        return Ok(None);
+    };
+    let Ok(name) = name.cast::<PyString>() else {
+        return Ok(None);
+    };
+    for part in name
+        .call_method1(intern!(py, "split"), (".",))?
+        .try_iter()?
+    {
+        if !part?
+            .call_method0(intern!(py, "isidentifier"))?
+            .is_truthy()?
+        {
+            return Ok(None);
+        }
+    }
+    Ok(Some(stored(name)))
 }
 
 /// A string spelled the way Python spells it.

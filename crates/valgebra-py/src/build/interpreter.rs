@@ -582,7 +582,7 @@ fn a_constraint_is_read_off_its_vocabulary_alone() {
             // is read off a compiled one.
             (
                 "typing.Annotated[int, at.Predicate(bool)]",
-                "Annotated[int, Predicate(...)]",
+                "Annotated[int, Predicate(bool)]",
             ),
             (
                 "typing.Annotated[str, re.compile('a')]",
@@ -679,7 +679,7 @@ fn a_typing_form_in_metadata_is_not_a_predicate() {
             // Every other callable is still a predicate.
             (
                 "typing.Annotated[int, abs]",
-                "Annotated[int, Predicate(...)]",
+                "Annotated[int, Predicate(abs)]",
             ),
             (
                 "typing.Annotated[int, Call()]",
@@ -2980,6 +2980,66 @@ fn each_protocol_member_is_classified_as_typing_lists_it() {
                     "{name}.{member} is classified against typing's callable split"
                 );
             }
+        }
+    });
+}
+
+/// A predicate renders by its `__qualname__` where every dotted part is an
+/// identifier, a name a session holding it reads back as the callable, and as
+/// `Predicate(...)` where no name does: a lambda, a function defined inside
+/// another, a name set to other text.
+#[test]
+fn a_predicate_renders_by_a_name_that_reads_back() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        py.run(
+            c"def is_slug(value):\n\x20   return True\n\
+              class Rules:\n\x20   @staticmethod\n\x20   def check(value):\n\x20       return True\n\
+              def factory():\n\x20   def inner(value):\n\x20       return True\n\x20   return inner\n\
+              renamed = lambda value: True\n\
+              renamed.__qualname__ = 'div(3, 1)'\n",
+            Some(&namespace),
+            None,
+        )
+        .expect("the callables define");
+        for (expression, wanted) in [
+            (
+                "typing.Annotated[str, at.Predicate(is_slug)]",
+                "Annotated[str, Predicate(is_slug)]",
+            ),
+            (
+                "typing.Annotated[str, at.Predicate(Rules.check)]",
+                "Annotated[str, Predicate(Rules.check)]",
+            ),
+            (
+                "typing.Annotated[str, at.Predicate(factory())]",
+                "Annotated[str, Predicate(...)]",
+            ),
+            (
+                "typing.Annotated[str, at.Predicate(renamed)]",
+                "Annotated[str, Predicate(...)]",
+            ),
+            (
+                "typing.Annotated[str, at.Predicate(lambda value: True)]",
+                "Annotated[str, Predicate(...)]",
+            ),
+        ] {
+            let annotation = py
+                .eval(
+                    &CString::new(expression).expect("an expression with no interior nul"),
+                    Some(&namespace),
+                    None,
+                )
+                .unwrap_or_else(|error| panic!("{expression} did not evaluate: {error}"));
+            let mut pool = Pool::default();
+            let mut defs = Vec::new();
+            let schema = build_schema(&annotation, &mut pool, &mut defs)
+                .unwrap_or_else(|error| panic!("{expression} did not build: {error}"));
+            assert_eq!(
+                render(py, &schema, pool.items(), &defs).expect("it renders"),
+                wanted,
+                "{expression}"
+            );
         }
     });
 }
