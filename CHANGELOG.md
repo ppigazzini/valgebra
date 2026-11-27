@@ -13,11 +13,26 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a union's predicate branch names its callable
-- fix: a raised predicate reads as a failed one, with what it raised
-- fix: a meet asks a predicate only of a value its other members admit
-- feat: a predicate prints by a name that reads back as it
 -->
+
+## [0.0.37] - 2026-11-27
+
+A release of one feature and three fixes, with no node, each on how a predicate is named and
+asked. A predicate whose `__qualname__` is a dotted path of identifiers prints by it,
+`Predicate(is_ip_address)`, which a session holding the name reads back as the schema; a union's
+predicate branch names its callable, `str and a passing is_legacy_username`; a raised predicate
+reads `a passing is_email (raised ValueError: ...)`, the failed expectation with what it raised;
+and a meet asks a member running a predicate only of a value its other members admit, so
+`Annotated[dict, record, Predicate(rule)]` reports the record's `missing_key` and never runs `rule`
+on the record that failed. Membership and every decision are as they were: the metamorphic gate's
+corpus, which holds a predicate refining a validator now, read against 0.0.36's recording, moves no
+membership and loses no decision, and its optimized wheel takes no decision slower than 0.0.36's
+published one. Read against 0.0.36 by the instruction gate on CPython 3.15.2, the seven binding
+workloads the window's code reaches count within 0.27% of it, every checksum unchanged. The record
+explain reads 0.13% more and the record explain with every field accepted 0.27%, each a count that
+moves with the addresses its compared keys sit at and not with its code: the record explain calls
+`memcmp` from `PyDict_GetItemRef` as often in both trees, and built with symbols the second reads
+level with 0.0.36 at four base addresses.
 
 ### Added
 
@@ -52,6 +67,19 @@ answer of its own, or a repair to a change not yet released.
   after the schemas written before it; `intersection(record, Annotated[object, Predicate(rule)])`
   reads the same. Membership and every decision are as they were, and the metamorphic corpus,
   which holds such meets now, reads them alike.
+
+<!-- changelog-roll
+
+Every feat/fix commit this section accounts for, oldest first; held to
+`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
+a caller cannot see: a step of the set representation that changed no
+answer of its own, or a repair to a change not yet released.
+
+- fix: a union's predicate branch names its callable
+- fix: a raised predicate reads as a failed one, with what it raised
+- fix: a meet asks a predicate only of a value its other members admit
+- feat: a predicate prints by a name that reads back as it
+-->
 
 ## [0.0.36] - 2026-11-26
 
@@ -5618,7 +5646,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.36...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.37...HEAD
+[0.0.37]: https://github.com/ppigazzini/valgebra/compare/v0.0.36...v0.0.37
 [0.0.36]: https://github.com/ppigazzini/valgebra/compare/v0.0.35...v0.0.36
 [0.0.35]: https://github.com/ppigazzini/valgebra/compare/v0.0.34...v0.0.35
 [0.0.34]: https://github.com/ppigazzini/valgebra/compare/v0.0.33...v0.0.34
