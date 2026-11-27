@@ -264,8 +264,8 @@ free-threaded legs and the PyPy legs to what the release ships.
 [The tooling and CI page](docs/dev/tooling-ci.md) says why each
 interpreter is a lane of its own.
 
-Scheduled lanes, on `github_ci` by a dispatch from the scheduled run on
-`main`, run the deep property suites, a libFuzzer soak over the core, and three
+Scheduled lanes, on `main`'s tip in the scheduled run, run the deep property
+suites, a libFuzzer soak over the core, and three
 mutation sweeps — the core crate, the membership walk under an
 embedded interpreter, and the files the shipped extension is the only caller of,
 swept with the Python suite as the test command — whose survivors are ratcheted

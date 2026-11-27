@@ -237,18 +237,13 @@ def _widen_the_inventory(tree: Path) -> None:
 
 
 def _read_no_result_of_one_job(tree: Path) -> None:
-    """Take every reading of one job's result out of the gate's condition.
-
-    Both: a push job is read on a night handed to the development branch as
-    well as on every other run, and a gate reading it once reads it still.
-    """
-    for reading in ("success", "skipped"):
-        _edit(
-            tree,
-            ".github/workflows/ci.yml",
-            f"          needs.rust-msrv.result != '{reading}' ||\n",
-            "",
-        )
+    """Take the reading of one job's result out of the gate's condition."""
+    _edit(
+        tree,
+        ".github/workflows/ci.yml",
+        "          needs.rust-msrv.result != 'success' ||\n",
+        "",
+    )
 
 
 def _empty_the_smoke_matrix(tree: Path) -> None:
@@ -1085,52 +1080,20 @@ PLANTS = (
         trips=("test_the_leg_that_takes_the_history_says_so_in_its_name",),
     ),
     Plant(
-        # A push job that runs on every night: on one handed to the development
-        # branch it reads `main`'s tip, which the hand-off exists to stop.
+        # A push job that skips the night: the scheduled run reads `main`'s tip
+        # without it, and nothing else reads it that night.
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "    name: rust lint\n    needs: nightly-dispatch\n    if: >-\n"
-            "      !cancelled() && (github.event_name != 'schedule' ||\n"
-            "      needs['nightly-dispatch'].outputs.dispatched == 'false')\n",
-            "    name: rust lint\n    needs: nightly-dispatch\n"
-            "    if: ${{ !cancelled() }}\n",
+            "    name: rust lint\n",
+            "    name: rust lint\n    if: github.event_name != 'schedule'\n",
         ),
         trips=(
             "test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",
-            "test_a_night_handed_to_the_development_branch_runs_no_push_job_here",
+            "test_a_night_runs_every_push_job_and_every_nightly_lane",
         ),
-    ),
-    Plant(
-        # The gate's handed-on reading short of one push job: that job running
-        # on `main` on a handed-on night, red or green, passes.
-        "tests/test_required_jobs.py",
-        (".github/workflows/ci.yml",),
-        lambda tree: _edit(
-            tree,
-            ".github/workflows/ci.yml",
-            "          needs.rust-lint.result != 'skipped' ||\n",
-            "",
-        ),
-        trips=(
-            "test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",
-            "test_a_night_handed_to_the_development_branch_runs_no_push_job_here",
-        ),
-    ),
-    Plant(
-        # The push jobs held to `success` on every run: a handed-on night,
-        # whose push jobs skip by design, reads red.
-        "tests/test_required_jobs.py",
-        (".github/workflows/ci.yml",),
-        lambda tree: _edit(
-            tree,
-            ".github/workflows/ci.yml",
-            "          (needs['nightly-dispatch'].outputs.dispatched != 'true' && (\n",
-            "          ((\n",
-        ),
-        trips=("test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",),
     ),
     Plant(
         # The core sweep starts whatever the plan answered: on a push the plan
@@ -1140,23 +1103,10 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "      !cancelled() && needs['mutants-plan'].outputs.core == 'yes' &&\n",
-            "      !cancelled() &&\n",
+            "      !cancelled() && needs['mutants-plan'].outputs.core == 'yes'\n",
+            "      !cancelled()\n",
         ),
         trips=("test_a_diff_scoped_sweep_runs_exactly_where_the_plan_names_a_file",),
-    ),
-    Plant(
-        # A dispatcher that answers nothing where it dispatched nothing: the
-        # one night the push jobs must run on `main`, they do not.
-        "tests/test_required_jobs.py",
-        (".github/workflows/ci.yml",),
-        lambda tree: _edit(
-            tree,
-            ".github/workflows/ci.yml",
-            '            echo "dispatched=false" >> "$GITHUB_OUTPUT"\n',
-            "            true\n",
-        ),
-        trips=("test_the_dispatcher_says_whether_it_handed_the_night_on",),
     ),
     Plant(
         # The repository audit on every leg: the condition that keeps it to the
@@ -3248,10 +3198,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
-            "(inputs.nightly ||\n      "
-            "(github.event_name == 'schedule' &&\n      "
-            "needs['nightly-dispatch'].outputs.dispatched == 'false'))\n"
+            "    if: inputs.nightly || github.event_name == 'schedule'\n"
             "    runs-on: ubuntu-26.04\n    # Six shards",
             "    runs-on: ubuntu-26.04\n    # Six shards",
         ),
@@ -3560,9 +3507,9 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "          needs.rust-lint.result != 'success' ||\n",
-            "          (needs.rust-lint.result != 'success' &&"
-            " needs.rust-lint.result != 'skipped') ||\n",
+            "          needs.rust-test.result != 'success' ||\n",
+            "          (needs.rust-test.result != 'success' &&"
+            " needs.rust-test.result != 'skipped') ||\n",
         ),
         trips=("test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may",),
     ),
@@ -3812,22 +3759,32 @@ PLANTS = (
         trips=("test_the_local_sweep_draws_the_push_lanes_seed",),
     ),
     Plant(
-        # A nightly lane that runs on `main` whatever its tip, so a night whose
-        # two tips agree reads one tree twice.
+        # A nightly lane that no night runs: the schedule's run reads `main`
+        # without it, and only a dispatch by hand would.
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
             "it is an early-warning lane.\n"
-            "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
-            "(inputs.nightly ||\n      "
-            "(github.event_name == 'schedule' &&\n      "
-            "needs['nightly-dispatch'].outputs.dispatched == 'false'))\n",
-            "it is an early-warning lane.\n"
-            "    if: github.event_name == 'schedule' || inputs.nightly\n",
+            "    if: inputs.nightly || github.event_name == 'schedule'\n",
+            "it is an early-warning lane.\n    if: inputs.nightly\n",
         ),
-        trips=("test_the_nightly_runs_on_the_branch_development_is_on",),
+        trips=("test_a_night_runs_every_push_job_and_every_nightly_lane",),
+    ),
+    Plant(
+        # A nightly lane that runs on every push: tens of runner-hours on each.
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "it is an early-warning lane.\n"
+            "    if: inputs.nightly || github.event_name == 'schedule'\n",
+            "it is an early-warning lane.\n    if: >-\n      inputs.nightly || "
+            "github.event_name == 'schedule' ||\n      github.event_name == 'push'\n",
+        ),
+        trips=("test_a_nightly_lane_runs_on_no_push",),
     ),
     Plant(
         # A nightly lane that runs on every dispatch, so a dispatch for one
@@ -3838,11 +3795,10 @@ PLANTS = (
             tree,
             ".github/workflows/ci.yml",
             "it is an early-warning lane.\n"
-            "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
-            "(inputs.nightly ||\n",
-            "it is an early-warning lane.\n"
-            "    needs: nightly-dispatch\n    if: >-\n      !cancelled() && "
-            "(github.event_name == 'workflow_dispatch' ||\n",
+            "    if: inputs.nightly || github.event_name == 'schedule'\n",
+            "it is an early-warning lane.\n    if: >-\n      "
+            "github.event_name == 'workflow_dispatch' ||\n      "
+            "github.event_name == 'schedule'\n",
         ),
         trips=("test_a_dispatch_for_a_reading_runs_no_night",),
     ),

@@ -1099,41 +1099,23 @@ UTF-8 mode and does not see it. The warning makes the open fail where it is
 written, on Linux. A pipe to a child process names `encoding="locale"`, the
 encoding both of its ends use, and a file names `encoding="utf-8"`.
 
-**The nightly runs where development is.** A schedule fires on the default
-branch alone, and a nightly that read `main` alone would read a release
-window's commits after they shipped. So the scheduled run's first job,
-`nightly-dispatch`, dispatches the workflow on `github_ci` with its `nightly`
-input set, and a dispatch runs that branch's own copy of `ci.yml`: a scheduled
-job checking `github_ci` out would run `main`'s copy against the other tree,
-and a change to the workflow on `github_ci` would read as a false red or a
-skip. The nightly lanes run on
-`main` only where nothing was dispatched, a repository without the branch: two
-full nightlies side by side compete for the runners and double the night, and
-`main`'s tip is a tree the next fast-forward replaces with the one the
-dispatched run read. Each lane reads the dispatcher's `dispatched` output, or
-the result of the sweep it ratchets. A dispatch changes nothing, so its push
-sweeps list no file: measured from `main`'s tip they would sweep the whole
-release window at the push seed, which the push that moves `main` sweeps once
-and the night's full sweeps read whole.
-`tests/test_required_jobs.py` holds the dispatch to the push trigger's other
-branch and every scheduled lane to that reading.
+**The night is `main`'s.** A schedule fires on the default branch, where
+development lands, and the scheduled run is the night: every push job and every
+nightly lane read `main`'s tip, one run a night, since two full nightlies side
+by side compete for the runners and double the night. Nothing dispatches
+another run. A night lists no file for the diff-scoped sweeps, as a dispatch
+does not: neither carries a `before`, and the night's full sweeps read every
+file whole. `tests/test_required_jobs.py` evaluates every job's condition on a
+night, and holds that no job dispatches a run and that no nightly lane runs on
+a push.
 
 **A dispatch for a reading runs no night.** The nightly lanes read the
 `nightly` input. A dispatch started by hand for a reading -- `record_compare`,
 `pgo_compare` -- clears it and runs the push jobs and the job it asked for, not
 tens of runner-hours of sweeps, fuzzers and deep laws. The input is on unless
-cleared, because the schedule runs `main`'s copy of `ci.yml`, which may predate
-the input on the branch it dispatches, and a dispatch that sets no input is the
-night. The night is a concurrency group of its own, so a dispatch for a reading
+cleared, so a dispatch that sets no input runs what the schedule runs. The night is a concurrency group of its own, so a dispatch for a reading
 on the same branch neither cancels it nor is canceled by it.
 `tests/test_required_jobs.py` runs both dispatches.
-
-**The push jobs run on `main`'s night only where nothing was dispatched.** The
-dispatched run reads every push job on the development tree, and on `main`'s
-tip they read a tree the next fast-forward replaces, and redden on what the
-branch has already repaired. So each push job reads the dispatcher's `dispatched` output
-and runs on a schedule only where it is `false`, a repository without the
-branch, where the scheduled run is the only one.
 
 **A skipped job cannot pass.** The `ci` aggregator lists every required job in
 `needs:` *and* fails unless each result is `success` rather than merely
@@ -1163,13 +1145,9 @@ silence -- so a ratchet behind a timeout runs nowhere while every lane reads
 green. The aggregate therefore waits on the scheduled
 jobs too, allowing one answer more from them than from the others — `skipped`,
 which is what a push gives a job it does not run — and refusing everything
-else. On a night handed to the development branch the push jobs answer
-`skipped` and nothing else, since one that ran read `main`'s tip.
-`tests/test_required_jobs.py` evaluates the gate's condition on every run its
-`RUNS` table names -- a push, a dispatch for a reading, a nightly dispatch, a
-night handed on with `main` behind the branch and with `main` on it, and a night
-with no branch -- each job's result planted in turn,
-and runs the dispatcher's step with `git` and `gh` stood in.
+else. `tests/test_required_jobs.py` evaluates the gate's condition on every run
+its `RUNS` table names -- a push, a dispatch for a reading, a nightly dispatch
+and a night -- each job's result planted in turn.
 
 **Every supported interpreter runs on every event.** The release ships a wheel
 built per version against a version-specific ABI, so each interpreter is a

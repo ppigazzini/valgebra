@@ -414,8 +414,8 @@ def test_both_push_sweeps_examine_what_it_names() -> None:
     `cargo mutants` it runs -- the sweep, and the listing its shards are named
     against -- the patterns the script wrote, so a sweep examines the touched
     functions and its ratchet places their mutants among the same ones. And
-    neither sweeps a dispatch: it changes nothing, and measured from the
-    default branch's tip it would sweep the whole release window again.
+    neither sweeps a dispatch or a night: neither changes anything or carries a
+    `before`, and the night's full sweeps read every file whole.
     """
     swept = {"mutants-diff-core": "valgebra-core", "mutants-diff-walk": "valgebra-py"}
     jobs = read_workflow()["jobs"]
@@ -429,7 +429,7 @@ def test_both_push_sweeps_examine_what_it_names() -> None:
         ) in listing, listing
         assert "git diff --name-only" not in listing, listing
         assert (
-            'if [ "$EVENT" = workflow_dispatch ]; then\n'
+            'if [ "$EVENT" = workflow_dispatch ] || [ "$EVENT" = schedule ]; then\n'
             "  : > changed.txt\n  : > examined.txt"
         ) in listing, listing
         (sweep,) = [run for run in steps if "--output" in run]

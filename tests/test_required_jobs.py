@@ -86,30 +86,14 @@ def test_every_job_is_required_by_the_gate() -> None:
     )
 
 
-#: The runs a workflow sees, as the event, what the dispatcher answered and the
-#: inputs a dispatch carries, its defaults filled in as the runner fills them: a
-#: push; a dispatch for a reading, and the night the dispatcher hands on; a
-#: night handed to the development branch, with `main`'s tip beside it and on
-#: it; and a night with no branch to hand it to.
+#: The runs a workflow sees, as the event and the inputs a dispatch carries, its
+#: defaults filled in as the runner fills them: a push; a dispatch for a
+#: reading, and a nightly one; and the night the schedule starts on `main`.
 RUNS = {
-    "a push": ("push", {}, {}),
-    "a dispatch": ("workflow_dispatch", {}, {"nightly": False}),
-    "a nightly dispatch": ("workflow_dispatch", {}, {"nightly": True}),
-    "a night handed on, main behind": (
-        "schedule",
-        {"dispatched": "true"},
-        {},
-    ),
-    "a night handed on, main on the branch": (
-        "schedule",
-        {"dispatched": "true"},
-        {},
-    ),
-    "a night with no branch": (
-        "schedule",
-        {"dispatched": "false"},
-        {},
-    ),
+    "a push": ("push", {}),
+    "a dispatch": ("workflow_dispatch", {"nightly": False}),
+    "a nightly dispatch": ("workflow_dispatch", {"nightly": True}),
+    "a night": ("schedule", {}),
 }
 
 
@@ -134,7 +118,7 @@ def _results(
     plan: dict[str, str] = ANSWERS["a change the sweeps examine"],
     **planted: str,
 ) -> dict[str, dict]:
-    """Give each job's result on a run, the dispatcher's outputs and the plan's.
+    """Give each job's result on a run, and the plan's outputs.
 
     Each job runs where its condition holds, reading the results of the jobs it
     needs, and a job that runs succeeds unless `planted` names another result
@@ -143,7 +127,7 @@ def _results(
     answers `plan`.
     """
     jobs = _jobs()
-    event, answered, inputs = RUNS[run]
+    event, inputs = RUNS[run]
     done: dict[str, dict] = {}
     pending = [name for name in jobs if name != GATE]
     while pending:
@@ -158,7 +142,7 @@ def _results(
         if not re.search(r"\b(always|cancelled|success|failure)\(", condition):
             runs = runs and all(need["result"] == "success" for need in needs.values())
         result = planted.get(name, "success") if runs else "skipped"
-        outputs = {DISPATCH: answered, PLAN: plan}.get(name, {}) if runs else {}
+        outputs = plan if runs and name == PLAN else {}
         done[name] = {"result": result, "outputs": outputs}
     return done
 
@@ -180,8 +164,8 @@ def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
     """The gate passes every run whose jobs did what they should, and no other.
 
     A run skips the jobs it does not run -- a push the scheduled ones and the
-    ones a dispatch input asks for, a night handed to the development branch
-    the push jobs -- so the gate has to accept that answer from them, and from
+    ones a dispatch input asks for -- so the gate has to accept that answer
+    from them, and from
     nothing else, since `skipped` from a job the run does run is a job that did
     not run. What every run refuses is a failure and a **cancellation**: a job
     that reaches its timeout is reported canceled rather than failed, and one
@@ -193,8 +177,9 @@ def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
     demands one in another.
 
     A nightly lane is accepted `skipped` on every run, the ones that run it
-    among them: which nights run it is its own condition's to say, and
-    `test_the_nightly_runs_on_the_branch_development_is_on` holds those.
+    among them: which runs start it is its own condition's to say, and
+    `test_a_night_runs_every_push_job_and_every_nightly_lane` and
+    `test_a_nightly_lane_runs_on_no_push` hold those.
 
     And each run is read under both of the plan's answers: a diff-scoped sweep
     is accepted `skipped` where the plan found nothing for it, and refused it
@@ -208,7 +193,7 @@ def test_a_job_a_push_does_not_run_may_be_skipped_and_no_other_may() -> None:
             for name, read in _results("a push", plan).items()
             if read["result"] == "success"
         }
-        for run, (event, _, _) in RUNS.items():
+        for run, (event, _) in RUNS.items():
             healthy = _results(run, plan)
             if _gate_fails(healthy, event):
                 wrong.append(
@@ -238,31 +223,52 @@ def test_a_diff_scoped_sweep_runs_exactly_where_the_plan_names_a_file() -> None:
             assert read[sweep]["result"] == expected, (answer, sweep, read[sweep])
 
 
-def test_a_night_handed_to_the_development_branch_runs_no_push_job_here() -> None:
-    """A push job runs on a night only where no run was handed to the branch.
+def test_a_night_runs_every_push_job_and_every_nightly_lane() -> None:
+    """The scheduled run is the night: every push job and every lane, one run.
 
-    The dispatched run reads every push job on the development branch, so the
-    scheduled run reading them again reads `main`'s tip: the tree the branch
-    replaces at its next fast-forward, red on what the branch has repaired. On
-    a night with no branch to hand it to, the scheduled run is the only one,
-    and it reads them. And a push job that did run on a handed-on night is a
-    red gate, since its reading is the one the hand-off exists to stop.
+    A schedule fires on the default branch, where development lands, so the
+    night reads `main`'s tip: every job a push runs and every nightly lane, in
+    the one run, and a dispatch with the `nightly` input runs the same night.
+    Nothing in the workflow dispatches another run: two full nightlies side by
+    side compete for the runners and double the night, and a night handed to a
+    branch nobody pushes to reads a tree `main` left behind.
     """
+    jobs = _jobs()
     push = sorted(
         name for name, read in _results("a push").items() if read["result"] == "success"
     )
     assert len(push) >= 20, f"only {push} run on a push"
-    wrong = []
-    for run, (event, answered, _) in RUNS.items():
-        results = _results(run)
-        handed_on = answered.get("dispatched") == "true"
-        for name in push:
-            ran = results[name]["result"] == "success"
-            if ran == handed_on:
-                wrong.append(f"{run}: {name} {'runs' if ran else 'does not run'}")
-            planted = {**results, name: {**results[name], "result": "success"}}
-            if handed_on and not _gate_fails(planted, event):
-                wrong.append(f"{run}: {name} ran on main, and the gate passes")
+    nightly = sorted(set(jobs) - {*push, GATE} - _asked_for(jobs))
+    assert len(nightly) >= 8, f"only {nightly} read as nightly lanes"
+    wrong = [
+        f"{run}: {name} reads {results[name]['result']}"
+        for run in ("a night", "a nightly dispatch")
+        for results in (_results(run),)
+        for name in (*push, *nightly)
+        if results[name]["result"] != "success"
+    ]
+    wrong += [
+        f"{name} dispatches another run"
+        for name, job in jobs.items()
+        for step in job.get("steps", [])
+        if "gh workflow run" in str(step.get("run", ""))
+    ]
+    assert not wrong, "\n".join(wrong)
+
+
+def test_a_nightly_lane_runs_on_no_push() -> None:
+    """A job whose condition names the schedule or an input skips on a push.
+
+    A nightly lane is tens of runner-hours of sweeps, fuzzers and deep laws,
+    and a job a dispatch input asks for is one reading: a push runs neither.
+    """
+    pushed = _results("a push")
+    wrong = [
+        f"{name} reads {pushed[name]['result']} on a push"
+        for name, job in _jobs().items()
+        if NOT_ON_A_PUSH.search(str(job.get("if", "")))
+        and pushed[name]["result"] != "skipped"
+    ]
     assert not wrong, "\n".join(wrong)
 
 
@@ -274,8 +280,8 @@ def test_the_gate_and_a_condition_are_read_as_the_runner_reads_them() -> None:
         "needs": {"rust-lint": {"result": "skipped", "outputs": {}}},
     }
     assert evaluate("needs.rust-lint.result != 'success'", context)
-    assert evaluate("needs['rust-lint'].outputs.dispatched != 'true'", context)
-    assert not evaluate("needs['rust-lint'].outputs.dispatched == 'false'", context)
+    assert evaluate("needs['rust-lint'].outputs.core != 'yes'", context)
+    assert not evaluate("needs['rust-lint'].outputs.core == 'no'", context)
     assert evaluate("!cancelled() && github.event_name != 'schedule'", context)
     assert not evaluate("${{ github.event_name == 'schedule' }}", context)
     with pytest.raises(AssertionError, match="cannot read"):
@@ -632,83 +638,6 @@ def test_the_local_sweep_draws_the_push_lanes_seed() -> None:
         )
 
 
-#: The job the scheduled run dispatches the nightly from.
-DISPATCH = "nightly-dispatch"
-
-#: The output that runs `main`'s own nightly, as a lane's condition reads it:
-#: only where nothing was dispatched, so one nightly runs a night.
-UNDISPATCHED = f"needs['{DISPATCH}'].outputs.dispatched == 'false'"
-
-#: The branch a schedule fires on.
-DEFAULT_BRANCH = "main"
-
-
-def test_the_nightly_runs_on_the_branch_development_is_on() -> None:
-    """The scheduled run dispatches the nightly on the development branch.
-
-    A schedule fires on the default branch alone, and development is on the
-    other branch the push trigger names, which `main` follows at a release cut:
-    a nightly that read `main` alone would read a release window's commits
-    after they shipped. So the scheduled job dispatches the workflow on that
-    branch, which runs the branch's own copy of the workflow, and every other
-    scheduled lane runs on `main` only where nothing was dispatched: two full
-    nightlies side by side compete for the runners and double the night.
-    A lane reads that from the dispatcher, or, a ratchet, from the sweep it
-    ratchets, which reads it in turn.
-    """
-    workflow = read_workflow()
-    jobs = workflow["jobs"]
-    dispatcher = jobs[DISPATCH]
-    assert " ".join(str(dispatcher["if"]).split()) == (
-        "github.event_name == 'schedule'"
-    ), "the dispatcher runs on a schedule and on nothing else"
-    assert dispatcher["permissions"].get("actions") == "write", (
-        "dispatching a run needs `actions: write`, at the dispatcher's level"
-    )
-    dispatching = [
-        step
-        for step in dispatcher["steps"]
-        if "gh workflow run ci.yml" in str(step.get("run", ""))
-    ]
-    assert len(dispatching) == 1, "the dispatcher dispatches the workflow once"
-    (step,) = dispatching
-    assert '--ref "$BRANCH"' in step["run"], step["run"]
-    assert "-f nightly=true" in step["run"], "the dispatcher asks for the night"
-    # PyYAML reads the bare key `on` as the boolean it spells in YAML 1.1.
-    triggers = workflow.get("on", workflow.get(True))
-    pushed = triggers["push"]["branches"]
-    branch = step["env"]["BRANCH"]
-    assert branch in pushed, f"{branch} is not a branch a push runs on: {pushed}"
-    assert branch != DEFAULT_BRANCH, "the dispatch names the branch the schedule runs"
-
-    scheduled = {
-        name
-        for name, job in jobs.items()
-        if "github.event_name == 'schedule'" in str(job.get("if", ""))
-    } - {DISPATCH}
-    assert len(scheduled) >= 8, f"only {sorted(scheduled)} read as scheduled"
-    unread = []
-    for name in sorted(scheduled):
-        job = jobs[name]
-        condition = " ".join(str(job["if"]).split())
-        needs = job.get("needs", [])
-        needed = [needs] if isinstance(needs, str) else list(needs)
-        if DISPATCH in needed:
-            if UNDISPATCHED not in condition:
-                unread.append(f"{name} needs the dispatcher and reads no output of it")
-            continue
-        sweeps = [need for need in needed if DISPATCH in str(jobs[need].get("needs"))]
-        if not sweeps or any(
-            f"needs['{sweep}'].result != 'skipped'" not in condition for sweep in sweeps
-        ):
-            unread.append(f"{name} reads neither the dispatcher nor a sweep that does")
-    assert not unread, (
-        "scheduled jobs that run on `main` beside the dispatched night: "
-        + "; ".join(unread)
-        + ". The dispatched run reads every lane on the development tree."
-    )
-
-
 def _asked_for(jobs: dict) -> set[str]:
     """Read which jobs run because a dispatch input other than the night asks."""
     return {
@@ -724,9 +653,8 @@ def test_a_dispatch_for_a_reading_runs_no_night() -> None:
     A dispatch started by hand for a reading wants one job, and a night is the
     full mutation sweeps, the fuzzers and the deep laws: tens of runner-hours.
     So a nightly lane reads the `nightly` input, and the push jobs run on either
-    dispatch, since the dispatched night reads them too. The input is on unless
-    cleared: the schedule runs `main`'s copy of the workflow, which may set no
-    input on the branch it dispatches, and that dispatch is still the night.
+    dispatch, since a night reads them too. The input is on unless cleared, so
+    a dispatch that sets none runs what the schedule runs.
     """
     workflow = read_workflow()
     # PyYAML reads the bare key `on` as the boolean it spells in YAML 1.1.
@@ -741,9 +669,7 @@ def test_a_dispatch_for_a_reading_runs_no_night() -> None:
     }
     reading, night = _results("a dispatch"), _results("a nightly dispatch")
     nightly = sorted(
-        name
-        for name in jobs
-        if name not in pushed | {GATE, DISPATCH} | _asked_for(jobs)
+        name for name in jobs if name not in pushed | {GATE} | _asked_for(jobs)
     )
     assert len(nightly) >= 8, f"only {nightly} read as nightly lanes"
     wrong = [
@@ -752,7 +678,7 @@ def test_a_dispatch_for_a_reading_runs_no_night() -> None:
         if reading[name]["result"] != "skipped"
     ]
     wrong += [
-        f"{name} reads {night[name]['result']} on the dispatched night"
+        f"{name} reads {night[name]['result']} on a nightly dispatch"
         for name in [*nightly, *sorted(pushed)]
         if night[name]["result"] != "success"
     ]
@@ -762,71 +688,6 @@ def test_a_dispatch_for_a_reading_runs_no_night() -> None:
         if reading[name]["result"] != "success"
     ]
     assert not wrong, "\n".join(wrong)
-
-
-def _dispatch(tmp_path: Path, listed: str, dispatching: int) -> tuple[int, str]:
-    """Run the dispatcher's step with `git` and `gh` stood in; give its outputs.
-
-    `listed` is what the stand-in `git ls-remote` answers: `main` (the branch
-    at `main`'s commit), `ahead` (at another), or `absent` (exit 2, a
-    repository without the branch). `dispatching` is the stand-in `gh`'s exit.
-    """
-    (step,) = [
-        step
-        for step in read_workflow()["jobs"][DISPATCH]["steps"]
-        if "gh workflow run" in str(step.get("run", ""))
-    ]
-    stand_ins = tmp_path / "bin"
-    stand_ins.mkdir()
-    main, ahead = "a" * 40, "b" * 40
-    tip, status = {"main": (main, 0), "ahead": (ahead, 0), "absent": ("", 2)}[listed]
-    for name, script in {
-        "git": f'[ -n "{tip}" ] && printf "{tip}\\trefs/heads/x\\n"; exit {status}',
-        "gh": f"exit {dispatching}",
-    }.items():
-        (stand_ins / name).write_text(f"#!/bin/sh\n{script}\n", encoding="utf-8")
-        (stand_ins / name).chmod(0o755)
-    bash = shutil.which("bash")
-    assert bash is not None, "bash runs every step of the workflow"
-    outputs = tmp_path / "outputs"
-    done = subprocess.run(  # noqa: S603  # the tree's own step, with stand-ins
-        [bash, "--noprofile", "--norc", "-eo", "pipefail", "-c", step["run"]],
-        cwd=tmp_path,
-        env={
-            "PATH": f"{stand_ins}:{os.environ.get('PATH', '')}",
-            "GITHUB_SHA": main,
-            "GITHUB_OUTPUT": str(outputs),
-            **{key: "stand-in" for key in step["env"] if key != "BRANCH"},
-            "BRANCH": step["env"]["BRANCH"],
-        },
-        capture_output=True,
-        text=True,
-        encoding="locale",
-        check=False,
-    )
-    written = outputs.read_text(encoding="utf-8") if outputs.exists() else ""
-    return done.returncode, " ".join(sorted(written.split()))
-
-
-@pytest.mark.parametrize(
-    ("listed", "dispatching", "answer"),
-    [
-        ("main", 0, (0, "dispatched=true")),
-        ("ahead", 0, (0, "dispatched=true")),
-        ("absent", 0, (0, "dispatched=false")),
-        ("ahead", 1, (1, "")),
-    ],
-)
-def test_the_dispatcher_says_whether_it_handed_the_night_on(
-    tmp_path: Path, listed: str, dispatching: int, answer: tuple[int, str]
-) -> None:
-    """`dispatched` is `true` where a run was dispatched and `false` where none was.
-
-    The push jobs read it on a night: `false` runs them on `main`, the only run
-    that night, and `true` leaves them to the dispatched one. A dispatch that
-    failed writes neither, and the dispatcher's own red says why.
-    """
-    assert _dispatch(tmp_path, listed, dispatching) == answer
 
 
 def test_every_supported_interpreter_runs_on_every_event() -> None:
