@@ -407,6 +407,25 @@ def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_by_its_repr() ->
 
 
 # PROMISE: When a comparison raises
+def is_email(_value: object) -> bool:
+    raise ValueError("no")
+
+
+def user_ok(_value: object) -> bool:
+    raise ValueError("no")
+
+
+def test_a_raised_predicate_reads_as_a_failed_one_with_no_article() -> None:
+    """A raised predicate's expectation is the failed one's, with what it raised.
+
+    No article stands before the name, since no rule picks one right for every
+    name: `is_email` would take "an", `user_ok` "a", `<lambda>` neither.
+    """
+    for check in (is_email, user_ok, lambda value: is_email(value) or False):
+        expected = _errors(Annotated[int, at.Predicate(check)], 1)[0]["expected"]
+        assert expected.startswith(f"a passing {check.__qualname__} (raised "), expected
+
+
 def test_a_predicate_that_raises_keeps_its_error_whole() -> None:
     """The exception's text is the predicate's account, and is kept whole.
 
@@ -421,7 +440,7 @@ def test_a_predicate_that_raises_keeps_its_error_whole() -> None:
     errors = _errors(Annotated[str, at.Predicate(boom)], value)
     assert errors[0]["code"] == "predicate_error"
     assert errors[0]["expected"] == (
-        f"a {boom.__qualname__} that does not raise (raised ValueError: {'Z' * 5000})"
+        f"a passing {boom.__qualname__} (raised ValueError: {'Z' * 5000})"
     )
     assert errors[0]["expected"] in errors[0]["message"]
     assert len(errors[0]["value"]) < 100

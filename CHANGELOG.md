@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a union's predicate branch names its callable
+- fix: a raised predicate reads as a failed one, with what it raised
 -->
 
 ### Fixed
@@ -23,6 +24,12 @@ answer of its own, or a repair to a change not yet released.
   alone reads `a passing is_legacy_username`. It reads `one of: str and a passing
   is_legacy_username, str and a string matching '...'` now, as pydantic tags such a branch
   `function-after[is_legacy_username(), str]` and vtjson names it `'is_legacy'`.
+- **A raised predicate reads as a failed one, with what it raised.** `expected a is_email that does
+  not raise (raised ValueError: ...)` put an article before a name, and no rule picks one right for
+  every name: `is_email`, `user_ok`, `<lambda>`. It reads `expected a passing is_email (raised
+  ValueError: ...)` now, the failed predicate's expectation with the exception's text whole, and the
+  code, `predicate_error`, tells the two apart, as vtjson writes one phrase for both and appends
+  the text.
 
 ## [0.0.36] - 2026-11-26
 

@@ -1045,7 +1045,7 @@ impl Expected<'_> {
             Self::Passing(predicate) => format!("a passing {}", predicate_name(predicate, ctx)),
             Self::Raised(predicate, error) => {
                 format!(
-                    "a {} that does not raise (raised {})",
+                    "a passing {} (raised {})",
                     predicate_name(predicate, ctx),
                     raised_text(error, ctx)
                 )

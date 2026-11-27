@@ -399,9 +399,11 @@ where the interpreter is told to raise it: a predicate that calls
 
 A predicate is named in its failure by its `__qualname__`: one that returns a
 falsy value reads `expected a passing total_games_must_match`, and one that
-raises `expected a total_games_must_match that does not raise (raised
-ValueError: ...)`, with the exception's text whole, since it is the predicate's
-own account of what is wrong. A lambda reads `<lambda>`, and a callable with no
+raises reads the same with what it raised, `expected a passing
+total_games_must_match (raised ValueError: ...)`, the exception's text whole,
+since it is the predicate's own account of what is wrong. The code tells the two
+apart, and no article stands before a name, which no rule could pick for every
+one: `is_email`, `user_ok`, `<lambda>`. A lambda reads `<lambda>`, and a callable with no
 `__qualname__`, a `functools.partial` or an instance with `__call__`, its
 type's name.
 
@@ -427,7 +429,7 @@ try:
 except ValidationError as err:
     raised = True
     assert err.errors[0]["expected"] == (
-        "a total_games_must_match that does not raise"
+        "a passing total_games_must_match"
         " (raised ValueError: From tasks: 100. From the run: 102)"
     )
 assert raised

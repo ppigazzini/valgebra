@@ -5242,7 +5242,7 @@ fn a_union_reports_a_branch_whose_walk_stopped_rather_than_a_summary() {
         // And it says what the predicate raised, by its class and its text.
         assert_eq!(
             violations[0].expected,
-            "a raises that does not raise (raised ValueError: no)"
+            "a passing raises (raised ValueError: no)"
         );
         // A branch that descends is reported over one that stopped where the
         // union stands: it is the one the value came closer to.

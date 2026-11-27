@@ -26,10 +26,12 @@ caller's data, and the summary keeps `SUMMARY_CHARS` characters of it.
 total_games_must_match`, `a passing <lambda>`, and a `functools.partial` or an
 instance with `__call__` by its type's. A union's branch label names it the same
 way (`constraint_label`), `str and a passing is_slug`, so a branch reads as it
-would alone. One that raised carries the exception's
-text whole (`raised_text`), since that text is the predicate's author's account
-of what is wrong -- which numbers disagree, and by how much -- and is read only
-whole.
+would alone. One that raised reads as a failed one with what it raised, `a passing
+total_games_must_match (raised ValueError: ...)`, the code telling the two apart and no
+article standing before a name, since no rule picks one right for `is_email`,
+`user_ok` and `<lambda>` alike. It carries the exception's text whole
+(`raised_text`), since that text is the predicate's author's account of what is
+wrong -- which numbers disagree, and by how much -- and is read only whole.
 
 **The code, the exception type and the path format are part of the documented
 API.** They are pinned by snapshot tests, so a wording change is a reviewed diff
