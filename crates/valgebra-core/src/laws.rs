@@ -4117,6 +4117,45 @@ fn deduplicated(values: Vec<Obj>, cap: usize) -> Vec<Obj> {
     kept
 }
 
+/// A tailed shape at its first element past the prefix, where its tail begins,
+/// against a bound the other shape puts on its element there.
+///
+/// A value of the tail grown past the bound ([`sized_past`]) tells them apart:
+/// `list[set[float]]` below a list of `Any` of at most one is refuted by
+/// `[{0.0, 1.0}]`, and neither side spells a set of two -- the bound builds its
+/// widths out of one item, and the subject's tail builds its own member at no
+/// width. [`crossed_sequences`]' crossing fills fixed shapes alone, so this runs
+/// beside it, ahead of the crossings that can fill the cap, since its values
+/// are few as the sized ones are.
+fn tails_grown_past_bounds(shapes: &[(SeqKind, &SeqShape)], cap: usize, made: &mut Vec<Obj>) {
+    for (container, mine) in shapes {
+        let Some(tail) = mine.tail.as_deref() else {
+            continue;
+        };
+        let Some(base): Option<Vec<Obj>> = mine
+            .prefix
+            .iter()
+            .map(|element| a_member(element, MEMBER_FUEL))
+            .collect()
+        else {
+            continue; // a position with no member of its own builds no value
+        };
+        for (_, theirs) in shapes {
+            let Some(element) = theirs.prefix.get(base.len()).or(theirs.tail.as_deref()) else {
+                continue;
+            };
+            for value in sized_past(tail, element) {
+                let mut items = base.clone();
+                items.push(value);
+                made.push(hold(*container, items));
+                if made.len() >= cap {
+                    return;
+                }
+            }
+        }
+    }
+}
+
 /// Values of one sequence whose positions come from another's.
 ///
 /// The construction a per-schema universe cannot reach, and a refutation about
@@ -4167,6 +4206,7 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
             made.extend(sized_past(mine, theirs));
         }
     }
+    tails_grown_past_bounds(&shapes, cap, &mut made);
     'crossed: for (container, mine) in &shapes {
         if mine.tail.is_some() {
             continue; // no fixed width to fill
@@ -5005,6 +5045,39 @@ fn a_length_bound_at_a_position_is_separated_by_a_set_of_its_own() {
             member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
         }),
         "no value of the universe refutes the pair"
+    );
+}
+
+/// A length bound on a tail's element is told by the subject's tail grown past
+/// it.
+///
+/// The pair: `list[set[float]]`, its element a union of the one kind, against
+/// a list of `Any` of at most one member. It is refuted by `[{0.0, 1.0}]`, and
+/// neither side spells a set of two: the bound builds its widths out of one
+/// item, the subject's tail builds its own member at no width, and a tailed
+/// shape has no fixed position for the crossing to fill. Drawn by
+/// `a_refutation_is_a_value` on a push lane.
+#[test]
+fn a_length_bound_on_a_tail_is_separated_by_the_tail_grown_past_it() {
+    let defs = fixpoint_defs();
+    let a = Schema::list(SeqShape::homogeneous(Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(Schema::Union(vec![Schema::Float].into())),
+    }));
+    let b = Schema::list(SeqShape::homogeneous(Schema::Refine {
+        base: Arc::new(Schema::ANYTHING),
+        constraints: vec![Constraint::MaxLen(1)].into(),
+    }));
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        a_value_parts(&subject, &other),
+        "no list holding a set of two floats is built"
     );
 }
 
