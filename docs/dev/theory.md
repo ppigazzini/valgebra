@@ -983,7 +983,8 @@ region, the key types being parts the paper asks to be disjoint [Cas23, §4.4]
 and a union of key types filling each part it covers [Cas23, fn. 15], and a
 mapping constrains one region and leaves the others as the openness says. One
 map is below another one region at a time [Cas23, Lem. 4.7]. A key schema
-naming part of a kind is refused, overlapping domains being a theory of their
+naming part of a kind is refused unless a regular language of `str` keys spells
+it, the deviation below, overlapping domains being a theory of their
 own [Cas23, §4.5], and the two finite parts, `None` and `bool`, are the ones the
 proof of that lemma has no key to spare in [Cas23, App. C.1].
 **[LOAD-BEARING: a-clause-is-a-region]**
@@ -992,7 +993,7 @@ SOURCE: §13.3 "**That is `Schema::KeyedMap` exactly**"
 
 IMPLEMENTED-BY: decision/records.rs, decision/records.rs::clause_by_key, decision/records.rs::by_constants, decision/records.rs::parts_of, decision/records.rs::Labels::slot, descr/maps.rs, descr/maps.rs::key_slot, descr/maps.rs::finite_keys, descr/maps.rs::MapAtom::field, descr/maps.rs::MapAtom::emptiness, descr/maps.rs::MapAtom::meet, descr/lower.rs::map, descr/lower.rs::key_cover, valgebra-py/src/check/walk/record.rs::keyed_map_scan, valgebra-py/src/build.rs::checked_key, decision/records.rs::spelled_by, descr/maps.rs::MapAtom::absorbed
 
-HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema, a_clause_constrains_its_region_alone_over_drawn_dicts
+HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema, a_clause_constrains_its_region_alone_over_drawn_dicts, test_a_key_narrowed_past_a_language_is_refused
 
 **A sequence is a regular language, and the automaton over it is well formed.**
 Regular expression types correspond to tree automata [HVP05, §1], and the

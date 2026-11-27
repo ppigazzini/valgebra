@@ -193,12 +193,16 @@ _NARROWED_ARM = recursive(
 )
 
 
+# THEORY: a-clause-is-a-region
 def test_a_key_narrowed_past_a_language_is_refused() -> None:
     """A clause's key names a kind, a constant or the words of a language.
 
     A bound, a word's order or a callback names part of a kind no language holds,
     so nothing can split a map's keys by it. It is refused where it is written, as
-    the zero divisor and the invalid pattern already are.
+    the zero divisor and the invalid pattern already are, and the keys are
+    checked beside the mapping instead, which keeps the map a set the decision
+    reads: below `dict[str, int]`, and empty beside a record giving a key
+    another value.
     """
     for spec in (
         {Annotated[int, at.Gt(0)]: int},
@@ -229,6 +233,17 @@ def test_a_key_narrowed_past_a_language_is_refused() -> None:
     one_key = Validator({"ab": int})
     assert one_key.is_valid({"ab": 1})
     assert not one_key.is_valid({"a": 1})
+
+    # The keys checked beside the mapping: the predicate is a conjunct the
+    # decision sets aside, and the map beside it is read as any other.
+    keys_beside = intersection(
+        dict[str, int],
+        Annotated[dict, at.Predicate(lambda mapping: all(map(str.isalpha, mapping)))],
+    )
+    assert keys_beside.is_valid({"ab": 1})
+    assert not keys_beside.is_valid({"a1": 1})
+    assert keys_beside.relation_to(dict[str, int]) == "subset"
+    assert intersection(keys_beside, {"ab": str}).relation_to(nothing) == "subset"
 
 
 def test_a_meet_keys_the_words_a_bound_over_every_value_leaves() -> None:

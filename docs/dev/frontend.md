@@ -711,9 +711,22 @@ them past one, so a complement and an intersection of them are languages too. Th
 held by a split of the map's `str` part, the partition of a quasi `K`-step function
 being any finite one [Cas23, Def. 4.6], and two clauses that overlap read the join
 of their values on the common refinement of their keys. `Annotated[int, Gt(0)]`, a
-word's order bound and a callback name part of a kind no language holds, with
-nothing for the set representation to split, so `checked_key` refuses them where
-they are written, and the mapping is checked by a predicate beside it. A meet is
+word's order bound and a callback name part of a kind no language holds, so
+`checked_key` refuses them where they are written, and the mapping is checked by a
+predicate beside it. The set representation would not misread such a key: it reads
+a clause's key as a cover or a language and declines the whole map where the key is
+neither (`narrowed_cover` in `descr/lower.rs`). What the refusal keeps is the rest
+of the map. A map keyed by `str` and met with a predicate over the mapping is a set
+the decision still reads, its key check a conjunct it sets aside, so it stays below
+`dict[str, V]` and is empty beside a record giving one of its keys another value. A
+map keyed by a callback would leave every relation over it to the structural rules,
+each of which reads a clause's key -- the keyed-map rules in `decision/records.rs`,
+the readings and the emptiness beside them, `open` and `close` -- and each would
+have to be shown to decline, or to ask the relation, for a key that is no language.
+A proposal starts from that reading and from
+`test_a_key_narrowed_past_a_language_is_refused` in
+`tests/test_heterogeneous_maps.py`, which holds the refusal and the recipe's two
+relations. A meet is
 read whole before it is refused for a member: a length or a pattern over a base
 wider than `str` holds part of each other kind, and a member holding none of a
 kind reads that part away, so `intersection(str, Annotated[object, MinLen(2)])`
@@ -726,7 +739,8 @@ A key that is the definition being built is a back edge whose body does not exis
 yet where the key is read, and reaching it would mean a scan of the finished body at
 the tie for the keys that name it, in `recursive` and in `tie_alias`; it builds, the
 walk reads it exactly, and a relation over it declines where the partition would
-decide.
+decide. That admission is the guard's limit, a body it cannot read where it stands,
+and not a reading a narrowed key could share.
 
 The same principle governs the regex: the pattern is compiled and anchored at
 build time, so an invalid expression fails at construction rather than at first
