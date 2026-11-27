@@ -59,7 +59,12 @@ beneath lists, sets of one literal, a dict of literal keys, a step table beneath
 a bound, a recursion holding no value. Two schemas are meets of integer
 ranges with many taken out, as a translation from JSON Schema writes a cell of
 a model checker, whose emptiness the two procedures read at the widest apart
-cost. A pair's two schemas are asked of every
+cost. Eight hold a predicate refining a validator -- a record, a list of
+integers, a pattern -- spelled every way the frontend reads one: the validator
+as the base, in the metadata beside a type, and met with the predicate over
+`object`. A predicate is a bare callable in the metadata, which the frontend
+reads as one, so the corpus needs no marker package, and each answers from its
+value alone. A pair's two schemas are asked of every
 value too, so a proof it gains is checked as any other.
 
 Usage:
@@ -298,6 +303,42 @@ def _schemas() -> tuple[dict[str, object], dict[str, tuple[object, object]]]:
         "str-regex-a": Annotated[str, Regex("a+")],
         "list-minlen-2": Annotated[list[int], MinLen(2)],
     }
+
+    # A predicate refining a validator, spelled each way the frontend reads one.
+    # Each reads the parts its validator guarantees and raises on any other
+    # value, so a spelling that asks it of a value the validator refuses stops
+    # there: the same refusal, reached by another path.
+    def xy_sum_is_even(point: dict) -> bool:
+        return (point["x"] + point["y"]) % 2 == 0
+
+    def ascending(items: list) -> bool:
+        return list(items) == sorted(items)
+
+    too_long = 4
+
+    def short(text: str) -> bool:
+        return len(text) < too_long
+
+    # A validator as the base is a value where a type checker reads a type, so
+    # it is subscripted as the interpreter subscripts it.
+    def refined(base: object, *metadata: object) -> object:
+        return Annotated.__getitem__((base, *metadata))
+
+    record_xy = Validator({"x": int, "y": int})
+    ints = Validator(list[int])
+    a_run = Validator(Annotated[str, Regex("a+")])
+    predicates: dict[str, object] = {
+        "pred-dict-xy-even": Annotated[dict, record_xy, xy_sum_is_even],
+        "pred-xy-even": refined(record_xy, xy_sum_is_even),
+        "pred-dict-even": Annotated[dict, xy_sum_is_even],
+        "pred-xy&object-even": intersection(
+            record_xy, Annotated[object, xy_sum_is_even]
+        ),
+        "pred-list-ints-ascending": Annotated[list, ints, ascending],
+        "pred-ints-ascending": refined(ints, ascending),
+        "pred-str-a+-short": Annotated[str, a_run, short],
+        "pred-a+-short": refined(a_run, short),
+    }
     recursive_schemas: dict[str, object] = {
         "json": json_value,
         "tree": recursive(lambda ref: union(int, listed(ref))),
@@ -330,6 +371,7 @@ def _schemas() -> tuple[dict[str, object], dict[str, tuple[object, object]]]:
         **containers,
         **records,
         **refinements,
+        **predicates,
         **recursive_schemas,
         **composites,
     }
@@ -506,12 +548,14 @@ def _values() -> dict[str, object]:
         "empty-str": "",
         "a": "a",
         "aaa": "aaa",
+        "aaaaa": "aaaaa",
         "b": "b",
         "bytes": b"a",
         "none": None,
         "empty-list": [],
         "list-1": [1],
         "list-1-2": [1, 2],
+        "list-2-1": [2, 1],
         "list-a": ["a"],
         "list-mixed": [1, "a"],
         "list-nested": [[1], [2]],
@@ -523,6 +567,7 @@ def _values() -> dict[str, object]:
         "tuple-1-2": (1, 2),
         "empty-dict": {},
         "dict-xy": {"x": 1, "y": 2},
+        "dict-xy-even": {"x": 1, "y": 3},
         "dict-x": {"x": 1},
         "dict-x-str": {"x": "a"},
         "dict-xyz": {"x": 1, "y": 2, "z": 3},
