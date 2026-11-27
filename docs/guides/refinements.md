@@ -732,6 +732,39 @@ than an ordinary failure, so a buggy predicate is not mistaken for a rejected
 value. Either failure names the predicate by its `__qualname__`, and a raised
 one keeps the exception's text whole.
 
+`__qualname__` is the name `repr` prints, so a check a factory returns is named
+with the factory before it, `keys_in.<locals>.undeclared_keys_belong`: a
+refusal carries no file and no line, and the factory is where a reader finds the
+rule. A factory that wants its check read by the check's own name gives it that
+name, as `functools.update_wrapper` gives a wrapper the name of what it wraps:
+
+```python
+from collections.abc import Callable
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import ValidationError, Validator
+
+
+def keys_in(allowed: frozenset[str]) -> Callable[[dict], bool]:
+    def undeclared_keys_belong(mapping: dict) -> bool:
+        return set(mapping) <= allowed
+
+    undeclared_keys_belong.__qualname__ = "undeclared_keys_belong"
+    return undeclared_keys_belong
+
+
+checked = Validator(Annotated[dict, at.Predicate(keys_in(frozenset({"a"})))])
+refused = False
+try:
+    checked.validate({"b": 1})
+except ValidationError as err:
+    refused = True
+    assert err.errors[0]["expected"] == "a passing undeclared_keys_belong"
+assert refused
+```
+
 A bare callable is a predicate too, without the wrapper:
 
 ```python
