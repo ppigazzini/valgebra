@@ -1256,7 +1256,9 @@ fn check_constraint(
 }
 
 /// What one constraint asks, as its own failure names it, for a label naming the
-/// refinement it stands in: `>= 10`, `length <= 2`.
+/// refinement it stands in: `>= 10`, `length <= 2`, `a passing is_slug`, the
+/// operand or the callable read from the pool; `a predicate` where the pool holds
+/// nothing at the constraint's slot.
 pub(super) fn constraint_label(constraint: &Constraint, ctx: Ctx<'_>, py: Python<'_>) -> String {
     let operand = |index: OperandIx| operand_at(ctx, index, py);
     let expected = match constraint {
@@ -1268,7 +1270,7 @@ pub(super) fn constraint_label(constraint: &Constraint, ctx: Ctx<'_>, py: Python
         Constraint::MinLen(n) => Some(Expected::Length(">=", *n)),
         Constraint::MaxLen(n) => Some(Expected::Length("<=", *n)),
         Constraint::Regex(pattern) => Some(Expected::Pattern(pattern)),
-        Constraint::Predicate(_) => None,
+        Constraint::Predicate(i) => predicate_at(ctx, *i, py).map(Expected::Passing),
     };
     expected.map_or_else(|| "a predicate".to_owned(), |expected| expected.render(ctx))
 }

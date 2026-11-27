@@ -13,7 +13,16 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a union's predicate branch names its callable
 -->
+
+### Fixed
+
+- **A union's predicate branch names its callable.** A refused union names each branch as the
+  branch names itself alone, and a predicate branch read `str and a predicate` where the predicate
+  alone reads `a passing is_legacy_username`. It reads `one of: str and a passing
+  is_legacy_username, str and a string matching '...'` now, as pydantic tags such a branch
+  `function-after[is_legacy_username(), str]` and vtjson names it `'is_legacy'`.
 
 ## [0.0.36] - 2026-11-26
 

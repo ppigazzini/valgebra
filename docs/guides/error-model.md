@@ -631,7 +631,8 @@ Messages and codes follow a fixed style so they stay predictable:
 - `expected` names the set, `value` is a short repr of what was found, truncated
   so a large value cannot flood the message. A union names each of its branches,
   bounded, as each would name itself alone, a refined branch its base and its
-  bounds: `one of: int and >= 10, int and < 0`, and a complement what it excludes:
+  bounds: `one of: int and >= 10, int and < 0`, a predicate branch its callable:
+  `str and a passing is_slug`, and a complement what it excludes:
   `not (int and >= 0)`. Clauses are a disjunction, so a key several of a mapping's
   clauses hold names each of their values the same way, a key one holds is refused by
   its value, and a key none holds is the failure alone.
@@ -647,13 +648,19 @@ the only thing that failed:
 
 ```python
 import enum
-from typing import Literal
+from typing import Annotated, Literal
+
+import annotated_types as at
 
 from valgebra import ValidationError, Validator, complement, intersection, union
 
 
 class Backend(enum.Enum):
     TORCH = "torch"
+
+
+def is_slug(value: str) -> bool:
+    return value.isidentifier()
 
 
 def expected_of(spec: object, value: object) -> str:
@@ -675,6 +682,9 @@ assert expected_of(union(str, intersection(int, complement(bool))), 1.5) == (
     "one of: str, int and not bool"
 )
 assert expected_of(complement(int | str), 1) == "not (int or str)"
+assert expected_of(union(int, Annotated[str, at.Predicate(is_slug)]), "a b") == (
+    "one of: int, str and a passing is_slug"
+)
 ```
 
 A `Literal[...]` builds a union of its constants, so its branches are the

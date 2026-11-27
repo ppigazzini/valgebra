@@ -24,7 +24,9 @@ caller's data, and the summary keeps `SUMMARY_CHARS` characters of it.
 `expected` names the set, and a predicate in it by its callable's
 `__qualname__` (`predicate_name` in `check/walk/scalar.rs`): `a passing
 total_games_must_match`, `a passing <lambda>`, and a `functools.partial` or an
-instance with `__call__` by its type's. One that raised carries the exception's
+instance with `__call__` by its type's. A union's branch label names it the same
+way (`constraint_label`), `str and a passing is_slug`, so a branch reads as it
+would alone. One that raised carries the exception's
 text whole (`raised_text`), since that text is the predicate's author's account
 of what is wrong -- which numbers disagree, and by how much -- and is read only
 whole.

@@ -49,6 +49,10 @@ def _nested(levels: int) -> object:
     return value
 
 
+def _is_slug(value: str) -> bool:
+    return value.isidentifier()
+
+
 # PROMISE: Unions report the closest branch
 def test_a_branch_names_itself_as_it_would_alone() -> None:
     """The page's own words, for a complement branch."""
@@ -60,6 +64,12 @@ def test_a_branch_names_itself_as_it_would_alone() -> None:
     assert inside[0]["code"] == "union_error"
     assert "not str" in inside[0]["expected"]
     assert "complement" not in inside[0]["expected"]
+    # A predicate branch names its callable, inside a union as alone.
+    slug = Annotated[str, at.Predicate(_is_slug)]
+    assert _errors(slug, "a b")[0]["expected"] == "a passing _is_slug"
+    assert _errors(union(int, slug), "a b")[0]["expected"] == (
+        "one of: int, str and a passing _is_slug"
+    )
 
 
 def test_a_recursive_branch_names_what_it_admits() -> None:

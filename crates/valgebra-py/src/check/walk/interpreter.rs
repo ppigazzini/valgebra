@@ -398,6 +398,37 @@ fn a_refined_branch_names_its_base_and_its_bounds() {
     });
 }
 
+/// A predicate branch names its callable, as its own failure does, so a union of
+/// rules says which rule each branch is.
+#[test]
+fn a_predicate_branch_names_its_callable() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"def is_slug(value):\n\x20   return False\n",
+            c"slugs.py",
+            c"slugs",
+        )
+        .expect("the module compiles");
+        let pool = vec![module.getattr("is_slug").expect("is_slug").unbind()];
+        let slug = Schema::Refine {
+            base: Arc::new(Schema::Str),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        let either = Schema::Union(vec![Schema::Int, slug.clone()].into());
+        let value = PyString::new(py, "a b").into_any();
+        let (valid, violations) = explain(py, &either, &value, &pool, &[]);
+        assert!(!valid);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(
+            violations[0].expected,
+            "one of: int, str and a passing is_slug"
+        );
+        let (_, alone) = explain(py, &slug, &value, &pool, &[]);
+        assert_eq!(alone[0].expected, "a passing is_slug");
+    });
+}
+
 /// Clauses are a disjunction: a key several hold names each of their values, a key
 /// one holds is refused by its value, and a key none holds is the failure alone.
 #[test]
