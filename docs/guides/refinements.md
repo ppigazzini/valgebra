@@ -705,7 +705,12 @@ report it (`docs/dev/walk.md`). A dict schema
 that is a branch of a union is read the second time only where no branch admits
 the value. Without
 `fail_fast`, `validate` also reads past the first failure, running the
-predicate on values `is_valid` never reached. A
+predicate on values `is_valid` never reached, except beside another member of
+a meet: there a predicate is asked only of a value the meet's other members
+admit, so `Annotated[dict, record, Predicate(rule)]` and
+`intersection(record, Annotated[object, Predicate(rule)])` run `rule` only on
+the dicts `record` admits, and a refusal names the record's missing key rather
+than what `rule` raised reading it. A
 predicate is user code, and every occurrence the walk reaches is a call --
 two equal occurrences in one meet or union are one occurrence, deduplicated
 when the schema is built, so `Annotated[int, f, f]` calls `f` once a value. The

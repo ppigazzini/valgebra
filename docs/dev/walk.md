@@ -194,6 +194,20 @@ mapping of scalars declines to the scan there (`scalar_map_matches`), so
 would read as a decided refusal, and a complement over it would admit the
 value.
 
+**A meet asks a predicate only of a value its other members admit.**
+`check_intersection` skips a member running a caller's predicate once a member
+before it has refused the value, in the explaining modes too, where the meet
+otherwise reads past a failure inside the value to collect every member's. The
+rule would read the parts the refusing member was there to guarantee, and a raise
+there is a stop naming the rule where the record named a missing key. A
+refinement ranks after every shape but a reference (`Schema::variant_rank`), so
+in a meet's order the record, the list or the kind a predicate is written beside
+comes first; a reference does not, and a predicate beside a recursive member is
+asked before it. The deciding walk stops at the first failure and is as it was,
+so membership is too: what moves is the values a rule is run on, and so the
+failure a report names. `a_meet_asks_its_predicate_only_of_a_value_the_rest_admits`
+in the corpus holds it.
+
 ## The union reports the closest branch
 
 When no branch of a union matches, dumping every branch's errors buries the one

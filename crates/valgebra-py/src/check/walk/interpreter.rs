@@ -586,6 +586,67 @@ fn a_key_of_a_str_subclass_reaches_a_name_by_its_hash_and_its_equality() {
     });
 }
 
+/// A meet asks a member running a predicate of no value a member before it
+/// refused: the record a rule is written beside reports its missing key, and
+/// the rule, which would read that key, is never run on the record that failed.
+/// Where every other member admits the value, the rule is asked and reports.
+#[test]
+fn a_meet_asks_its_predicate_only_of_a_value_the_rest_admits() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"calls = 0\n\
+              def total_matches(run):\n\
+              \x20   global calls\n\
+              \x20   calls += 1\n\
+              \x20   return run['a'] == run['total']\n",
+            c"guarded_rule.py",
+            c"guarded_rule",
+        )
+        .expect("the module compiles");
+        let pool = vec![
+            module
+                .getattr("total_matches")
+                .expect("total_matches")
+                .unbind(),
+        ];
+        let field = |name: &str| Field {
+            name: name.into(),
+            schema: Schema::Int,
+            required: true,
+        };
+        let record = Schema::keyed_map(vec![field("a"), field("total")], Vec::new());
+        let rule = Schema::Refine {
+            base: Arc::new(Schema::ANYTHING),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        let guarded = Schema::Intersection(vec![record, rule].into());
+        let calls = || {
+            module
+                .getattr("calls")
+                .and_then(|calls| calls.extract::<i64>())
+                .expect("the count reads")
+        };
+
+        let missing = PyDict::new(py);
+        missing.set_item("a", 1).expect("the dict takes a key");
+        let (ok, violations) = explain(py, &guarded, &missing.into_any(), &pool, &[]);
+        assert!(!ok);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert_eq!(violations[0].code, "missing_key");
+        assert_eq!(calls(), 0, "the rule ran on a record that failed");
+
+        let unequal = PyDict::new(py);
+        unequal.set_item("a", 1).expect("the dict takes a key");
+        unequal.set_item("total", 2).expect("the dict takes a key");
+        let (ok, violations) = explain(py, &guarded, &unequal.into_any(), &pool, &[]);
+        assert!(!ok);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert_eq!(violations[0].code, "predicate_failed");
+        assert_eq!(calls(), 1);
+    });
+}
+
 /// A meet collects every member's failure until one rejects the value
 /// *itself*, and then stops: what a later member would say describes a value
 /// already known to be the wrong kind of thing. A member that fails *inside*

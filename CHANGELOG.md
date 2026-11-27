@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a union's predicate branch names its callable
 - fix: a raised predicate reads as a failed one, with what it raised
+- fix: a meet asks a predicate only of a value its other members admit
 -->
 
 ### Fixed
@@ -30,6 +31,15 @@ answer of its own, or a repair to a change not yet released.
   ValueError: ...)` now, the failed predicate's expectation with the exception's text whole, and the
   code, `predicate_error`, tells the two apart, as vtjson writes one phrase for both and appends
   the text.
+- **A predicate beside a validator is asked only of a value the validator admits.** `validate`'s
+  full report read past a failure inside the value into every member of a meet, so
+  `Annotated[dict, record, Predicate(rule)]`, the spelling a type checker accepts, ran `rule` on a
+  record that had failed and reported what `rule` raised reading the missing key: `predicate_error`
+  where the record's `missing_key` was the failure. A meet's member running a predicate is asked of
+  no value a member before it refused, in every mode, as vtjson's ordered `intersect` asked a rule
+  after the schemas written before it; `intersection(record, Annotated[object, Predicate(rule)])`
+  reads the same. Membership and every decision are as they were, and the metamorphic corpus,
+  which holds such meets now, reads them alike.
 
 ## [0.0.36] - 2026-11-26
 

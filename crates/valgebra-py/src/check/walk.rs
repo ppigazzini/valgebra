@@ -39,8 +39,8 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
 use valgebra_core::{
-    ClassIx, CollKind, ConstIx, DefIx, Field, MapClause, OperandIx, PathSegment, PredIx, Schema,
-    Violation,
+    ClassIx, CollKind, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, PathSegment,
+    PredIx, Schema, Violation,
 };
 
 use crate::build::declares_of_kind;
@@ -570,8 +570,7 @@ fn operand_at<'a, 'py>(
     pool_slot(ctx, index.get(), py)
 }
 
-/// The callable behind a
-/// [`Constraint::Predicate`](valgebra_core::Constraint::Predicate).
+/// The callable behind a [`Constraint::Predicate`].
 fn predicate_at<'a, 'py>(
     ctx: Ctx<'a>,
     index: PredIx,
@@ -1565,6 +1564,16 @@ fn check_intersection(
     let mut ok = true;
     let entered = ctx.state.memo.entered();
     for member_schema in members {
+        // A member running a caller's predicate is asked of no value a member
+        // before it refused: the meet refuses the value already, and the rule
+        // would read the parts the refusing member was there to guarantee. A
+        // refinement ranks after every shape but a reference
+        // (`Schema::variant_rank`), so the record, the list or the kind a
+        // predicate is written beside comes first in the meet's order. The fast
+        // walk stops at the first failure and never reaches one.
+        if !ok && runs_a_predicate(member_schema) {
+            continue;
+        }
         let before = frame.out.len();
         ok &= if ctx.state.memo.entered() == entered {
             member(member_schema, value, frame)
@@ -1577,6 +1586,13 @@ fn check_intersection(
         }
     }
     ok
+}
+
+/// Whether `schema` is a refinement holding a predicate: a member whose walk runs
+/// a caller's callable on the value.
+fn runs_a_predicate(schema: &Schema) -> bool {
+    matches!(schema, Schema::Refine { constraints, .. }
+        if constraints.iter().any(|constraint| matches!(constraint, Constraint::Predicate(_))))
 }
 
 /// Whether the violations recorded since `before` include one about the value at

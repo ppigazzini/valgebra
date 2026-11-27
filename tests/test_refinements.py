@@ -623,6 +623,38 @@ def test_a_validator_in_the_metadata_is_met_with_the_base(
     )
 
 
+def test_a_predicate_is_asked_only_of_a_value_its_validators_admit() -> None:
+    """The record written beside a rule guards it, however the meet is spelled.
+
+    The full report names the record's own failure, a missing key, and the rule
+    never runs on a record that failed, so a rule may read the fields the record
+    holds it to: the guard vtjson's ordered `intersect` gives, for each spelling
+    a type checker reads.
+    """
+    seen: list[object] = []
+
+    def sums_match(run: dict) -> bool:
+        seen.append(run)
+        return run["a"] + run["b"] == run["total"]
+
+    record = Validator({"a": int, "b": int, "total": int})
+    rule = at.Predicate(sums_match)
+    for schema in (
+        Validator(Annotated[dict, record, rule]),
+        Validator(Annotated[dict, rule, record]),
+        intersection(record, Annotated[object, rule]),
+    ):
+        for fail_fast in (False, True):
+            seen.clear()
+            with pytest.raises(ValidationError) as caught:
+                schema.validate({"a": 1}, fail_fast=fail_fast)
+            assert {error["code"] for error in caught.value.errors} == {"missing_key"}
+            assert seen == []
+        with pytest.raises(ValidationError) as caught:
+            schema.validate({"a": 1, "b": 2, "total": 4})
+        assert [error["code"] for error in caught.value.errors] == ["predicate_failed"]
+
+
 def test_a_validator_in_a_type_has_a_spelling_a_checker_reads() -> None:
     """The static-checking page's two replacements build the refused sets.
 
