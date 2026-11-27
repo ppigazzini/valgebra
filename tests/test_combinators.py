@@ -385,8 +385,11 @@ def test_a_predicate_does_not_fold_against_its_own_complement() -> None:
     that admits values.
 
     Pinned rather than left to the reader of the law, because "`A & ~A` is
-    empty" is exactly what somebody reading `docs/guides/algebra.md` would add.
-    `docs/dev/schema-ir.md` carries the refusal.
+    empty" is exactly what somebody reading the laws would add.
+    `docs/guides/algebra.md` names the exception where it states them, and
+    `docs/dev/schema-ir.md` carries the refusal and the two ways around it this
+    test refuses with it: a caller's word that the predicate answers from its
+    value alone, and a cache of its answer for one walk.
     """
     flip = itertools.count()
 

@@ -369,6 +369,38 @@ assert intersection(int, Validator(anything)) == Validator(int)  # dually
 assert intersection(int, complement(int)) == Validator(nothing)  # the complement law
 ```
 
+**The complement laws are folded for an atom Python answers once.** Construction
+rewrites `A & ~A` to `nothing` and `A | ~A` to the top where `A`'s answer is a
+fact about the value: a kind, a constant, a bound, a length, a step, a pattern,
+an attribute. Two atoms answer by running code, and construction folds neither.
+A class is asked through `isinstance`, which its metaclass may answer, and
+construction holds no class object to ask, so `intersection(C, complement(C))`
+keeps its spelling and the decision procedures, which do hold one, prove it
+empty. A predicate is your own code, and the meet asks it twice, once a side:
+one that does not answer from its value alone answers the two calls apart and
+puts that value in the meet, so a predicate's meet with its complement is neither
+folded nor proved empty. [What the soundness argument
+assumes](../explanation/soundness.md#what-this-argument-assumes) draws the line.
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator, complement, intersection, nothing
+
+
+class Plain:
+    pass
+
+
+even = Validator(Annotated[int, at.Predicate(lambda x: x % 2 == 0)])
+plain_meet = intersection(Plain, complement(Plain))
+assert plain_meet != Validator(nothing)  # construction cannot ask the class
+assert plain_meet.is_empty()  # the decision procedures can
+assert intersection(even, complement(even)).relation_to(nothing) == "undecided"
+```
+
 A recursive schema's definitions sit in a table, numbered in the order
 construction met them, and `==` reads a reference through to the definition it
 names rather than by its number -- a `recursive` definition binds its back edge,

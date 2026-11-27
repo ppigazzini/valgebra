@@ -381,6 +381,20 @@ and a step fold because Python's rules ask each of them for one answer about a
 value. The trust base assumes it ([the soundness page](../explanation/soundness.md)), and
 five known-unsound tests pin what a value breaking it is answered.
 
+Two ways around the refusal are refused with it, each by the same test. **A
+caller's word that a predicate answers from its value alone**, a flag on the
+marker or a wrapper around it, would have `denotes_a_set_within` take the
+predicate for a set. The trust base is what Python's rules ask of an atom, and a
+caller's word is not one of them; a metaclass's `__instancecheck__` is declined
+on the same line. Given to the alternating predicate above, the word folds the
+meet to `nothing`, and `test_a_predicate_does_not_fold_against_its_own_complement`
+fails on the value a walk admits. **A cache of a predicate's answer for the
+length of one walk** would make the meet empty on every walk, so the fold would
+hold of each. It changes what a predicate that does not answer from its value
+alone observes, which [the refinements guide](../guides/refinements.md#predicates-the-slow-path)
+refuses for the walk as a whole, and the same test fails on its witness, which
+no walk would then admit.
+
 **A method that reduces a schema.** Refused. Construction settles the lattice
 laws -- see "Which laws construction settles" below -- so the schema a caller
 holds already *is* the normal form a reduction would give: `repr` shows it,
