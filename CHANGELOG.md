@@ -34,6 +34,15 @@ moves with the addresses its compared keys sit at and not with its code: the rec
 `memcmp` from `PyDict_GetItemRef` as often in both trees, and built with symbols the second reads
 level with 0.0.36 at four base addresses.
 
+PyPI's wheels for CPython 3.11 to 3.15 on Linux x86_64, read against 0.0.36's (release step 9, an
+AMD Ryzen 7 PRO 7840U), count the same instructions as 0.0.36's on each of the fourteen shapes
+read. A list of a thousand JSON values under a guarded bound validates 6% to 9% slower in cycles in
+both of 0.0.37's environments on CPython 3.12, 3.14 and 3.15, and 5% faster on 3.11, and a list of
+a thousand strings under length bounds 6% to 7% slower on 3.11, each again on a second reading and
+on the same instructions, where 0.0.36's second environment reads each within 1%: moves of where
+the profiled builds placed that code, charged to no change. Every other shape on every interpreter
+reads within 5% in both of 0.0.37's environments.
+
 ### Added
 
 - **A predicate prints by a name that reads back as it.** `repr` printed every predicate as
